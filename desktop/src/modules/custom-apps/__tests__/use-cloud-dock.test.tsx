@@ -70,8 +70,12 @@ describe("useCloudDock", () => {
   })
 
   it("sends pin and unpin intents to the cloud catalog", async () => {
+    mocks.applyDockOperation.mockResolvedValueOnce({
+      ...snapshot(),
+      dockAppIds: ["agent", appId, "drive", "launcher"],
+    })
     await renderHook()
-    await act(async () => latest?.addDockApp("drive"))
+    await act(async () => expect(await latest?.addDockApp("drive")).toBe(true))
     expect(mocks.applyDockOperation).toHaveBeenLastCalledWith(expect.objectContaining({
       type: "pin",
       appId: "drive",
@@ -82,6 +86,16 @@ describe("useCloudDock", () => {
       type: "unpin",
       appId,
     }))
+  })
+
+  it("reports a failed pin when the cloud returns a layout without SkillHub", async () => {
+    mocks.applyDockOperation.mockResolvedValueOnce({ ...snapshot(), revision: 2 })
+    await renderHook()
+
+    await act(async () => expect(await latest?.addDockApp("skill-hub")).toBe(false))
+
+    expect(mocks.notifyError).toHaveBeenCalledWith(expect.stringContaining("固定"))
+    expect(latest?.pinnedApps.map((app) => app.id)).toEqual(["agent", appId, "launcher"])
   })
 
   it("bootstraps the legacy Dock only once when the cloud snapshot is uninitialized", async () => {

@@ -100,10 +100,14 @@ export function useCloudDock({ workflowEntryVisible }: { readonly workflowEntryV
     if (!canEdit || saving) return false
     setSaving(true)
     try {
-      await customApps.applyDockOperation({
+      const snapshot = await customApps.applyDockOperation({
         ...action,
         operationId: crypto.randomUUID(),
       })
+      if (action.type === "pin" && !snapshot.dockAppIds.includes(action.appId)) {
+        notifyError("未能将应用固定到 Dock")
+        return false
+      }
       return true
     } catch {
       notifyError("保存 Dock 设置失败")
