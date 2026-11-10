@@ -16,11 +16,12 @@ const authenticated: CanActivate = {
   },
 }
 
-async function fixture() {
+async function fixture(guard: CanActivate = authenticated) {
   const mail = {
     automationCheckpoint: vi.fn(async () => ({ receiptSequence: "20", serverTime: "2026-11-05T00:00:00Z" })),
     automationChanges: vi.fn(async () => ({ items: [], nextAfter: "20", through: "20", complete: true })),
     searchRecipients: vi.fn(async () => ({ items: [] })),
+    resolveRecipients: vi.fn(async () => ({ items: [{ nickname: "王明", status: "not_found" }] })),
     createPreview: vi.fn(async () => ({ previewId: "preview-1", recipients: [], subject: "报告", body: "完整正文", attachments: [] })),
     listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
     listMessages: vi.fn(async () => ({ items: [], nextCursor: null })),
@@ -34,7 +35,7 @@ async function fixture() {
     prepareLocalAttachment: vi.fn(async () => ({ attachmentId: "attachment-1" })),
   }
   const moduleRef = await Test.createTestingModule({ controllers: [MailController], providers: [{ provide: MailService, useValue: mail }] })
-    .overrideGuard(UserAuthGuard).useValue(authenticated)
+    .overrideGuard(UserAuthGuard).useValue(guard)
     .compile()
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false })
   registerHttpBodyParsers(app)
@@ -43,6 +44,26 @@ async function fixture() {
 }
 
 describe("internal mail HTTP routes", () => {
+  it("resolves a batch of exact nicknames under the authenticated account", async () => {
+    const { app, mail } = await fixture()
+    try {
+      const endpoint = "/api/mail-internal/recipients/resolve"
+      await request(app.getHttpServer()).post(endpoint).send({ nicknames: [" 王明 "] })
+        .expect(200, { items: [{ nickname: "王明", status: "not_found" }] })
+      expect(mail.resolveRecipients).toHaveBeenCalledWith("sender", ["王明"])
+      for (const payload of [{ nicknames: [] }, { nicknames: ["  "] }, { nicknames: ["A\u0000B"] }, { nicknames: Array(51).fill("王明") }, { nicknames: ["王明"], userId: "other" }]) {
+        await request(app.getHttpServer()).post(endpoint).send(payload).expect(400)
+      }
+      expect(mail.resolveRecipients).toHaveBeenCalledTimes(1)
+    } finally { await app.close() }
+  })
+  it("rejects unauthenticated nickname resolution without querying membership", async () => {
+    const { app, mail } = await fixture(new UserAuthGuard({} as never))
+    try {
+      await request(app.getHttpServer()).post("/api/mail-internal/recipients/resolve").send({ nicknames: ["王明"] }).expect(401)
+      expect(mail.resolveRecipients).not.toHaveBeenCalled()
+    } finally { await app.close() }
+  })
   it("scopes automation cursors to the authenticated account and rejects arbitrary query fields", async () => {
     const { app, mail } = await fixture()
     try {

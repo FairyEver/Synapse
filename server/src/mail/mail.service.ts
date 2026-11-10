@@ -10,6 +10,7 @@ import { resolveMailAddresses, type MailAddressSnapshot } from "./mail-addresses
 import { descendantIds } from "../team/organization-tree"
 import { mailContactFilter, mailContactsQuery, type MailContactRow } from "./mail-contacts"
 import { MailReceiptFeed, withMailReceiptFence } from "./mail-receipt-feed"
+import { resolveRecipientNicknames } from "./mail-recipient-resolve"
 
 export const MAIL_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
@@ -65,6 +66,10 @@ export class MailService {
     private readonly storage: MailStorageService,
     private readonly notifications: NotificationService,
   ) {}
+
+  async resolveRecipients(userId: string, nicknames: string[]) {
+    return { items: await resolveRecipientNicknames(this.prisma, userId, nicknames) }
+  }
 
   async searchRecipients(userId: string, query: string, cursor?: string) {
     const term = query.trim().toLocaleLowerCase()

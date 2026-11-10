@@ -3,6 +3,7 @@ import { createReadStream, createWriteStream, type Stats } from "node:fs"
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { MailOperation, MailOperationResult } from "../../src/types/mail"
+import { mailRecipientResolveResultSchema, type MailRecipientResolveInput } from "../../synapse-capabilities/shared/mail-internal-input"
 import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { app, safeStorage } from "electron"
@@ -384,6 +385,8 @@ async function unavailableExternalUrlOpener(): Promise<void> {
 
 export type AccountRequestScope = { readonly accountId: string | null; readonly authRevision: number }
 
+export type MailServiceOperation = MailOperation | ({ kind: "recipientResolve" } & MailRecipientResolveInput)
+
 export class AccountService {
   private readonly namespace: EncryptedJsonNamespace<PersistedAccount>
   private readonly fetchImpl: typeof fetch
@@ -564,7 +567,8 @@ export class AccountService {
   }
 
   async executeMailOperation<K extends MailOperation["kind"]>(operation: Extract<MailOperation, { kind: K }>): Promise<MailOperationResult[K]>
-  async executeMailOperation(operation: MailOperation): Promise<unknown> {
+  async executeMailOperation(operation: MailServiceOperation): Promise<unknown>
+  async executeMailOperation(operation: MailServiceOperation): Promise<unknown> {
     const base = `${apiBaseUrl()}/mail-internal`
     const id = (value: string) => encodeURIComponent(value)
     const json = <T>(method: string, path: string, body?: unknown) => this.requestAuthenticatedJson<T>(method, `${base}${path}`, body, "站内信操作失败。")
@@ -573,6 +577,20 @@ export class AccountService {
         const query = new URLSearchParams({ query: operation.query })
         if (operation.cursor) query.set("cursor", operation.cursor)
         return await json("GET", `/recipients?${query}`)
+      }
+      case "recipientResolve": {
+        const { nicknames } = operation
+        const response = await json<unknown>("POST", "/recipients/resolve", { nicknames }).catch((error: unknown) => {
+          if (isAccountHttpError(error) && error.status === 404) {
+            throw new Error("recipient_resolve_unavailable: Synapse 服务端暂不支持昵称解析。", { cause: error })
+          }
+          throw error
+        })
+        const parsed = mailRecipientResolveResultSchema.safeParse(response)
+        if (!parsed.success || parsed.data.items.length !== nicknames.length || parsed.data.items.some((item, index) => item.nickname !== nicknames[index])) {
+          throw new Error("recipient_resolve_invalid_response: Synapse 服务端返回的昵称解析结果无效。")
+        }
+        return parsed.data
       }
       case "organizationSearch": return await json("GET", `/organizations?${new URLSearchParams({ query: operation.query })}`)
       case "organizationMembers": return await json("GET", `/organizations/${id(operation.organizationId)}/members${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`)

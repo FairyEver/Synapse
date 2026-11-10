@@ -3,6 +3,7 @@ import type { CapabilityId } from "./naming"
 
 const definitions = [
   ["app_mail_internal_recipient_list", "app.mail_internal.recipient.list", "Browse or search active users sharing a team with the current user. Returns contactEmail (nullable, never the login email) for external email address lookup as well as internal recipients. Resolve names using context and candidates; ask only when uncertainty remains."],
+  ["app_mail_internal_recipient_resolve", "app.mail_internal.recipient.resolve", "Resolve a batch of exact, case-sensitive profile nicknames among active users sharing a team with the signed-in user. Read-only; returns one matched, not_found, or ambiguous item per nickname in input order. Only matched items include userId and nullable contactEmail. For unattended mail, stop if any recipient cannot be resolved. Pagination: none; returns one result per input."],
   ["app_mail_internal_organization_list", "app.mail_internal.organization.list", "Search organizations/departments in the current user's teams for internal mail or read-only external email recipient resolution. Disambiguate by team; a parent includes descendants. For external email, fetch all member pages and use contactEmail only, never an organization ID or an old relay address. Pagination: none; returns all matching organizations."],
   ["app_mail_internal_organization_members_list", "app.mail_internal.organization_members.list", "List active direct and descendant members of one visible organization, including nullable contactEmail (never login email). For external department email, read ALL pages until nextCursor is null; missing/invalid contactEmail must be reported by name and block sending until the user explicitly excludes those members. No silent omission or login-email fallback. Deduplicate actual email addresses, To wins Cc, then use external mail draft/preview/send. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_internal_contact_list", "app.mail_internal.contact.list", "List historical senders for inbox or explicit To/Cc users and organizations for sent mail, newest related message first. Returns contact keys and inbox unread counts across the entire visible mailbox. Does not expand organization members. Pagination: none; returns all distinct contacts."],
@@ -23,7 +24,7 @@ const definitions = [
 
 export const MAIL_INTERNAL_DOMAIN: CapabilityDomainDefinition = {
   id: "mail_internal",
-  capabilities: definitions.map(([, id, description]) => ({ id, title: description, description, mutates: !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".count") && !id.endsWith(".preview"), ...(id.endsWith(".delete_batch") || id.endsWith(".delete_all") ? { risk: "high" as const } : {}) })),
+  capabilities: definitions.map(([, id, description]) => ({ id, title: description, description, mutates: id !== "app.mail_internal.recipient.resolve" && !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".count") && !id.endsWith(".preview"), ...(id.endsWith(".delete_batch") || id.endsWith(".delete_all") ? { risk: "high" as const } : {}) })),
 }
 
 export const MAIL_INTERNAL_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(definitions.map(([name, id]) => [name, id]))
@@ -45,6 +46,7 @@ const content = {
 
 const schemas: Record<string, { properties: Record<string, unknown>; required?: readonly string[] }> = {
   app_mail_internal_recipient_list: { properties: { query: text("Recipient name, handle, or known userId; use an empty string to browse shared-team members."), cursor: text("Next cursor from a browse page.") }, required: ["query"] },
+  app_mail_internal_recipient_resolve: { properties: { nicknames: { type: "array", minItems: 1, maxItems: 50, items: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, description: "Exact profile nicknames; leading and trailing whitespace is trimmed." } }, required: ["nicknames"] },
   app_mail_internal_organization_list: { properties: { query: text("Organization or team name; use an empty string to browse organizations in the current user's teams.") }, required: ["query"] },
   app_mail_internal_organization_members_list: { properties: { organizationId: text("Visible organization ID."), cursor: text("Next cursor from the prior member page.") }, required: ["organizationId"] },
   app_mail_internal_contact_list: { properties: { box: { type: "string", enum: ["inbox", "sent"] } }, required: ["box"] },

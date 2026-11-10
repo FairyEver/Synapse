@@ -1,14 +1,14 @@
 import type { ShareImageSource } from "../../app-capabilities/agent/shared/share"
 import path from "node:path"
 import { z } from "zod"
-import type { MailOperation } from "../../src/types/mail"
+import type { MailServiceOperation } from "../services/account-service"
 import { parseMailMessageReference } from "../../synapse-capabilities/shared/message-reference"
-import { mailAttachmentSourceSchema, mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-internal-input"
+import { mailAttachmentSourceSchema, mailBoxInputSchema, mailMessageListInputSchema, mailRecipientResolveInputSchema } from "../../synapse-capabilities/shared/mail-internal-input"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
 
-type MailAccount = { uploadMailAttachment?: (source: ShareImageSource, signal?: AbortSignal) => Promise<unknown>; executeMailOperation: (operation: MailOperation) => Promise<unknown> }
+type MailAccount = { uploadMailAttachment?: (source: ShareImageSource, signal?: AbortSignal) => Promise<unknown>; executeMailOperation: (operation: MailServiceOperation) => Promise<unknown> }
 type MailDeps = { resolveShareImage?: (ref: string, context: DispatchContext) => Promise<ShareImageSource>; accountService: MailAccount; permissionGuard?: PermissionGuard; auditSink?: AuditSink }
 const actor: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const id = z.string().min(1)
@@ -16,9 +16,10 @@ const content = z.object({ formatVersion: z.literal(3), toIds: z.array(id), ccId
 const getInput = z.object({ messageId: id.optional(), reference: z.string().optional() }).strict()
   .refine((input) => (input.messageId === undefined) !== (input.reference === undefined), "Provide exactly one mail locator.")
 
-function parseOperation(action: string, params: Record<string, unknown>): MailOperation | { kind: "attachmentShare"; shareImageRef: string } {
+function parseOperation(action: string, params: Record<string, unknown>): MailServiceOperation | { kind: "attachmentShare"; shareImageRef: string } {
   switch (action) {
     case "app.mail_internal.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
+    case "app.mail_internal.recipient.resolve": return { kind: "recipientResolve", ...mailRecipientResolveInputSchema.parse(params) }
     case "app.mail_internal.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
     case "app.mail_internal.organization_members.list": return { kind: "organizationMembers", ...z.object({ organizationId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail_internal.message.list": {

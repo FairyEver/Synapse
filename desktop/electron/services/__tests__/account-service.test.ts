@@ -418,6 +418,26 @@ describe("AccountService", () => {
     expect(legacy.items[0]).not.toHaveProperty("contactEmail")
   })
 
+  it("dispatches exact nicknames as one authenticated read and distinguishes a missing server endpoint", async () => {
+    const result = { items: [{ nickname: "王明", status: "matched", userId: "reader", contactEmail: null }] }
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(result))
+      .mockResolvedValueOnce(jsonResponse({ message: "Cannot POST /api/mail-internal/recipients/resolve" }, 404))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const dispatcher = createMailInternalCapabilityDispatcher({ accountService: service })
+    const action = "app.mail_internal.recipient.resolve"
+    await expect(dispatcher.dispatch(action, { nicknames: [" 王明 "] }, {})).resolves.toEqual({ ok: true, data: result })
+    expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/mail-internal\/recipients\/resolve$/), expect.objectContaining({
+      method: "POST", body: JSON.stringify({ nicknames: ["王明"] }),
+    }))
+    await expect(dispatcher.dispatch(action, { nicknames: ["王明"] }, {})).rejects.toThrow("recipient_resolve_unavailable")
+    await expect(dispatcher.dispatch(action, { nicknames: ["王明"] }, {})).rejects.toThrow("recipient_resolve_invalid_response")
+    await expect(dispatcher.dispatch(action, { nicknames: [" "] }, {})).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
   it("reads a legacy mail page and detail from a server that has not upgraded", async () => {
     const { service } = await createTestAccountService()
     const person = { userId: "reader", nickname: "读者", handle: null }

@@ -40,6 +40,7 @@ function harness() {
       updateMany: vi.fn(async () => ({ count: 0 })),
     },
     $executeRaw: vi.fn(async () => 1),
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
   const notifications = { create: vi.fn(async () => ({ id: "notice-1" })) }
@@ -49,6 +50,21 @@ function harness() {
 }
 
 describe("MailService", () => {
+  it("returns one ordered outcome per nickname and withholds details for ambiguous names", async () => {
+    const { service, prisma } = harness()
+    prisma.$queryRaw.mockResolvedValue([
+      { nickname: "王明", userId: "teammate", contactEmail: null },
+      { nickname: "李明", userId: "one", contactEmail: "one@example.com" },
+      { nickname: "李明", userId: "two", contactEmail: null },
+    ])
+    expect(await service.resolveRecipients("sender", ["李明", "王明", "王", "王明"])).toEqual({ items: [
+      { nickname: "李明", status: "ambiguous" },
+      { nickname: "王明", status: "matched", userId: "teammate", contactEmail: null },
+      { nickname: "王", status: "not_found" },
+      { nickname: "王明", status: "matched", userId: "teammate", contactEmail: null },
+    ] })
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
+  })
   it("returns contact email for shared-team candidates without exposing login email", async () => {
     const { service, prisma, teammate } = harness()
     prisma.user.findMany.mockResolvedValue([{ ...teammate, nickname: "王益明", contactEmail: "contact@example.com", email: "private@example.com" }] as never)

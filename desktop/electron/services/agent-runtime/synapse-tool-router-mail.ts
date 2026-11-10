@@ -30,6 +30,7 @@ export function mailSearchIntent(query: string): MailSearchIntent | null {
   if (internal) {
     if (/组织/u.test(text)) return route(/成员/u.test(text) ? "organization_members_list" : "organization_list")
     if (/联系人/u.test(text)) return route("contact_list")
+    if (/收件人|收信人|昵称/u.test(text) && /解析|解决/u.test(text)) return route("recipient_resolve")
     if (/收件人|收信人/u.test(text)) return route("recipient_list")
     if (/未读数|数量|多少|count/u.test(text)) return route("message_count")
     if (/清空|删除全部/u.test(text)) return route("message_delete_all")

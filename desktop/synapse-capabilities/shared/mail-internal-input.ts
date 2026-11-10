@@ -1,5 +1,19 @@
 import { z } from "zod"
 
+export const mailRecipientResolveInputSchema = z.object({
+  nicknames: z.array(z.string().max(100).trim().min(1).regex(/^[^\u0000\p{Surrogate}]+$/u)).min(1).max(50),
+}).strict()
+
+export const mailRecipientResolveResultSchema = z.object({
+  items: z.array(z.discriminatedUnion("status", [
+    z.object({ nickname: z.string(), status: z.literal("matched"), userId: z.string().min(1), contactEmail: z.string().nullable() }),
+    z.object({ nickname: z.string(), status: z.literal("not_found") }),
+    z.object({ nickname: z.string(), status: z.literal("ambiguous") }),
+  ])),
+})
+
+export type MailRecipientResolveInput = z.infer<typeof mailRecipientResolveInputSchema>
+
 export const mailBoxInputSchema = z.object({ box: z.enum(["inbox", "sent"]) }).strict()
 export const mailMessageListInputSchema = mailBoxInputSchema.extend({
   query: z.string().max(120).optional(), cursor: z.string().min(1).optional(), unreadOnly: z.boolean().optional(),

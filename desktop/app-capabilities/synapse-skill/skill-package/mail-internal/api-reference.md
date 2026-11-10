@@ -9,6 +9,7 @@
 | 工具 | 必填参数 | 返回或作用 |
 |---|---|---|
 | `app_mail_internal_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、`contactEmail`（可空，用户自填，非登录邮箱）、匹配类型、共同团队、`nextCursor` |
+| `app_mail_internal_recipient_resolve` | `nicknames`，1–50 个非空昵称，每项最多 100 个 UTF-16 代码单元 | 按输入顺序返回 `items`。每项包含去掉首尾空白的 `nickname` 与 `status: matched \| not_found \| ambiguous`。仅 `matched` 提供 `userId` 和可空 `contactEmail` |
 | `app_mail_internal_organization_list` | `query`（可传空字符串浏览） | 当前用户所在团队的组织 ID、名称、所属团队和成员数 |
 | `app_mail_internal_organization_members_list` | `organizationId`，可选 `cursor` | 组织及下级的活跃成员（userId、nickname、handle、可空 contactEmail，不含登录邮箱），按 `nextCursor` 续页；外部部门邮件必须读完全部页并处理缺失邮箱 |
 | `app_mail_internal_contact_list` | `box: inbox \| sent` | 完整可见信箱的历史发件人或收件/抄送地址，含 `key`、`kind`、`name`、`handle`、`teamName`、`unread`、`lastSentAt`，最近相关信件倒序 |
@@ -25,6 +26,8 @@
 | `app_mail_internal_attachment_download_file` | `messageId`, `attachmentId`, `outputPath` | 下载到绝对本地路径 |
 | `app_mail_internal_send_preview` | `formatVersion: 3`, `toIds`, `ccIds`, `toOrganizationIds`, `ccOrganizationIds`, `subject`, `body`, `attachmentIds`, `forwardAttachmentIds`，可选 `relation: {kind, messageId}` | `previewId`、To/Cc 地址、当前可投递人数、完整待发内容与团队 |
 | `app_mail_internal_message_send` | `previewId`, `clientRequestId`, `confirmed: true`（调用者已核对发送授权与预览，无待解决问题） | `messageId`、最终收件人数、发送时间 |
+
+批量解析仅匹配当前登录账号共同团队内活跃成员的完整昵称，区分大小写及字符。两名或更多可见同名成员返回 `ambiguous`，联系邮箱有无不影响判断。无法发现工具、服务端不支持或查询失败时应停止无人值守发信，不将失败当作 `not_found`，也不退回模糊搜索。外部邮件只读取唯一命中项的 `contactEmail`，发送前按邮箱地址规则校验。
 
 `app_mail_internal_message_list` 的 `unreadOnly: true` 只可用于 `inbox`；它与 `query`、`contactKey`、`cursor` 可组合。`contactKey` 必须原样使用对应信箱 `app_mail_internal_contact_list` 返回的 key：收件箱匹配发件人或平台公告，已发送匹配 To/Cc 地址快照中的个人或组织，不展开组织成员。仅无地址快照的旧信按个人投递记录回退。按 `nextCursor` 续页时保持全部条件，查询条件变化时从第一页重新开始。`get` 不自动设已读。全部已读与清空信箱不受人员、搜索词或当前页限制；局部处理先查询确定的信件 ID。
 

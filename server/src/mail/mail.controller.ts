@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
@@ -9,6 +9,9 @@ import { MAIL_MAX_ATTACHMENT_BYTES, MailService } from "./mail.service"
 import { mailContactFilter } from "./mail-contacts"
 
 const content = z.object({ formatVersion: z.union([z.literal(2), z.literal(3)]), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)).optional(), ccOrganizationIds: z.array(z.string().min(1)).optional(), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
+const recipientResolveInput = z.object({
+  nicknames: z.array(z.string().max(100).trim().min(1).regex(/^[^\u0000\p{Surrogate}]+$/u)).min(1).max(50),
+}).strict()
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -39,6 +42,12 @@ export class MailController {
   @Get("recipients")
   searchRecipients(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string, @Query("cursor") cursor?: string) {
     return this.mail.searchRecipients(userId(request), query ?? "", cursor)
+  }
+
+  @Post("recipients/resolve")
+  @HttpCode(200)
+  resolveRecipients(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+    return this.mail.resolveRecipients(userId(request), parse(recipientResolveInput, body).nicknames)
   }
 
   @Get("organizations")

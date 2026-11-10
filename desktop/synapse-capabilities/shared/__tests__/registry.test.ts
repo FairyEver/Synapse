@@ -25,10 +25,14 @@ describe("mail capability registry", () => {
   })
 })
 
-it("publishes 17 internal mail tools and 44 separate external mail tools", () => {
+it("publishes 18 internal mail tools and 44 separate external mail tools", () => {
   const tools = buildAllMcpTools()
-  expect(tools.filter(t => t.name.startsWith("app_mail_internal_"))).toHaveLength(17)
+  expect(tools.filter(t => t.name.startsWith("app_mail_internal_"))).toHaveLength(18)
   expect(tools.filter(t => t.name.startsWith("app_mail_") && !t.name.startsWith("app_mail_internal_"))).toHaveLength(44)
+  expect(MAIL_INTERNAL_DOMAIN.capabilities.find(({ id }) => id === "app.mail_internal.recipient.resolve")?.mutates).toBe(false)
+  expect(tools.find(tool => tool.name === "app_mail_internal_recipient_resolve")?.inputSchema).toMatchObject({
+    required: ["nicknames"], properties: { nicknames: { type: "array", minItems: 1, maxItems: 50 } },
+  })
 })
 
 
