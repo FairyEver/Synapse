@@ -1,6 +1,6 @@
 # 内网穿透部署
 
-本功能默认关闭。本轮代码未部署、迁移未执行，正式域名和自动续期尚未验收。2026-11-11 的 `*.tunnel-test.d2.pub` 是基础设施试验，不能作为产品已上线的证据。
+代码默认关闭，生产环境按下述流程启用。2026-11-11 已完成正式 wildcard DNS、可信证书签发和受限续期账号配置；应用部署及端到端验收结果见[验收记录](tunnel-acceptance.md)。`*.tunnel-test.d2.pub` 是独立基础设施试验，不能作为产品已上线的证据。
 
 ## 入口与前提
 
@@ -45,7 +45,9 @@ bash server/scripts/tunnel-certificate-renew.sh --renew --force
 
 `--check` 不签发、不安装，校验 wildcard SAN、密钥匹配、有效期和系统可信链，返回到期时间/剩余天数；小于14天失败。`--renew` 仅在不足30天时申请，DNS01成功后候选再次校验至少30天。复制到独立版本目录后原子切换整个证书对，Caddy validate + 强制reload（`--force`，即使配置文本未变也重新加载手动TLS文件）；失败切回旧链接并重载。首次无旧证书时失败移除新链接。后续获授权的真实验收必须通过TLS握手核对对外证书指纹，磁盘校验不能代替热加载验收。失败候选保留待检查，不覆盖旧文件、不输出证书私钥或DNS凭据。
 
-授权配置完成后，为 root 的受保护任务增加每日 `--renew` 和独立每日 `--check` 监测；失败应接入已有运维告警渠道。任务仅通过凭据管理机制加载环境。不要把“存在脚本”当成已经安装了定时任务；本次没有创建生产调度。崩溃遗留的 `.acme-lock` / `.renew-lock` 必须核对进程退出后人工移除，不自动删除并发锁。
+生产已安装 root 包装器 `/usr/local/sbin/synapse-tunnel-certificate`，仅从上述0600文件加载环境。systemd `synapse-tunnel-certificate.timer` 每日03:17执行 `--renew`，独立 `synapse-tunnel-certificate-check.timer` 每日08:17执行 `--check`，均按服务器 Asia/Shanghai 时区、附加最多20分钟随机延迟并启用 Persistent。两个 service 首次实际执行均返回成功；不足14天的检查失败和续期失败会保留在 systemd failed 状态及 journal，当前没有配置外部推送告警。
+
+运维检查使用 `systemctl list-timers 'synapse-tunnel-certificate*'`、`systemctl status synapse-tunnel-certificate.service synapse-tunnel-certificate-check.service` 和对应 `journalctl -u`。续期 service 限时15分钟，独立检查限时1分钟。崩溃遗留的 `.acme-lock` / `.renew-lock` 必须核对进程退出后人工移除，不自动删除并发锁。
 
 ## 候选入口与回滚
 

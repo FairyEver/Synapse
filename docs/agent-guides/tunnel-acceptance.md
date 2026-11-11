@@ -1,6 +1,26 @@
 # 内网穿透交付验收记录
 
-日期：2026-11-11。实现仓库 `/Users/liyang/Documents/code/github/Synapse`，发生修改时分支为 `main`。本轮只做本地提交，无 push、远端CI、发版、产品生产部署或生产数据库迁移。
+日期：2026-11-11。实现仓库 `/Users/liyang/Documents/code/github/Synapse`，发生修改时分支为 `main`。下述生产验收为用户随后明确授权的自动配置、部署和发版阶段；后半部分保留最初本地实现阶段的历史记录。
+
+## 正式环境配置与验收
+
+- 已通过 `deploy.sh` 部署后端镜像 `synapse-server:deploy-20261111_222203`。风险扫描识别新空表上的唯一索引，审阅完整新增表迁移后显式放行，仍执行备份恢复至隔离库 `synapse_preflight_20261111_222203` 的迁移预演，预演成功后才进行生产迁移及切换。19项部署流程成功；health、Console、Admin、文档、更新页、PDF及Webhook路由检查通过。Live桌面/手机和穿透控制/数据WSS匿名连接均返回401。
+- 正式 `*.tunnel.d2.pub` wildcard A 指向当前服务器，配置后新随机域名解析成功。DNSPod记录2448370038，TTL600。每条映射仅分配数据库label，不再申请DNS记录。独立CAM续期账号及域级受限策略已配置，凭据只保存在服务器受保护环境文件。
+- 已签发系统信任的 wildcard 证书，并完成一次真实 DNS01 强制续期。公网TLS握手证实SHA256从 `6D:2D:B1:BE:C8:75:BD:25:0E:92:ED:69:FD:6B:E7:E0:94:0C:A7:EE:37:56:A6:5F:DD:0B:86:D1:78:CF:83:FC` 切换为 `0B:B5:05:92:DE:51:E4:5E:06:E5:82:81:3E:B8:A5:69:EA:C8:97:F6:A6:C8:4C:A2:9E:F1:40:26:16:DC:42:69`，续期证书到期时间2027-02-09T13:39:40Z。未跳过证书校验；挑战TXT记录清理后数量为0。
+- 正式Caddy tagged区块已按候选摘要CAS安装，沿用现有父目录证书挂载。功能关闭时公网域及宿主机命名空间均503，启用后未知合法label为404，没有回落平台。生产 `TUNNEL_ENABLED=true`。每日自动续期和独立每日到期检查的systemd timer均已启用，两个service首次运行成功；具体运维和告警现状见部署指南。
+- 使用当前真实已登录桌面账号，通过原生MCP管理入口申请三个独立测试链接，绑定拥有的19780/19781/19782测试端口。相同requestId重复申请得到相同ID和URL；多个端口同时访问成功。停用503、重新启用URL不变、改端口URL不变且请求到新端口、本机端口不可达502及状态提示、删除410均验证通过。仅操作本次拥有的测试映射；保留的测试链接将在最终部署重连检查后清理。
+- 真实公网HTTP/WSS/SSE测试通过：3MiB二进制POST和下载、编码路径/查询串、localhost重定向、Cookie、WS二进制/子协议、SSE首事件和访客取消传播。POST上游断开只调用本机一次；`/api`、`/console`、Live和Webhook同名路径仍进入本机应用。
+- Chrome真实浏览器HTTP、WSS、SSE及 `__Host-` Cookie带父域属性的注入拒绝检查通过。浏览器跨域退出响应被CORS阻止，另以相同Origin的直接请求确认服务器403，未将CORS读失败当作状态码证据。真实Vite项目源码由before-hmr改为after-hmr后，公网页面通过WSS热更新，无需手工刷新。首轮浏览器WS曾被提前停用映射的测试动作中断，恢复后完整重测通过。
+- 真实桌面应用列表、多个运行状态、展开菜单和键盘焦点已观察。桌面自动化在独立窗口缩放后超时，因此未宣称原生窄窗口视觉通过；另将同一真实 `TunnelList` / `TunnelPortDialog` 与现有构建CSS打包为纯视觉夹具，在Chrome520px视口确认长URL折行、菜单图标/文字/边界、弹窗焦点和操作布局，夹具不执行生产管理操作。
+- 本阶段服务端完整有界并发测试为2309通过、3跳过；网页会话和证书provider专项回归通过，server tsc通过。补齐端口申请/修改的结果及耗时日志，先观察新增回归失败，再修复后通过；desktop穿透专项24项、完整typecheck、hard-constraints及UI tracking coverage通过。未把Windows真实用户桌面现场操作当作已验证。
+
+生产回滚点：`/www/wwwroot/synapse/backups/env/synapse-env-before-sync-20261111_222203.env`、`backups/globals/synapse-globals-before-deploy-20261111_222203.sql`、`backups/synapse-final-before-switch-20261111_222203.sql`；旧服务镜像 `synapse-server:rollback-20261111_222203`，PDF回滚状态 `backups/pdf-renderer-rollback-20261111_222203.state`（以上相对路径均位于远端仓库）。Caddy脚本保留单独配置备份和证书历史版本。日常回滚不删除新表、不复用退役域名。
+
+本轮证据位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-11-tunnel-app/release/`：`backend-deploy-reviewed.log`、`certificate-initial.log`、`certificate-renewal.log`、`public-evidence.json`、`browser-public.json`、`narrow-menu.png`、`narrow-dialog.png`及各专项日志；尚无在线分享链接。版本发布、TestFlight和最终部署状态以随后真实发布记录为准。
+
+## 初始本地实现阶段（历史记录）
+
+以下“未部署/未验证”描述仅对应生产部署前的本地交付阶段，不覆盖上面的正式环境验收结果。
 
 ## 已实现
 

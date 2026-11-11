@@ -3,7 +3,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TunnelModule } from "../index"
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), setEnabled: vi.fn(), delete: vi.fn(), write: vi.fn() }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), setEnabled: vi.fn(), delete: vi.fn(), write: vi.fn(), log: vi.fn() }))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "u1" } } }, isLoading: false }) }))
 vi.mock("@/modules/apps/components/system-app-window-shell", () => ({ SystemAppWindowShell: ({ children, left, actions }: { children: React.ReactNode; left: React.ReactNode; actions: React.ReactNode }) => <main>{left}{actions}{children}</main> }))
 vi.mock("@/modules/apps/components/system-app-top-bar", () => ({ SystemAppTopBarActionButton: (props: Record<string, unknown>) => <button onClick={props.onClick as never} aria-label={props["aria-label"] as string}>{props.children as React.ReactNode}</button> }))
@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
   Object.values(mocks).forEach(fn => fn.mockReset())
   mocks.list.mockResolvedValue({ items: [], total: 0, nextOffset: null, currentClientInstanceId: "d1" }); mocks.create.mockResolvedValue(row); mocks.setEnabled.mockResolvedValue({ ...row, enabled: false, revision: 2, runtimeStatus: "stopped" }); mocks.update.mockResolvedValue({ ...row, port: 3001, revision: 2 }); mocks.delete.mockResolvedValue({ id: row.id, deleted: true })
-  vi.stubGlobal("synapse", { tunnel: { mapping: { ...mocks, onChanged: () => () => {}, onReset: () => () => {} } } })
+  vi.stubGlobal("synapse", { tunnel: { mapping: { ...mocks, onChanged: () => () => {}, onReset: () => () => {} } }, log: { write: mocks.log } })
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: mocks.write } })
   container = document.createElement("div"); document.body.append(container); root = createRoot(container)
 })
@@ -26,6 +26,14 @@ async function openMenu() {
   await act(async () => { trigger.focus(); trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
 }
 describe("tunnel app", () => {
+  it("records a failed allocation and successful retry as separate timed operations", async () => {
+    await act(async () => root.render(<TunnelModule />)); await click("申请链接"); await port("3000")
+    mocks.create.mockRejectedValueOnce(new Error("response lost")); await click("申请"); await click("申请")
+    const operations = mocks.log.mock.calls.map(([entry]) => entry).filter(entry => entry.details?.eventKey === "tunnel.mapping.create" && entry.details?.category === "operation")
+    expect(operations.map(entry => entry.details.outcome)).toEqual(["failure", "success"])
+    expect(operations.every(entry => Number.isFinite(entry.details.durationMs) && entry.details.durationMs >= 0)).toBe(true)
+    expect(operations.some(entry => JSON.stringify(entry.details).includes(row.url))).toBe(false)
+  })
   it("opens menus for copy, port editing and confirmed deletion", async () => {
     mocks.list.mockResolvedValue({ items: [row], total: 1, nextOffset: null, currentClientInstanceId: "d1" })
     await act(async () => root.render(<TunnelModule />))

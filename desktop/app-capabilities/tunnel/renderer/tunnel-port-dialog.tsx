@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 export function TunnelPortDialog({ port, pending, failure, onSave, onClose }: { port?: number; pending: boolean; failure: string | null; onSave(port: number): Promise<boolean>; onClose(): void }) {
   const [value, setValue] = useState(port?.toString() ?? ""), [invalid, setInvalid] = useState(false)
   const submit = async (event: FormEvent) => {
@@ -10,7 +11,12 @@ export function TunnelPortDialog({ port, pending, failure, onSave, onClose }: { 
     const number = Number(value)
     if (!/^\d+$/u.test(value) || !Number.isInteger(number) || number < 1 || number > 65535) { setInvalid(true); return }
     setInvalid(false)
-    if (await onSave(number)) onClose()
+    const eventKey = port === undefined ? "tunnel.mapping.create" : "tunnel.mapping.update"
+    const finish = startTrackedOperation({ component: "tunnel", eventKey })
+    let saved = false
+    try { saved = await onSave(number) }
+    finally { finish(saved ? "success" : "failure") }
+    if (saved) onClose()
   }
   return <Dialog open onOpenChange={open => { if (!open && !pending) onClose() }}>
     <DialogContent><form onSubmit={event => { void submit(event) }} className="space-y-4">
