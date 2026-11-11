@@ -14,28 +14,27 @@ const loginSchema = z.object({
 
 const legacyDashboardCookieName = "synapse_admin"
 
-type UserCookiePath = "/api" | "/drive"
-
-function userCookieOptions(path: UserCookiePath, expiresAt: Date) {
+function userCookieOptions(expiresAt: Date) {
   return {
     httpOnly: true,
     maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
-    path,
+    path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
 
-function userCookieClearOptions(path: UserCookiePath) {
+function userCookieClearOptions() {
   return {
     httpOnly: true,
-    path,
+    path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
 
 function clearLegacyDashboardCookie(response: Response): void {
+  for (const path of ["/api", "/drive"]) response.clearCookie("synapse_user_session", { httpOnly: true, path, sameSite: "lax", secure: process.env.NODE_ENV === "production" })
   response.clearCookie(legacyDashboardCookieName, {
     httpOnly: true,
     path: "/",
@@ -59,8 +58,7 @@ export class DashboardAuthController {
     const result = loginSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "登录请求无效。")
     const session = await this.auth.loginWeb(result.data, request.ip)
-    response.cookie(userSessionCookieName, session.token, userCookieOptions("/api", session.expiresAt))
-    response.cookie(userSessionCookieName, session.token, userCookieOptions("/drive", session.expiresAt))
+    response.cookie(userSessionCookieName, session.token, userCookieOptions(session.expiresAt))
     clearLegacyDashboardCookie(response)
     return {
       userId: session.user.id,
@@ -82,12 +80,11 @@ export class DashboardAuthController {
     const token = request.cookies?.[userSessionCookieName]
     const session = typeof token === "string" ? await this.auth.verifyWebSession(token) : null
     if (!session) {
-      response.clearCookie(userSessionCookieName, userCookieClearOptions("/api"))
-      response.clearCookie(userSessionCookieName, userCookieClearOptions("/drive"))
+      response.clearCookie(userSessionCookieName, userCookieClearOptions())
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     const me = await this.auth.getMe(session.userId)
-    response.cookie(userSessionCookieName, token, userCookieOptions("/drive", session.expiresAt))
+    response.cookie(userSessionCookieName, token, userCookieOptions(session.expiresAt))
     return {
       userId: me.user.id,
       email: me.user.email,
@@ -108,8 +105,7 @@ export class DashboardAuthController {
     try {
       if (typeof token === "string") await this.auth.logoutWeb(token, request.ip)
     } finally {
-      response.clearCookie(userSessionCookieName, userCookieClearOptions("/api"))
-      response.clearCookie(userSessionCookieName, userCookieClearOptions("/drive"))
+      response.clearCookie(userSessionCookieName, userCookieClearOptions())
       clearLegacyDashboardCookie(response)
     }
     return { ok: true }

@@ -1,1 +1,2 @@
-export const userSessionCookieName = "synapse_user_session"
+import { sessionCookieName } from "./session-cookie"
+export const userSessionCookieName = sessionCookieName("synapse_user_session")

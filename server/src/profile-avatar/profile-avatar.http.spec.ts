@@ -5,7 +5,7 @@ import { Test } from "@nestjs/testing"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import cookieParser from "cookie-parser"
 import request from "supertest"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
 import { userSessionCookieName } from "../auth/user-web-session"
@@ -42,12 +42,16 @@ async function createApp() {
   app.getHttpAdapter().getInstance().set("trust proxy", "loopback")
   app.use(cookieParser())
   await app.init()
+  // Keep one owned loopback listener for the rate-limit run instead of rebinding for every request.
+  await app.listen(0, "127.0.0.1")
   return app
 }
 
 const randomAvatarPath = "/api/console/me/avatar/random"
 
 describe("random avatar rate limit over HTTP", () => {
+  beforeEach(() => vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test"))
+  afterEach(() => vi.unstubAllEnvs())
   it("gives each account its own 60 requests behind the same IP", async () => {
     const app = await createApp()
     try {
@@ -78,7 +82,7 @@ describe("random avatar rate limit over HTTP", () => {
       }
       for (let sent = 0; sent < 20; sent += 1) {
         await request(server).post(randomAvatarPath)
-          .set("Cookie", `${userSessionCookieName}=user-a-web-session`)
+          .set("Cookie", `${userSessionCookieName}=user-a-web-session`).set("Origin", "https://synapse.test")
           .set("X-Forwarded-For", "203.0.113.3")
           .expect(201)
       }
@@ -87,7 +91,7 @@ describe("random avatar rate limit over HTTP", () => {
         .set("X-Forwarded-For", "203.0.113.4")
         .expect(429)
       await request(server).post(randomAvatarPath)
-        .set("Cookie", `${userSessionCookieName}=user-a-web-session`)
+        .set("Cookie", `${userSessionCookieName}=user-a-web-session`).set("Origin", "https://synapse.test")
         .expect(429)
     } finally {
       await app.close()

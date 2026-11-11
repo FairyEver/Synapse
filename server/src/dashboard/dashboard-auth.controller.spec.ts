@@ -9,7 +9,7 @@ describe("DashboardAuthController", () => {
     vi.unstubAllEnvs()
   })
 
-  it("sets API and Drive-scoped user cookies on login", async () => {
+  it("sets one root-path user cookie on login", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-10T00:00:00.000Z"))
     vi.stubEnv("NODE_ENV", "production")
@@ -35,20 +35,14 @@ describe("DashboardAuthController", () => {
     expect(response.cookie).toHaveBeenNthCalledWith(1, userSessionCookieName, "opaque-token", expect.objectContaining({
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: "/api",
+      path: "/",
       sameSite: "lax",
       secure: true,
     }))
-    expect(response.cookie).toHaveBeenNthCalledWith(2, userSessionCookieName, "opaque-token", expect.objectContaining({
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: "/drive",
-      sameSite: "lax",
-      secure: true,
-    }))
+
   })
 
-  it("refreshes the Drive-scoped cookie for an existing session", async () => {
+  it("refreshes the root-path cookie for an existing session", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-10T00:00:00.000Z"))
     const auth = {
@@ -71,12 +65,12 @@ describe("DashboardAuthController", () => {
 
     expect(response.cookie).toHaveBeenCalledWith(userSessionCookieName, "opaque-token", expect.objectContaining({
       maxAge: 2 * 24 * 60 * 60 * 1000,
-      path: "/drive",
+      path: "/",
     }))
     expect(result.userId).toBe("user-1")
   })
 
-  it("clears API and Drive-scoped user cookies on logout", async () => {
+  it("clears the root-path cookie on logout", async () => {
     const auth = { logoutWeb: vi.fn().mockResolvedValue(undefined) }
     const controller = new DashboardAuthController(auth as never)
     const response = { cookie: vi.fn(), clearCookie: vi.fn() }
@@ -86,7 +80,7 @@ describe("DashboardAuthController", () => {
       response as never,
     )
 
-    expect(response.clearCookie).toHaveBeenCalledWith(userSessionCookieName, expect.objectContaining({ path: "/api" }))
-    expect(response.clearCookie).toHaveBeenCalledWith(userSessionCookieName, expect.objectContaining({ path: "/drive" }))
+    expect(response.clearCookie).toHaveBeenCalledWith(userSessionCookieName, expect.objectContaining({ path: "/" }))
+    expect(response.clearCookie).toHaveBeenCalledWith(userSessionCookieName, expect.objectContaining({ path: "/" }))
   })
 })

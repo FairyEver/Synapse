@@ -115,7 +115,8 @@ export async function withAdminSession(config, callback, fetchImpl = fetch) {
     headers: { "Content-Type": "application/json", Origin: origin },
     body: JSON.stringify({ accessSecret: config.accessSecret }),
   })
-  const cookie = login.headers.getSetCookie().map((item) => item.split(";", 1)[0]).find((item) => item.startsWith("synapse_admin_session="))
+  const cookies = login.headers.getSetCookie().map((item) => item.split(";", 1)[0])
+  const cookie = cookies.find((item) => item.startsWith("__Host-synapse_admin_session=")) ?? cookies.find((item) => item.startsWith("synapse_admin_session=") && item !== "synapse_admin_session=")
   if (!cookie) throw new Error("管理员会话未返回 Cookie。")
   try {
     return await callback({

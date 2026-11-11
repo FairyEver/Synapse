@@ -475,3 +475,5 @@ Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；�
 - 六项管理 capability / MCP 与 IPC 共用 dispatcher；无 Workflow、Automation、Deep Link、移动端或 Dashboard 入口。配置、流量预算与公网入口规则见[设计](../superpowers/specs/2026-11-11-tunnel-app-design.md)。生产自动续期需长期 DNSPod 验证授权；基础设施试验不等于产品上线。
 
 内网穿透命名空间关闭后仍由Nginx明确拒绝，不可回落平台站点。平台Cookie会话写操作、网页登录及退出始终精确校验APP_PUBLIC_URL的Origin，Bearer不受此限制。原始多Cookie字段先用分号合并再移除平台会话Cookie。证书安装/恢复必须强制Caddy reload，并在真实验收核对TLS指纹。
+
+生产网页用户/管理员会话使用 `__Host-synapse_user_session` / `__Host-synapse_admin_session`，固定Secure、HttpOnly、Path=/，不设置Domain，不接受旧未加前缀Cookie作为兼容认证；首次升级需网页登录一次。开发HTTP环境保留普通名称。桌面/iOS Bearer协议不变。DNS01续期使用专用TencentCloud CAM子账号，仅d2.pub域的TXT创建/删除和记录读取，密钥保存在服务器root专属配置，BT ACME不落凭据到订单。

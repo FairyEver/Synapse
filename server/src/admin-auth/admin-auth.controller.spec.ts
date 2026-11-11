@@ -25,7 +25,7 @@ describe("AdminAuthController", () => {
     expect(result).not.toHaveProperty("token")
     expect(response.cookie).toHaveBeenCalledWith(adminSessionCookieName, "opaque-token", expect.objectContaining({
       httpOnly: true,
-      path: "/api/admin",
+      path: "/",
       sameSite: "strict",
     }))
   })

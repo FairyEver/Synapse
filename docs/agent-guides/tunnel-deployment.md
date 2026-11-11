@@ -21,24 +21,26 @@
 
 ## 证书与 DNSPod
 
-沿用当前 BT 的 `/www/server/panel/class/acme_v2.py`，不安装 Caddy DNS 插件或新的 ACME 依赖。已只读核对该机 provider 为 `panelDnsapi.DNSPodDns(ID, Token)`，需要 **DNSPod 旧 API 的 ID 和 Token**，不是腾讯云 SecretId/SecretKey，也不是网页登录 Cookie。当前未配置这对长期凭据。
+沿用当前 BT `/www/server/panel/class/acme_v2.py` 和已安装的腾讯云 Python SDK，不新增Caddy插件。正式环境使用独立CAM账号 `synapse-tunnel-dns-renew`，仅授权 `d2.pub` 的 DescribeRecordList / CreateRecord / DeleteRecord，禁止控制台登录。不是复用业务主密钥，也不需要旧版DNSPod ID/Token。
 
-将凭据交由 root 专属的调度环境管理（文件0600、目录0700），提供 `TUNNEL_DNSPOD_ID` / `TUNNEL_DNSPOD_TOKEN`。不要写入仓库、普通 server `.env`、命令参数、调度命令文本或日志。脚本覆盖 provider 的凭据读取，BT 订单只保存 `DNSPodDns` 名称；候选证书写入独立目录，不调用 BT 的站点自动部署。
+凭据位于服务器 `/root/.config/synapse-tunnel/renew.env`（0600，父目录0700），变量为 `TUNNEL_DNS_SECRET_ID` / `TUNNEL_DNS_SECRET_KEY` / `TUNNEL_DNS_ZONE`。不写仓库、普通server环境或命令参数。`tunnel-acme.py` 仅把provider名称写入BT订单，严格限定挑战域，只删除本次创建的TXT记录ID。
 
 设置以下非敏感配置：
 
 ```sh
 export TUNNEL_PUBLIC_DOMAIN=tunnel.d2.pub
-export TUNNEL_CERT_ROOT=/www/wwwroot/shared-caddy-edge/tunnel-certs
+export TUNNEL_CERT_ROOT=/www/wwwroot/shared-caddy-edge/bootstrap-certs/tunnel
 export TUNNEL_CADDYFILE=/www/wwwroot/shared-caddy-edge/Caddyfile
 export TUNNEL_CADDY_CONTAINER=shared-caddy-edge
 ```
 
-Caddy 只读挂载整个 `TUNNEL_CERT_ROOT` 到 `/certs/tunnel`，保留父目录挂载，不能只挂载当前证书文件。首次安装证书后通过配置脚本加正式区块。活动路径为 `current/fullchain.pem` 和 `current/privkey.pem`，`current` 必须是符号链接。候选与历史版本仅 root 可读。
+Caddy通过现有 `bootstrap-certs` 父目录只读挂载，证书位于容器 `/bootstrap-certs/tunnel`；保留父目录挂载，不能只挂载当前证书文件。首次安装证书后通过配置脚本加正式区块。活动路径为 `current/fullchain.pem` 和 `current/privkey.pem`，`current` 必须是符号链接。候选与历史版本仅 root 可读。
 
 ```sh
 bash server/scripts/tunnel-certificate-renew.sh --check
 bash server/scripts/tunnel-certificate-renew.sh --renew
+# 仅在明确进行真实续期演练时：
+bash server/scripts/tunnel-certificate-renew.sh --renew --force
 ```
 
 `--check` 不签发、不安装，校验 wildcard SAN、密钥匹配、有效期和系统可信链，返回到期时间/剩余天数；小于14天失败。`--renew` 仅在不足30天时申请，DNS01成功后候选再次校验至少30天。复制到独立版本目录后原子切换整个证书对，Caddy validate + 强制reload（`--force`，即使配置文本未变也重新加载手动TLS文件）；失败切回旧链接并重载。首次无旧证书时失败移除新链接。后续获授权的真实验收必须通过TLS握手核对对外证书指纹，磁盘校验不能代替热加载验收。失败候选保留待检查，不覆盖旧文件、不输出证书私钥或DNS凭据。
@@ -61,4 +63,4 @@ Caddy 使用 `flush_interval 1ms` 保留客户端断开时的后端取消；SSE�
 
 配置参考：[Caddy CLI reload](https://caddyserver.com/docs/command-line#caddy-reload)、[Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)、[log_skip](https://caddyserver.com/docs/caddyfile/directives/log_skip)、[Nginx server names](https://nginx.org/en/docs/http/server_names.html)。
 
-上线安全门禁：当前公共域与平台共享 `d2.pub`。精确Origin与响应Cookie Domain重写不能宣称已经解决父域JavaScript Cookie注入。必须完成真实浏览器会话隔离验证；若需改变平台Cookie格式或改用不同注册域，按设计先报告产品边界变化，取得对应授权。该项未验证前不标记生产就绪。
+生产会话已改为浏览器强制host-only的 `__Host-` Cookie（Secure、HttpOnly、Path=/、无Domain），旧Cookie不作为认证回退，因此已有网页用户需重新登录一次；桌面/iOS Bearer不变。上线仍须用真实浏览器核对公共子域无法植入平台会话，不能仅凭Set-Cookie重写宣称隔离完成。官方依据：[MDN Cookie安全配置](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/Cookies)。

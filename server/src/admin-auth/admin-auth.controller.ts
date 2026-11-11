@@ -4,20 +4,21 @@ import type { Request, Response } from "express"
 import { z } from "zod"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { AdminAuthService, adminSessionMaxAgeMs } from "./admin-auth.service"
+import { sessionCookieName } from "../auth/session-cookie"
 import { assertTrustedAdminOrigin } from "./admin-origin"
 
 const accessSchema = z.object({
   accessSecret: z.string().min(1).max(4096),
 }).strict()
 
-export const adminSessionCookieName = "synapse_admin_session"
+export const adminSessionCookieName = sessionCookieName("synapse_admin_session")
 const legacyDashboardCookieName = "synapse_admin"
 
 function adminCookieOptions() {
   return {
     httpOnly: true,
     maxAge: adminSessionMaxAgeMs,
-    path: "/api/admin",
+    path: "/",
     sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
   }
@@ -26,13 +27,14 @@ function adminCookieOptions() {
 function adminCookieClearOptions() {
   return {
     httpOnly: true,
-    path: "/api/admin",
+    path: "/",
     sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
 
 function clearLegacyDashboardCookie(response: Response): void {
+  response.clearCookie("synapse_admin_session", { httpOnly: true, path: "/api/admin", sameSite: "strict", secure: process.env.NODE_ENV === "production" })
   response.clearCookie(legacyDashboardCookieName, {
     httpOnly: true,
     path: "/",

@@ -39,11 +39,11 @@ test("blocks empty or oversized release notes before any network access", () => 
   assert.throws(() => parseArgs(["--send", "--check", "--version", "v1.2.3", "--notes-file", "notes.md"]), /只能选择一种/u)
 })
 
-test("uses an ephemeral admin cookie for audience and send, then logs out", async () => {
+for (const cookieName of ["synapse_admin_session", "__Host-synapse_admin_session"]) test(`uses an ephemeral ${cookieName} cookie for audience and send, then logs out`, async () => {
   const requests = []
   const fetchImpl = async (url, init) => {
     requests.push({ url: String(url), init })
-    if (requests.length === 1) return new Response("{}", { status: 201, headers: { "set-cookie": "synapse_admin_session=temporary-token; HttpOnly; Path=/api/admin" } })
+    if (requests.length === 1) return new Response("{}", { status: 201, headers: { "set-cookie": `${cookieName}=temporary-token; HttpOnly; Path=/` } })
     if (requests.length === 2) return Response.json({ activeUsers: 2 })
     if (requests.length === 3) return Response.json({ messageId: "mail-1", recipientCount: 2 }, { status: 201 })
     return Response.json({ ok: true })
@@ -62,7 +62,7 @@ test("uses an ephemeral admin cookie for audience and send, then logs out", asyn
     ["/api/admin/session", "DELETE"],
   ])
   assert.equal(JSON.parse(requests[0].init.body).accessSecret, "private-admin-secret")
-  assert.equal(requests[2].init.headers.Cookie, "synapse_admin_session=temporary-token")
+  assert.equal(requests[2].init.headers.Cookie, `${cookieName}=temporary-token`)
   assert.equal(requests[2].init.headers.Origin, "https://synapse.example")
   assert.ok(requests.every((item) => !item.url.includes("private-admin-secret") && !item.url.includes("temporary-token")))
 })
