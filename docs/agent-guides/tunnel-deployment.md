@@ -6,6 +6,7 @@
 
 - 正式域为 `*.tunnel.d2.pub`，DNSPod 配一次 wildcard A 到服务器；每条映射不调用 DNS API。
 - 当前边缘为 Docker `shared-caddy-edge`（Caddy 2.11.4），80/443 已由它监听。Caddy → 宿主机回环3000 → 应用容器 Nginx3000 → 容器回环3002。不要增加3002宿主机映射。
+- Caddyfile 必须通过父目录只读挂载：生产 `/www/wwwroot/shared-caddy-edge:/etc/caddy:ro`，启动仍读取 `/etc/caddy/Caddyfile`。配置脚本会原子替换文件，不能改回单文件绑定，否则容器可能继续读取旧inode，出现热加载配置与重启配置不一致。2026-11-12 已重建同版本边缘容器，并通过原子替换后的inode、SHA256和公网请求验证。DNS API凭据始终保留在挂载目录之外的 `/root/.config/synapse-tunnel/renew.env`。
 - wildcard 域所有路径，包括 `/api`、`/console`、Live 和保留路径，都进入 TunnelIngress，未知/多层/不合法 label 为404。管理 API 和控制/数据 WSS 仍只在平台域。
 - Nginx 启动时从已验证的 TUNNEL 配置生成 `/etc/nginx/http.d/tunnel.conf`；关闭时仍保留命名空间的503拒绝虚拟主机（未指定时为 `tunnel.d2.pub`），不回落平台。回滚时保留原 `TUNNEL_PUBLIC_DOMAIN`，先移除Caddy区块后才能撤掉该配置。`.tunnel.d2.pub` 捕获该命名空间全部 host，严格 label 校验在 ingress，不能让无效 label 回退平台站点。
 - Caddy 覆盖可信客户端地址头，Nginx 原样转交；3000只能绑定宿主机回环。公网请求不得绕过 Caddy 到达它。

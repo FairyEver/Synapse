@@ -8,7 +8,7 @@
 - 正式 `*.tunnel.d2.pub` wildcard A 指向当前服务器，配置后新随机域名解析成功。DNSPod记录2448370038，TTL600。每条映射仅分配数据库label，不再申请DNS记录。独立CAM续期账号及域级受限策略已配置，凭据只保存在服务器受保护环境文件。
 - 已签发系统信任的 wildcard 证书，并完成一次真实 DNS01 强制续期。公网TLS握手证实SHA256从 `6D:2D:B1:BE:C8:75:BD:25:0E:92:ED:69:FD:6B:E7:E0:94:0C:A7:EE:37:56:A6:5F:DD:0B:86:D1:78:CF:83:FC` 切换为 `0B:B5:05:92:DE:51:E4:5E:06:E5:82:81:3E:B8:A5:69:EA:C8:97:F6:A6:C8:4C:A2:9E:F1:40:26:16:DC:42:69`，续期证书到期时间2027-02-09T13:39:40Z。未跳过证书校验；挑战TXT记录清理后数量为0。
 - 正式Caddy tagged区块已按候选摘要CAS安装，沿用现有父目录证书挂载。功能关闭时公网域及宿主机命名空间均503，启用后未知合法label为404，没有回落平台。生产 `TUNNEL_ENABLED=true`。每日自动续期和独立每日到期检查的systemd timer均已启用，两个service首次运行成功；具体运维和告警现状见部署指南。
-- 使用当前真实已登录桌面账号，通过原生MCP管理入口申请三个独立测试链接，绑定拥有的19780/19781/19782测试端口。相同requestId重复申请得到相同ID和URL；多个端口同时访问成功。停用503、重新启用URL不变、改端口URL不变且请求到新端口、本机端口不可达502及状态提示、删除410均验证通过。仅操作本次拥有的测试映射；保留的测试链接将在最终部署重连检查后清理。
+- 使用当前真实已登录桌面账号，通过原生MCP管理入口申请三个独立测试链接，绑定拥有的19780/19781/19782测试端口。相同requestId重复申请得到相同ID和URL；多个端口同时访问成功。停用503、重新启用URL不变、改端口URL不变且请求到新端口、本机端口不可达502及状态提示、删除410均验证通过。仅操作本次拥有的测试映射；最终部署重连检查后，三个测试链接均已清理并返回410，拥有的测试服务进程已停止。
 - 真实公网HTTP/WSS/SSE测试通过：3MiB二进制POST和下载、编码路径/查询串、localhost重定向、Cookie、WS二进制/子协议、SSE首事件和访客取消传播。POST上游断开只调用本机一次；`/api`、`/console`、Live和Webhook同名路径仍进入本机应用。
 - Chrome真实浏览器HTTP、WSS、SSE及 `__Host-` Cookie带父域属性的注入拒绝检查通过。浏览器跨域退出响应被CORS阻止，另以相同Origin的直接请求确认服务器403，未将CORS读失败当作状态码证据。真实Vite项目源码由before-hmr改为after-hmr后，公网页面通过WSS热更新，无需手工刷新。首轮浏览器WS曾被提前停用映射的测试动作中断，恢复后完整重测通过。
 - 真实桌面应用列表、多个运行状态、展开菜单和键盘焦点已观察。桌面自动化在独立窗口缩放后超时，因此未宣称原生窄窗口视觉通过；另将同一真实 `TunnelList` / `TunnelPortDialog` 与现有构建CSS打包为纯视觉夹具，在Chrome520px视口确认长URL折行、菜单图标/文字/边界、弹窗焦点和操作布局，夹具不执行生产管理操作。
@@ -16,7 +16,21 @@
 
 生产回滚点：`/www/wwwroot/synapse/backups/env/synapse-env-before-sync-20261111_222203.env`、`backups/globals/synapse-globals-before-deploy-20261111_222203.sql`、`backups/synapse-final-before-switch-20261111_222203.sql`；旧服务镜像 `synapse-server:rollback-20261111_222203`，PDF回滚状态 `backups/pdf-renderer-rollback-20261111_222203.state`（以上相对路径均位于远端仓库）。Caddy脚本保留单独配置备份和证书历史版本。日常回滚不删除新表、不复用退役域名。
 
-本轮证据位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-11-tunnel-app/release/`：`backend-deploy-reviewed.log`、`certificate-initial.log`、`certificate-renewal.log`、`public-evidence.json`、`browser-public.json`、`narrow-menu.png`、`narrow-dialog.png`及各专项日志；尚无在线分享链接。版本发布、TestFlight和最终部署状态以随后真实发布记录为准。
+本轮证据位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-11-tunnel-app/release/`：`backend-deploy-reviewed.log`、`certificate-initial.log`、`certificate-renewal.log`、`public-evidence.json`、`browser-public.json`、`narrow-menu.png`、`narrow-dialog.png`及各专项日志；测试原始日志尚无在线分享链接。
+
+## 2026-11-12 正式发布结果
+
+- 已发布 [v1.0.112](https://github.com/FairyEver/SynapseAppRelease/releases/tag/v1.0.112)。源码版本提交为 `5132229adc4970593ab2a89d764378afd687c768`，更新说明已归档至 [docs/releases/v1.0.112.md](../releases/v1.0.112.md)，归档提交 `988685b46` 已推送main。
+- 首轮v1.0.111未启动Release：完整CI发现5个测试文件12项失败。已复现并修复启动依赖、领域路由、能力/文档数量和ASAR夹具的过期基线，以及确实遗漏的中文检索词和Skill两工具入口说明；没有跳过或放宽门禁。五文件139项通过后重新发起v1.0.112。
+- [CI 43048563456](https://github.com/FairyEver/Synapse/actions/runs/43048563456) 六组全部成功。macOS主套件11846通过、32跳过，独立真实文件系统契约80通过；macOS/Windows实际打包目录和运行时、Windows安装包及Linux运行时检查通过。[Release 43051609240](https://github.com/FairyEver/Synapse/actions/runs/43051609240) 的两端正式包、更新协议、CDN发布及包完成通知均成功。
+- 三个安装文件的CDN检查均200：macOS DMG 325524642字节、ZIP 314718475字节、Windows EXE 282885432字节。`latest.yml`、`latest-windows.yml`、`latest-mac.yml` 均200且版本1.0.112；发布正文保留全部六条CDN链接和一键更新入口。
+- iOS 1.0.112（build118）已通过App Store签名导出并成功上传TestFlight，Delivery UUID `3127108a-fe62-4254-9c63-64a606b4ee9c`；上传命令退出0。不等待Apple后续处理，未将上传成功写成已完成Apple处理。上传器先记录了恢复状态文件不存在的提示，最终明确返回 `UPLOAD SUCCEEDED with no errors`。
+- 最终后端镜像为 `synapse-server:deploy-20261112_001315`，部署174秒、19项流程成功，隔离库为 `synapse_preflight_20261112_001315`。最终备份 `backups/synapse-final-before-switch-20261112_001315.sql`、环境备份 `backups/env/synapse-env-before-sync-20261112_001315.env`、回滚镜像 `synapse-server:rollback-20261112_001315` 和PDF状态 `backups/pdf-renderer-rollback-20261112_001315.state` 均位于远端仓库。新后端和边缘容器healthy，TUNNEL_ENABLED=true，APNS_USE_SANDBOX仍false。
+- 持久化检查发现Caddy单文件绑定仍指向旧inode，已把同版本边缘容器改为配置父目录只读挂载并重建。再次调用正式配置脚本进行原子替换后，宿主机和容器inode一致，配置SHA256同为 `97b00018a6427d09530dcdcdedc92b5bddc6f9c9cecbd2e6067e84e0a0dc9438`。配置备份在远端 `/www/wwwroot/shared-caddy-edge/backups/tunnel-directory-mount-20261112/`。原站及其他配置站点均有TLS/HTTP响应，未出现网关5xx；正式穿透和旧试验探针200。续期检查再次成功，定时任务保持active。
+- 最终后端重启后，两个原URL自动恢复200，新的WSS往返通过，MCP摘要均running。随后只删除本次拥有的三个映射，逐一验证410；19780/19781/19782无剩余测试监听。
+- 按稳定请求ID `release:v1.0.112` 向全站40个活跃账号投递一封更新站内信。服务端确认入库，信件ID `cmwcbqlp9007mpc3bvzqz2vlo`；此结果表示数据库接收与收件副本数量，不代表所有设备已显示。
+
+新增证据为同一目录下的 `ci-v112-final.json`、`release-v112-final.json`、`cdn-and-edge-check.json`、`caddy-persistence.log`、`ios-v112.log`、`final-deploy-v112.log`、`final-reconnect.json` 和 `release-mail-v112.log`。DNS续期凭据仍只在远端受保护文件中，不进入仓库、发布说明或群发邮件。
 
 ## 初始本地实现阶段（历史记录）
 
