@@ -1,18 +1,16 @@
-import { useRef, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-export function TunnelPortDialog({ port, pending, failure, onSave, onClose }: { port?: number; pending: boolean; failure: string | null; onSave(port: number, requestId: string): Promise<boolean>; onClose(): void }) {
+export function TunnelPortDialog({ port, pending, failure, onSave, onClose }: { port?: number; pending: boolean; failure: string | null; onSave(port: number): Promise<boolean>; onClose(): void }) {
   const [value, setValue] = useState(port?.toString() ?? ""), [invalid, setInvalid] = useState(false)
-  const request = useRef<{ port: number; id: string } | null>(null)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const number = Number(value)
     if (!/^\d+$/u.test(value) || !Number.isInteger(number) || number < 1 || number > 65535) { setInvalid(true); return }
     setInvalid(false)
-    if (request.current?.port !== number) request.current = { port: number, id: crypto.randomUUID() }
-    if (await onSave(number, request.current.id)) onClose()
+    if (await onSave(number)) onClose()
   }
   return <Dialog open onOpenChange={open => { if (!open && !pending) onClose() }}>
     <DialogContent><form onSubmit={event => { void submit(event) }} className="space-y-4">

@@ -22,6 +22,7 @@ export class TunnelBroker {
   private readonly devices = new Map<string, Session>()
   private readonly mappingSessions = new Map<string, Session>()
   private readonly flows = new Map<string, Flow>()
+  private readonly bindingReads = new Set<{ ids: Set<string>; invalidated: Set<string> }>()
   private readonly tickets = new Map<string, Flow>()
   private readonly budget: TunnelBudget
   private readonly now: () => number
@@ -44,15 +45,20 @@ export class TunnelBroker {
   async setBindings(connectionId: string, refs: TunnelBindingRef[]): Promise<TunnelBindingRef[]> {
     const session = this.sessions.get(connectionId)
     if (!session) throw new TunnelTransportError("TUNNEL_OFFLINE")
-    const page = await this.service.list(session.actor.userId, { clientInstanceId: session.actor.clientInstanceId, limit: 100 })
-    if (this.sessions.get(connectionId) !== session) throw new TunnelTransportError("TUNNEL_OFFLINE")
     const wanted = new Map(refs.map(ref => [ref.id, ref.revision]))
-    const accepted = page.items.filter(row => row.enabled && wanted.get(row.id) === row.revision)
-    const current = new Map(accepted.map(row => [row.id, row]))
-    for (const [id, old] of session.mappings) if (current.get(id)?.revision !== old.revision) this.invalidateMapping(id)
-    session.mappings = current
-    for (const row of accepted) this.mappingSessions.set(row.id, session)
-    return accepted.map(row => ({ id: row.id, revision: row.revision }))
+    // Each in-flight snapshot carries monotonic invalidation flags, bounded by its <=100 requested IDs.
+    const read = { ids: new Set(wanted.keys()), invalidated: new Set<string>() }
+    this.bindingReads.add(read)
+    try {
+      const page = await this.service.list(session.actor.userId, { clientInstanceId: session.actor.clientInstanceId, limit: 100 })
+      if (this.sessions.get(connectionId) !== session) throw new TunnelTransportError("TUNNEL_OFFLINE")
+      const accepted = page.items.filter(row => row.enabled && wanted.get(row.id) === row.revision && !read.invalidated.has(row.id))
+      const current = new Map(accepted.map(row => [row.id, row]))
+      for (const [id, old] of session.mappings) if (current.get(id)?.revision !== old.revision) this.invalidateMapping(id)
+      session.mappings = current
+      for (const row of accepted) this.mappingSessions.set(row.id, session)
+      return accepted.map(row => ({ id: row.id, revision: row.revision }))
+    } finally { this.bindingReads.delete(read) }
   }
   setState(connectionId: string, id: string, revision: number, status: TunnelRuntimeStatus): void {
     const session = this.sessions.get(connectionId)
@@ -110,6 +116,7 @@ export class TunnelBroker {
     }
   }
   invalidateMapping(id: string): void {
+    for (const read of this.bindingReads) if (read.ids.has(id)) read.invalidated.add(id)
     const session = this.mappingSessions.get(id)
     this.mappingSessions.delete(id); session?.mappings.delete(id); session?.states.delete(id)
     for (const flow of this.flows.values()) if (flow.mappingId === id) this.fail(flow.id, new TunnelTransportError("TUNNEL_MAPPING_CHANGED"))

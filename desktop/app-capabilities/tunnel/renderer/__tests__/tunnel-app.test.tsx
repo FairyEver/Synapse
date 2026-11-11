@@ -43,6 +43,12 @@ describe("tunnel app", () => {
     expect(document.body.textContent).toContain("暂无链接")
   })
 
+  it("reopens an uncertain allocation through the main-process receipt instead of minting a new UUID", async () => {
+    await act(async () => root.render(<TunnelModule />)); await click("申请链接"); await port("3000")
+    mocks.create.mockRejectedValueOnce(new Error("response lost")); await click("申请"); await click("取消")
+    await click("申请链接"); await port("3000"); await click("申请")
+    expect(mocks.create.mock.calls).toEqual([[{ port: 3000 }], [{ port: 3000 }]])
+  })
   it("does not let a pre-mutation refresh erase a newly allocated link", async () => {
     let finish!: (page: unknown) => void
     mocks.list.mockImplementationOnce(() => new Promise(done => { finish = done }))
@@ -56,7 +62,7 @@ describe("tunnel app", () => {
     mocks.create.mockRejectedValueOnce(new Error("暂时失败")); await click("申请")
     expect(document.querySelector<HTMLInputElement>('input[aria-label="本机端口"]')!.value).toBe("3000")
     await click("申请")
-    expect(mocks.create).toHaveBeenLastCalledWith(expect.objectContaining({ port: 3000 }))
+    expect(mocks.create).toHaveBeenLastCalledWith({ port: 3000 })
     expect(document.body.textContent).toContain(row.url); expect(document.body.textContent).toContain("本机服务不可达")
   })
   it("defaults to this computer and exposes other devices read-only", async () => {

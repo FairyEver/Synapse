@@ -59,7 +59,7 @@ export class UserAuthGuard implements CanActivate {
     }
     request.user = { id: session.userId }
     request.userAuthMethod = "cookie"
-    assertTunnelCookieOrigin(request, process.env.APP_PUBLIC_URL, process.env.TUNNEL_ENABLED === "true")
+    assertTunnelCookieOrigin(request, process.env.APP_PUBLIC_URL)
     return true
   }
 

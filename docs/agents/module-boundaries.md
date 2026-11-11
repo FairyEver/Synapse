@@ -473,3 +473,5 @@ Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；�
 - 原设备、账号、端口、revision 与本机授权全部一致才能运行；启用意图长期保存，后台恢复不得阻塞主窗口。身份切换、撤销权限和连接换代立即终止旧流。
 - 独立控制与逐请求数据 WSS，不走 Live；只连回环 HTTP 端口，不提供任意主机、TCP 或 CONNECT。拿到公网 HTTPS 链接即可访问，不启动本机服务、不重放请求、不记录正文/Cookie/query。
 - 六项管理 capability / MCP 与 IPC 共用 dispatcher；无 Workflow、Automation、Deep Link、移动端或 Dashboard 入口。配置、流量预算与公网入口规则见[设计](../superpowers/specs/2026-11-11-tunnel-app-design.md)。生产自动续期需长期 DNSPod 验证授权；基础设施试验不等于产品上线。
+
+内网穿透命名空间关闭后仍由Nginx明确拒绝，不可回落平台站点。平台Cookie会话写操作、网页登录及退出始终精确校验APP_PUBLIC_URL的Origin，Bearer不受此限制。原始多Cookie字段先用分号合并再移除平台会话Cookie。证书安装/恢复必须强制Caddy reload，并在真实验收核对TLS指纹。

@@ -10,7 +10,7 @@ function filtered(raw: readonly string[]): OutgoingHttpHeaders {
     if (skip.has(name) || name.startsWith("x-synapse-tunnel-") || name === "forwarded" || name.startsWith("x-forwarded-")) continue
     const prior = result[name]
     if (name === "set-cookie") result[name] = [...(Array.isArray(prior) ? prior : []), value]
-    else result[name] = prior === undefined ? value : `${prior}, ${value}`
+    else result[name] = prior === undefined ? value : `${prior}${name === "cookie" ? "; " : ", "}${value}`
   }
   return result
 }

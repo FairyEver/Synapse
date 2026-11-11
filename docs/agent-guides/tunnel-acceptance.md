@@ -13,17 +13,17 @@
 | 层次 | 实际执行 | 结果 |
 | --- | --- | --- |
 | Shared | 协议/ESM+CJS入口/背压与分帧/系统App目录，25项 | 通过 |
-| Server | Tunnel管理、HTTP/WS/SSE代理、真实双端传输、认证Origin、配置、Live及Webhook回归，167项 | 通过 |
-| Desktop | 应用service/账号隔离/持久化/MCP/IPC/端口与菜单组件/注册/顶栏/DataRepository schema，84项 | 通过 |
+| Server | Tunnel管理、HTTP/WS/SSE代理、真实双端传输、认证Origin、配置、Live及Webhook回归，200项 | 通过 |
+| Desktop | 应用service/账号隔离/持久化/MCP/IPC/端口与菜单组件/注册/顶栏/DataRepository schema，85项 | 通过 |
 | 开发环境 | `node --test scripts/__tests__/run-server-with-env.test.mjs`，7项 | 通过 |
 | 静态与构建 | shared build、server tsc、desktop完整typecheck与build、IPC codegen一致、hard-constraints、Node/Bash脚本语法 | 通过 |
-| 本地macOS arm64候选 | 未签名`electron-builder --dir --publish never`，加载包内协议、schema、ws/transport及已有Worker | 构建及穿透加载检查通过；完整ASAR checker失败，见下文 |
+| 本地macOS arm64候选 | 未签名`electron-builder --dir --publish never`，加载包内协议、schema、ws/transport及已有Worker | 构建及完整ASAR checker通过（带PTY的测试会话） |
 | 真实桌面界面/浏览器 | 未启动实际应用和浏览器 | 未验证菜单视觉、窄窗口、键盘与真实网站/HMR；DOM菜单测试不代替视觉验收 |
 | Windows | 当前没有执行Windows测试 | 未验证 |
 | PostgreSQL | 仅生成Prisma client和validate，未连接隔离或生产库 | 迁移/约束真实数据库预演未执行 |
 | 产品生产部署 | 正式`*.tunnel.d2.pub`、自动续期、实际用户访问 | 未部署/未验证，不能宣称生产就绪 |
 
-完整ASAR checker在 `Terminal node-pty packaged smoke failed: Frameworks spawn-helper could not create a PTY` 失败。没有修改Terminal、签名流程或绕过该断言。候选包不能作为已通过完整发布验证的产物。
+首次无PTY工具会话在Terminal的PTY smoke失败；同一候选、同一完整checker改在带PTY会话执行后通过。未修改Terminal、签名或放宽断言。未签名候选通过资源/运行时检查，不等于正式签名与发布验收。
 
 ## 真实跨端夹具覆盖
 
@@ -57,4 +57,10 @@
 
 ## 证据定位
 
-本地测试日志和未签名候选位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-11-tunnel-app/`，暂无在线分享链接。重点日志：`task-9-server-regression.log`、`task-9-desktop-regression.log`、`task-9-shared-regression.log`、`task-9-shutdown.log`、`task-9-asar.log`。代码和配套测试已按任务本地提交；最终提交与独立审查结果见Git及本次交付回复。
+本地测试日志和未签名候选位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-11-tunnel-app/`，暂无在线分享链接。重点日志：`final-server-suite.log`、`final-desktop-suite.log`、`task-9-shared-regression.log`、`task-9-shutdown.log`、`task-9-asar.log` / `task-9-asar-tty.log` / `final-asar.log`。代码和配套测试已按任务本地提交；最终提交与独立审查结果见Git及本次交付回复。
+
+## 独立审查与修复
+
+按完整实现范围进行一次独立只读审查。六项Critical/Important均有失败回归后修复：关闭后拒绝命名空间且Origin保护保持、网页会话登录/登出来源校验、证书强制reload、停止/删除/改端口期间晚到bindings快照不得重新准入、重开申请弹窗复用main持久化回执、重复Cookie字段按分号合并并过滤平台Cookie。额外核对Caddy官方配置语义，将负flush改为1ms以保留访客取消传播。
+
+非阻塞小项暂缓：列表没有独立“浏览器打开”操作，目前通过复制URL打开。真实UI/Windows/数据库/生产与签名验收仍未执行；父域JavaScript Cookie注入的完整影响尚未验证，是生产启用前的安全门禁，未擅自改平台Cookie格式或宣称已解决。

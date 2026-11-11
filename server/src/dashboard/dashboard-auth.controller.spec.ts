@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { userSessionCookieName } from "../auth/user-web-session"
 import { DashboardAuthController } from "./dashboard-auth.controller"
 
 describe("DashboardAuthController", () => {
+  beforeEach(() => vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test"))
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllEnvs()
@@ -25,7 +26,7 @@ describe("DashboardAuthController", () => {
 
     const result = await controller.login(
       { email: "user@example.com", password: "secret" },
-      { ip: "127.0.0.1" } as never,
+      { ip: "127.0.0.1", method: "POST", headers: { origin: "https://synapse.test" } } as never,
       response as never,
     )
 
@@ -81,7 +82,7 @@ describe("DashboardAuthController", () => {
     const response = { cookie: vi.fn(), clearCookie: vi.fn() }
 
     await controller.logout(
-      { cookies: { [userSessionCookieName]: "opaque-token" }, ip: "127.0.0.1" } as never,
+      { cookies: { [userSessionCookieName]: "opaque-token" }, ip: "127.0.0.1", method: "POST", headers: { origin: "https://synapse.test" } } as never,
       response as never,
     )
 

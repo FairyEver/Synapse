@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { TunnelControlMessage } from "@synapse/shared/tunnel-contracts"
 import { TunnelBroker } from "./tunnel-broker"
 import { TunnelService } from "./tunnel.service"
@@ -58,4 +58,20 @@ describe("tunnel data tickets", () => {
     expect(f.broker.activeCount).toBe(0)
     await f.broker.close()
   })
+})
+
+it.each(["stop", "delete", "port"])("does not reinstall a late binding snapshot after %s", async operation => {
+  const f = await fixture(), snapshot = await f.service.list("u", { limit: 100 })
+  let complete!: (page: typeof snapshot) => void
+  vi.spyOn(f.service, "list").mockImplementationOnce(() => new Promise(done => { complete = done }))
+  const pending = f.broker.setBindings(f.connectionId, [{ id: f.mapping.id, revision: 1 }])
+  if (operation === "stop") await f.service.setEnabled(f.actor, f.mapping.id, { enabled: false, expectedRevision: 1 })
+  else if (operation === "delete") await f.service.delete("u", f.mapping.id, { expectedRevision: 1 })
+  else await f.service.update(f.actor, f.mapping.id, { port: 3001, expectedRevision: 1 })
+  complete(snapshot)
+  expect(await pending).toEqual([])
+  const unexpected = f.broker.open(f.mapping.id, 1, new AbortController().signal)
+  f.broker.close()
+  await expect(unexpected).rejects.toThrow()
+  expect(f.messages.filter(message => message.type === "open")).toEqual([])
 })

@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { z } from "zod"
 import { UserAuthService } from "../auth/user-auth.service"
+import { assertTunnelCookieOrigin } from "../auth/tunnel-origin"
 import { userSessionCookieName } from "../auth/user-web-session"
 import { badRequestFromZodError } from "../common/zod-validation"
 
@@ -54,6 +55,7 @@ export class DashboardAuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
+    assertTunnelCookieOrigin(request, process.env.APP_PUBLIC_URL)
     const result = loginSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "登录请求无效。")
     const session = await this.auth.loginWeb(result.data, request.ip)
@@ -101,6 +103,7 @@ export class DashboardAuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
+    assertTunnelCookieOrigin(request, process.env.APP_PUBLIC_URL)
     const token = request.cookies?.[userSessionCookieName]
     try {
       if (typeof token === "string") await this.auth.logoutWeb(token, request.ip)

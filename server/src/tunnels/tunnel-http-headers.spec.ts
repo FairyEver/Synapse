@@ -7,6 +7,10 @@ describe("tunnel HTTP headers", () => {
     expect(headers).toMatchObject({ host: "localhost:3000", authorization: "Bearer app-token", cookie: "app=1", origin: context.publicOrigin, "x-forwarded-for": "203.0.113.1", "x-forwarded-proto": "https" })
     expect(headers["x-private"]).toBeUndefined()
   })
+  it("joins repeated Cookie fields with semicolons and filters platform sessions in every field", () => {
+    const headers = buildTunnelUpstreamHeaders(["Cookie", "first=1", "Cookie", "synapse_user_session=private; second=2", "Cookie", "__Host-synapse_admin_session=private; third=3"], context)
+    expect(headers.cookie).toBe("first=1; second=2; third=3")
+  })
   it("rewrites exact localhost redirects and host-only cookies without touching third parties", () => {
     const headers = rewriteTunnelResponseHeaders(["Location", "http://localhost:3000/a?x=%2F#h", "Set-Cookie", "a=1; Domain=localhost; HttpOnly", "Set-Cookie", "b=2; Domain=.tunnel.test; SameSite=Lax"], context)
     expect(headers.location).toBe(context.publicOrigin + "/a?x=%2F#h")

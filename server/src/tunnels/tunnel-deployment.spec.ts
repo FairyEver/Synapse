@@ -29,9 +29,16 @@ describe("tunnel deployment", () => {
     expect(compose).toContain("TUNNEL_ENABLED:")
     expect(compose).not.toMatch(/- ["']?(?:127\.0\.0\.1:)?3002:3002/u)
     const caddy = edge.renderCaddy({ domain: "tunnel.d2.pub", cert: "/certs/tunnel/current/fullchain.pem", key: "/certs/tunnel/current/privkey.pem", upstream: "127.0.0.1:3000" })
-    expect(caddy).toContain("*.tunnel.d2.pub"); expect(caddy).toContain("log_skip"); expect(caddy).toContain("flush_interval -1")
+    expect(caddy).toContain("*.tunnel.d2.pub"); expect(caddy).toContain("log_skip"); expect(caddy).toContain("flush_interval 1ms"); expect(caddy).not.toContain("flush_interval -1")
     const existing = "synapse.d2.pub { respond ok }\n"
     expect(edge.replaceBlock(existing, caddy)).toContain(existing)
+  })
+  it("keeps a rejected namespace while disabled and forces certificate reloads", () => {
+    const disabled = edge.nginxConfigFromEnv({ TUNNEL_ENABLED: "false", TUNNEL_PUBLIC_DOMAIN: "tunnel.test" })
+    expect(disabled).toContain("server_name .tunnel.test;"); expect(disabled).toContain("return 503;"); expect(disabled).not.toContain("proxy_pass")
+    expect(edge.nginxConfigFromEnv({})).toContain("server_name .tunnel.d2.pub;")
+    expect(edge.caddyInvocation("reload", "edge")).toContain("--force")
+    expect(edge.caddyInvocation("validate", "edge")).not.toContain("--force")
   })
   it("refuses stale config and restores a failed reload without affecting other blocks", () => {
     const file = join(fixture, "Caddyfile"), original = "synapse.test { respond ok }\n"

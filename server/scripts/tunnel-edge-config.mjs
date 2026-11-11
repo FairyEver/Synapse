@@ -7,9 +7,18 @@ const BEGIN = "# BEGIN SYNAPSE TUNNEL", END = "# END SYNAPSE TUNNEL"
 const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u
 function domain(value) { if (!domainPattern.test(value ?? "")) throw new Error("Invalid tunnel DNS suffix"); return value }
 function safePath(value) { if (!/^\/[A-Za-z0-9_/.-]+$/u.test(value ?? "")) throw new Error("Invalid certificate path"); return value }
-export function renderNginx({ domain: suffix, port }) {
+export function renderNginx({ domain: suffix, port, enabled = true }) {
   domain(suffix)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid ingress port")
+  if (!enabled) return `# Tunnel namespace remains isolated while disabled.
+server {
+  listen 3000;
+  server_name .${suffix};
+  access_log off;
+  error_log /dev/null crit;
+  return 503;
+}
+`
   return `# Generated tunnel-only virtual host. All paths bypass platform routing.
 server {
   listen 3000;
@@ -34,6 +43,11 @@ server {
 }
 `
 }
+export function nginxConfigFromEnv(env) {
+  const enabled = env.TUNNEL_ENABLED === "true"
+  const suffix = env.TUNNEL_PUBLIC_DOMAIN || (enabled ? undefined : "tunnel.d2.pub")
+  return renderNginx({ domain: suffix, port: Number(env.TUNNEL_INGRESS_PORT ?? 3002), enabled })
+}
 export function renderCaddy({ domain: suffix, cert, key, upstream }) {
   domain(suffix); safePath(cert); safePath(key)
   if (!/^127\.0\.0\.1:\d{1,5}$/u.test(upstream) || Number(upstream.split(":")[1]) > 65535) throw new Error("Upstream must be a loopback port")
@@ -46,7 +60,7 @@ export function renderCaddy({ domain: suffix, cert, key, upstream }) {
   reverse_proxy ${upstream} {
     header_up Host {http.request.host}
     header_up X-Synapse-Tunnel-Client-IP {http.request.remote.host}
-    flush_interval -1
+    flush_interval 1ms
   }
 }`
 }
@@ -113,12 +127,13 @@ function args(values) {
   for (let i = 0; i < values.length; i++) { const key = values[i]; if (!key.startsWith("--")) throw new Error("Invalid argument"); result[key.slice(2)] = values[i + 1] && !values[i + 1].startsWith("--") ? values[++i] : true }
   return result
 }
-function caddy(command, candidate, container) { return execFileSync("docker", ["exec", "-i", container, "caddy", command, "--config", "/dev/stdin", "--adapter", "caddyfile"], { input: candidate, stdio: ["pipe", "pipe", "pipe"], timeout: 30000 }) }
+export function caddyInvocation(command, container) { return ["exec", "-i", container, "caddy", command, ...(command === "reload" ? ["--force"] : []), "--config", "/dev/stdin", "--adapter", "caddyfile"] }
+function caddy(command, candidate, container) { return execFileSync("docker", caddyInvocation(command, container), { input: candidate, stdio: ["pipe", "pipe", "pipe"], timeout: 30000 }) }
 function main() {
   const input = args(process.argv.slice(2)), suffix = input["render-nginx"] && process.env.TUNNEL_ENABLED !== "true" ? undefined : domain(input.domain ?? process.env.TUNNEL_PUBLIC_DOMAIN)
   if (input["render-nginx"]) {
     if (!input.apply || !input.output) throw new Error("Nginx generation needs --apply --output")
-    const content = process.env.TUNNEL_ENABLED === "true" ? renderNginx({ domain: suffix, port: Number(process.env.TUNNEL_INGRESS_PORT ?? 3002) }) : "# Tunnels disabled\n"
+    const content = nginxConfigFromEnv(process.env)
     atomicWrite(resolve(input.output), content); return
   }
   const file = resolve(input.caddyfile ?? "/www/wwwroot/shared-caddy-edge/Caddyfile"), container = input.container ?? "shared-caddy-edge"

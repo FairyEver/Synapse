@@ -7,7 +7,7 @@
 - 正式域为 `*.tunnel.d2.pub`，DNSPod 配一次 wildcard A 到服务器；每条映射不调用 DNS API。
 - 当前边缘为 Docker `shared-caddy-edge`（Caddy 2.11.4），80/443 已由它监听。Caddy → 宿主机回环3000 → 应用容器 Nginx3000 → 容器回环3002。不要增加3002宿主机映射。
 - wildcard 域所有路径，包括 `/api`、`/console`、Live 和保留路径，都进入 TunnelIngress，未知/多层/不合法 label 为404。管理 API 和控制/数据 WSS 仍只在平台域。
-- Nginx 启动时从已验证的 TUNNEL 配置生成 `/etc/nginx/http.d/tunnel.conf`；默认关闭时生成空配置。`.tunnel.d2.pub` 捕获该命名空间全部 host，严格 label 校验在 ingress，不能让无效 label 回退平台站点。
+- Nginx 启动时从已验证的 TUNNEL 配置生成 `/etc/nginx/http.d/tunnel.conf`；关闭时仍保留命名空间的503拒绝虚拟主机（未指定时为 `tunnel.d2.pub`），不回落平台。回滚时保留原 `TUNNEL_PUBLIC_DOMAIN`，先移除Caddy区块后才能撤掉该配置。`.tunnel.d2.pub` 捕获该命名空间全部 host，严格 label 校验在 ingress，不能让无效 label 回退平台站点。
 - Caddy 覆盖可信客户端地址头，Nginx 原样转交；3000只能绑定宿主机回环。公网请求不得绕过 Caddy 到达它。
 - 单个服务实例持有控制连接、票据和全局预算；不要直接扩容多个 API 实例。需要扩容时另行设计会话路由与全局配额。
 
@@ -17,7 +17,7 @@
 
 迁移 `server/prisma/migrations/20261111100000_user_tunnels/migration.sql` 仅新增三张表及约束。正式操作前先备份 PostgreSQL，在专用隔离库预演，验证唯一 label、账号配额、原子幂等和软删除永久退役。现有入口脚本会 `prisma migrate deploy`，不能未经预演就以部署代替验证。
 
-开启时 Cookie 认证写操作要求 `Origin` 精确等于 `APP_PUBLIC_URL`；Bearer 沿用原规则。部署前核对真实平台 Cookie 客户端，不能只测跨域 CORS。不要放宽为父域匹配。
+平台 Cookie 认证写操作及网页登录/退出始终要求 `Origin` 精确等于 `APP_PUBLIC_URL`，不随穿透开关关闭；Bearer 沿用原规则。部署前核对真实平台 Cookie 客户端，不能只测跨域 CORS。不要放宽为父域匹配。
 
 ## 证书与 DNSPod
 
@@ -41,7 +41,7 @@ bash server/scripts/tunnel-certificate-renew.sh --check
 bash server/scripts/tunnel-certificate-renew.sh --renew
 ```
 
-`--check` 不签发、不安装，校验 wildcard SAN、密钥匹配、有效期和系统可信链，返回到期时间/剩余天数；小于14天失败。`--renew` 仅在不足30天时申请，DNS01成功后候选再次校验至少30天。复制到独立版本目录后原子切换整个证书对，Caddy validate + reload；失败切回旧链接并重载。首次无旧证书时失败移除新链接。失败候选保留待检查，不覆盖旧文件、不输出证书私钥或DNS凭据。
+`--check` 不签发、不安装，校验 wildcard SAN、密钥匹配、有效期和系统可信链，返回到期时间/剩余天数；小于14天失败。`--renew` 仅在不足30天时申请，DNS01成功后候选再次校验至少30天。复制到独立版本目录后原子切换整个证书对，Caddy validate + 强制reload（`--force`，即使配置文本未变也重新加载手动TLS文件）；失败切回旧链接并重载。首次无旧证书时失败移除新链接。后续获授权的真实验收必须通过TLS握手核对对外证书指纹，磁盘校验不能代替热加载验收。失败候选保留待检查，不覆盖旧文件、不输出证书私钥或DNS凭据。
 
 授权配置完成后，为 root 的受保护任务增加每日 `--renew` 和独立每日 `--check` 监测；失败应接入已有运维告警渠道。任务仅通过凭据管理机制加载环境。不要把“存在脚本”当成已经安装了定时任务；本次没有创建生产调度。崩溃遗留的 `.acme-lock` / `.renew-lock` 必须核对进程退出后人工移除，不自动删除并发锁。
 
@@ -57,4 +57,8 @@ node server/scripts/tunnel-edge-config.mjs --check --domain tunnel.d2.pub
 
 正式验收覆盖原站health、Live、Webhook，新增域的HTTP/WS/SSE、本机不可达、断线重连、账号切换、慢流取消、至少一次真实 DNS01续期。只有这些完成后才能标记生产就绪。
 
-配置参考：[Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)、[log_skip](https://caddyserver.com/docs/caddyfile/directives/log_skip)、[Nginx server names](https://nginx.org/en/docs/http/server_names.html)。
+Caddy 使用 `flush_interval 1ms` 保留客户端断开时的后端取消；SSE和未知长度响应由Caddy自动即时flush。不使用 `-1`，该模式会取消断开传播。
+
+配置参考：[Caddy CLI reload](https://caddyserver.com/docs/command-line#caddy-reload)、[Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)、[log_skip](https://caddyserver.com/docs/caddyfile/directives/log_skip)、[Nginx server names](https://nginx.org/en/docs/http/server_names.html)。
+
+上线安全门禁：当前公共域与平台共享 `d2.pub`。精确Origin与响应Cookie Domain重写不能宣称已经解决父域JavaScript Cookie注入。必须完成真实浏览器会话隔离验证；若需改变平台Cookie格式或改用不同注册域，按设计先报告产品边界变化，取得对应授权。该项未验证前不标记生产就绪。
