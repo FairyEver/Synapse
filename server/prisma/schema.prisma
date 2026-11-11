@@ -71,6 +71,9 @@ model User {
   notifications                  UserNotification[]
   notificationImages             NotificationImage[]
   todoItems                      TodoItem[]
+  tunnels                        UserTunnel[]
+  tunnelOperations               UserTunnelOperation[]
+  tunnelDeviceCredentials        TunnelDeviceCredential[]
   todoMutationReceipts            TodoMutationReceipt[]
   todoReminderDeliveries          TodoReminderDelivery[]
   openApiDownloadGrants          OpenApiDownloadGrant[]
@@ -107,6 +110,46 @@ model User {
   mailAttachments                 MailAttachment[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
+}
+
+model UserTunnel {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientInstanceId String   @db.VarChar(128)
+  label            String   @unique @db.VarChar(32)
+  port             Int
+  enabled          Boolean  @default(true)
+  revision         Int      @default(1)
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  operations       UserTunnelOperation[]
+
+  @@index([userId, clientInstanceId, deletedAt, createdAt])
+  @@index([userId, deletedAt])
+}
+
+model UserTunnelOperation {
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  requestId   String     @db.VarChar(36)
+  requestHash String     @db.VarChar(64)
+  mappingId   String
+  mapping     UserTunnel @relation(fields: [mappingId], references: [id], onDelete: Restrict)
+  createdAt   DateTime   @default(now())
+
+  @@id([userId, requestId])
+}
+
+model TunnelDeviceCredential {
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientInstanceId String   @db.VarChar(128)
+  keyHash          String   @db.VarChar(64)
+  createdAt        DateTime @default(now())
+
+  @@id([userId, clientInstanceId])
 }
 
 model SystemAvatar {

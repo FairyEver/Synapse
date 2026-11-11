@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { cloudTableConfig } from "../cloud-tables/cloud-table-config"
+import { isTunnelDomain } from "@synapse/shared/tunnel-contracts"
 
 export type TrustProxySetting = boolean | number | string
 
@@ -99,6 +100,11 @@ const envSchema = z
     TRUST_PROXY: z.string().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
+    // 穿透独立入口，生产只允许应用容器内回环监听；未启用不接受域名申请。
+    TUNNEL_ENABLED: z.enum(["true", "false"]).default("false"),
+    TUNNEL_PUBLIC_DOMAIN: optionalEnvString,
+    TUNNEL_INGRESS_HOST: z.enum(["127.0.0.1", "::1"]).default("127.0.0.1"),
+    TUNNEL_INGRESS_PORT: z.coerce.number().int().min(1).max(65535).default(3002),
     DRIVE_COS_SECRET_ID: optionalEnvString,
     DRIVE_COS_SECRET_KEY: optionalEnvString,
     DRIVE_COS_BUCKET: optionalEnvString,
@@ -253,12 +259,19 @@ const envSchema = z
     path: ["SKILL_HUB_COS_BUCKET"],
     message: "Skill Hub COS bucket must be separate from every other storage domain",
   })
+  .refine(env => env.TUNNEL_ENABLED !== "true" || (env.TUNNEL_PUBLIC_DOMAIN !== undefined && isTunnelDomain(env.TUNNEL_PUBLIC_DOMAIN)), {
+    path: ["TUNNEL_PUBLIC_DOMAIN"], message: "a DNS suffix without wildcard or protocol is required when tunnels are enabled",
+  })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL must be the public app root, not the /api URL",
   })
 
 export interface ServerEnv {
+  readonly tunnelEnabled: boolean
+  readonly tunnelPublicDomain?: string
+  readonly tunnelIngressHost: "127.0.0.1" | "::1"
+  readonly tunnelIngressPort: number
   readonly cloudTables: ReturnType<typeof cloudTableConfig>
   readonly databaseUrl: string
   readonly adminAccessSecret: string
@@ -323,6 +336,10 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
   }
 
   return {
+    tunnelEnabled: result.data.TUNNEL_ENABLED === "true",
+    tunnelPublicDomain: result.data.TUNNEL_PUBLIC_DOMAIN,
+    tunnelIngressHost: result.data.TUNNEL_INGRESS_HOST,
+    tunnelIngressPort: result.data.TUNNEL_INGRESS_PORT,
     cloudTables: cloudTableConfig(source),
     databaseUrl: result.data.DATABASE_URL,
     adminAccessSecret: result.data.ADMIN_ACCESS_SECRET,
