@@ -22,6 +22,7 @@ export const systemAppPresentation: Record<SynapseSystemAppId, {
   "agent-personas": { icon: Bot, category: "collaboration" },
   "mail-internal": { icon: Inbox, category: "collaboration" },
   mail: { icon: Mail, category: "collaboration" },
+  tunnel: { icon: Plug, category: "development" },
   todos: { icon: ListTodo, category: "collaboration" },
   meeting: { icon: Mic, category: "collaboration" },
   drive: { icon: Cloud, category: "resources" },

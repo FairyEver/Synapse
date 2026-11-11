@@ -5,6 +5,7 @@ import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
 import { mailAppDefinition } from "../mail/app-definition"
 import { mailInternalAppDefinition } from "../mail-internal/app-definition"
+import { tunnelAppDefinition } from "../../../app-capabilities/tunnel/shared/app-definition"
 import { todosAppDefinition } from "../todos/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
 import { secretsAppDefinition } from "../../../app-capabilities/secrets/renderer/app-definition"
@@ -31,6 +32,7 @@ const systemAppDefinitions = [
   mailInternalAppDefinition,
   mailAppDefinition,
   todosAppDefinition,
+  tunnelAppDefinition,
   automationAppDefinition,
   launcherAppDefinition,
   settingsAppDefinition,

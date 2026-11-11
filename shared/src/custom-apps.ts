@@ -8,6 +8,7 @@ export const SYSTEM_APP_IDS = [
   "mail-internal",
   "mail",
   "todos",
+  "tunnel",
   "automation",
   "launcher",
   "settings",

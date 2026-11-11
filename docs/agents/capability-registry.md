@@ -1,6 +1,6 @@
 # 能力注册清单
 
-2026-11-11 内网穿透核心接入：新增 `tunnel` domain 六项 capability / MCP 索引和六项 typed IPC，全局 372 / 368。运行摘要事件仅 UI，后台恢复在窗口创建后执行。System App 界面尚待下一阶段注册；默认 Dock、Workflow、Automation、Deep Link 无增量。
+2026-11-11 内网穿透核心接入：新增 `tunnel` domain 六项 capability / MCP 索引和六项 typed IPC，全局 372 / 368。运行摘要事件仅 UI，后台恢复在窗口创建后执行。System App 从22增至23，可独立开窗，默认不固定 Dock；默认 Dock仍9项，Workflow、Automation、Deep Link无增量。
 
 2026-11-10 新增只读的 `app.mail_internal.recipient.resolve`（MCP `app_mail_internal_recipient_resolve`），在当前登录用户的共同团队内批量解析活跃成员的精确昵称。站内信 capability / MCP 索引各 18 项，全局 366 / 362。使用既有网络权限与审计，由 MCP `search` / `invoke` 调用，无新增 IPC、System App、Dock、Workflow、Automation Action 或 Deep Link。调用契约见[批量昵称解析接入指南](../agent-guides/mail-recipient-nickname-resolution.md)。
 
@@ -126,7 +126,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 18 | `synapse://mail-internal/<id>` |
-| Tunnel | 否（界面待接入） | 否 | — | — | 6 | — |
+| Tunnel | 是（内网穿透） | 否（可手动固定） | — | — | 6 | — |
 | Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | — | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -250,7 +250,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
-| Tunnel | 否（界面待接入） | 否 | — | — | 6 | — |
+| Tunnel | 是（内网穿透） | 否（可手动固定） | — | — | 6 | — |
 | Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
