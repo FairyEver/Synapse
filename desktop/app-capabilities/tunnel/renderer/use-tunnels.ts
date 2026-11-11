@@ -41,7 +41,7 @@ export function useTunnels() {
       return false
     } finally { if (alive.current && generation === epoch.current) { locks.current.delete(key); setWritingIds(new Set(locks.current)); setLoading(false) } }
   }, [refresh])
-  const save = (result: TunnelMappingDto) => setItems(previous => [result, ...previous.filter(row => row.id !== result.id)])
+  const save = (result: TunnelMappingDto) => { setClientId(previous => previous || result.clientInstanceId); setItems(previous => [result, ...previous.filter(row => row.id !== result.id)]) }
   const create = (port: number, requestId: string) => write("create", () => requireBridgeDomain("tunnel").mapping.create({ port, requestId }), save)
   const update = (row: TunnelMappingDto, port: number) => write(row.id, () => requireBridgeDomain("tunnel").mapping.update(row.id, { port, expectedRevision: row.revision }), save)
   const setEnabled = (row: TunnelMappingDto, enabled: boolean) => write(row.id, () => requireBridgeDomain("tunnel").mapping.setEnabled(row.id, { enabled, expectedRevision: row.revision }), save)

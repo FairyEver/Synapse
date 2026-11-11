@@ -43,6 +43,13 @@ describe("tunnel app", () => {
     expect(document.body.textContent).toContain("暂无链接")
   })
 
+  it("does not let a pre-mutation refresh erase a newly allocated link", async () => {
+    let finish!: (page: unknown) => void
+    mocks.list.mockImplementationOnce(() => new Promise(done => { finish = done }))
+    await act(async () => root.render(<TunnelModule />)); await click("申请链接"); await port("3000"); await click("申请")
+    await act(async () => finish({ items: [], total: 0, nextOffset: null, currentClientInstanceId: "d1" }))
+    expect(document.body.textContent).toContain(row.url)
+  })
   it("requires only a port, preserves failed input, then shows an unreachable allocated URL", async () => {
     await act(async () => root.render(<TunnelModule />)); await click("申请链接"); await port("3000")
     expect(document.querySelectorAll("input[required]")).toHaveLength(1)

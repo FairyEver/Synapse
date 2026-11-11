@@ -32,6 +32,8 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, TUNNEL_ENABLED: "true" })).toThrow("TUNNEL_PUBLIC_DOMAIN")
     expect(() => loadEnv({ ...base, TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "*.tunnel.test" })).toThrow()
     expect(() => loadEnv({ ...base, TUNNEL_INGRESS_HOST: "0.0.0.0" })).toThrow()
+    expect(() => loadEnv({ ...base, APP_PUBLIC_URL: "https://synapse.test", TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "test" })).toThrow()
+    expect(() => loadEnv({ ...base, APP_PUBLIC_URL: "https://synapse.d2.pub", TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "d2.pub" })).toThrow()
     expect(loadEnv({ ...base, TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "tunnel.test" })).toMatchObject({ tunnelIngressHost: "127.0.0.1", tunnelIngressPort: 3002 })
   })
   it("parses required production settings", () => {

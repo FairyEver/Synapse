@@ -135,7 +135,7 @@ export class TunnelTransport implements TunnelTransportPort {
   }
   private async openData(message: Extract<TunnelControlMessage, { type: "open" }>, generation: number): Promise<void> {
     const mapping = this.mappings.get(message.mapping.id)
-    if (!mapping || mapping.revision !== message.mapping.revision || mapping.port !== message.mapping.port || this.flows.has(message.requestId) || this.flows.size >= TUNNEL_LIMITS.streamsPerUser) { this.control?.terminate(); return }
+    if (!mapping || mapping.revision !== message.mapping.revision || mapping.port !== message.mapping.port || this.flows.has(message.requestId) || this.flows.size >= TUNNEL_LIMITS.streamsPerUser) { this.deps.onFailure("TUNNEL_PROTOCOL_ERROR"); this.control?.terminate(); return }
     const flow: DataFlow = { id: message.requestId, mapping: message.mapping, abort: new AbortController() }
     this.flows.set(flow.id, flow)
     try {
@@ -158,6 +158,7 @@ export class TunnelTransport implements TunnelTransportPort {
       const accepted = (raw: RawData, binary: boolean) => {
         if (decode(raw, binary)?.type !== "data-accepted" || !flow.local || flow.abort.signal.aborted || generation !== this.generation) { this.cancel(flow.id); return }
         ws.removeListener("message", accepted)
+        ws.on("message", (_raw, isBinary) => { if (!isBinary) this.cancel(flow.id) })
         const stream = boundedTunnelStream(createWebSocketStream(ws, { highWaterMark: TUNNEL_LIMITS.dataMessageBytes }), this.byteBudget)
         flow.stream = stream
         stream.once("error", () => this.cancel(flow.id)); stream.once("close", () => this.cancel(flow.id))

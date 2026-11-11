@@ -55,3 +55,19 @@ describe("tunnel application recovery", () => {
     await service.dispose()
   })
 })
+
+it("drops a terminal retired receipt so a later explicit request can allocate a fresh link", async () => {
+  const f = fixture(), service = f.make()
+  f.cloud.operation.mockRejectedValueOnce(Object.assign(new Error("retired"), { status: 410 }))
+  await expect(service.create({ port: 3000 })).rejects.toThrow("retired")
+  await service.create({ port: 3000 })
+  expect(f.cloud.operation.mock.calls[0]![0]).not.toBe(f.cloud.operation.mock.calls[1]![0])
+  expect(f.cloud.create).toHaveBeenCalledTimes(1); await service.dispose()
+})
+it("recovers the original allocation after a local persistence failure", async () => {
+  const f = fixture(), service = f.make()
+  vi.spyOn(f.store, "commitBinding").mockRejectedValueOnce(new Error("disk"))
+  await expect(service.create({ port: 3000 })).rejects.toThrow("disk")
+  expect((await service.create({ port: 3000 })).id).toBe("m1")
+  expect(f.cloud.create).toHaveBeenCalledTimes(1); await service.dispose()
+})

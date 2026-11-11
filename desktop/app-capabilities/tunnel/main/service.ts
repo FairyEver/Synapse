@@ -145,7 +145,7 @@ export class TunnelAppService {
       this.current(generation, scope); await this.cloud.register(proof); this.current(generation, scope)
       let row: TunnelMappingDto
       try { row = await this.cloud.operation(pending.requestId) }
-      catch (error) { if ((error as { status?: number }).status !== 404) throw error; row = await this.cloud.create({ port: input.port, requestId: pending.requestId }, proof) }
+      catch (error) { if ((error as { status?: number }).status === 410) await this.deps.store.discardPending(scope, pending.requestId); if ((error as { status?: number }).status !== 404) throw error; row = await this.cloud.create({ port: input.port, requestId: pending.requestId }, proof) }
       this.current(generation, scope)
       if (row.clientInstanceId !== scope.clientInstanceId || row.port !== input.port) throw new TunnelAppError(409, "TUNNEL_BINDING_CONFLICT", "映射信息不一致")
       await this.deps.store.commitBinding(scope, row, pending); this.current(generation, scope)

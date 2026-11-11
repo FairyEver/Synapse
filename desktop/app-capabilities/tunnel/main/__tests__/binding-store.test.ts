@@ -33,13 +33,14 @@ describe("device-local tunnel authorizations", () => {
   it("isolates an invalid local row without granting it or dropping other bindings", async () => {
     const bindings = memoryNamespace(), credentials = memoryNamespace()
     const valid = { id: "valid", mappingId: "m1", ...scope, kind: "binding", port: 3000, revision: 1 }
+    const hundred = Array.from({ length: 100 }, (_, i) => ({ ...valid, id: String(i), mappingId: `m${i}` }))
     bindings.listWindow = async (query: { limit: number; offset?: number }) => {
-      if (query.limit > 1 || query.offset === 1) throw new InvalidNamespaceDataError("app.tunnel.bindings", "row failed validate()")
-      return query.offset === 0 ? [{ value: valid }] : []
+      if (query.limit > 1 || query.offset === 37) throw new InvalidNamespaceDataError("app.tunnel.bindings", "row failed validate()")
+      return query.offset! < 100 ? [{ value: hundred[query.offset!]! }] : []
     }
     let isolated = 0
     const store = new TunnelBindingStore({ bindings, credentials, onInvalidBinding: () => { isolated++ } })
-    expect(await store.listOwnedBindings(scope)).toEqual([valid])
+    expect(await store.listOwnedBindings(scope)).toEqual(hundred.filter((_, i) => i !== 37))
     expect(isolated).toBe(1)
   })
 })

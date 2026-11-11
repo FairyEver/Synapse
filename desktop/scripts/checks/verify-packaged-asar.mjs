@@ -600,6 +600,29 @@ async function runSkillHubWorkerSmoke(unpackedPath, failures) {
   }
 }
 
+function verifyTunnelRuntime(asarPath, failures) {
+  const smokeScript = [
+    "const path = require('node:path')",
+    "const { createRequire } = require('node:module')",
+    "const packagedRequire = createRequire(path.join(process.argv[1], 'package.json'))",
+    "const contract = packagedRequire('@synapse/shared/tunnel-contracts')",
+    "const stream = packagedRequire('@synapse/shared/tunnel-stream-node')",
+    "const capabilities = packagedRequire('./dist-electron/app-capabilities/tunnel/shared/capability.js')",
+    "const schema = packagedRequire('./dist-electron/app-capabilities/tunnel/shared/schema.js')",
+    "const transport = packagedRequire('./dist-electron/app-capabilities/tunnel/main/transport.js')",
+    "if (capabilities.TUNNEL_CAPABILITY_IDS.length !== 6 || contract.TUNNEL_PROTOCOL_VERSION !== 1 || typeof transport.TunnelTransport !== 'function' || new stream.TunnelByteBudget().used !== 0) throw new Error('Tunnel runtime contract mismatch')",
+    "schema.tunnelPageSchema.parse({ items: [], nextOffset: null, total: 0 })",
+    "process.stdout.write('synapse-tunnel-runtime-ok')",
+  ].join("\n")
+  let executablePath
+  try { executablePath = require("electron") }
+  catch { failures.push("packaged Tunnel smoke could not resolve Electron"); return }
+  const smoke = spawnSync(executablePath, ["-e", smokeScript, asarPath], {
+    encoding: "utf8", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 10_000,
+  })
+  if (smoke.status !== 0 || smoke.stdout !== "synapse-tunnel-runtime-ok") failures.push("packaged Tunnel CommonJS/schema/ws resolution smoke failed")
+}
+
 function verifyTodoRuntime(asarPath, failures) {
   const smokeScript = [
     "const path = require('node:path')",
@@ -1140,6 +1163,12 @@ async function verifyResources(resourcesPath, label) {
   for (const entry of ["main/service", "main/ipc", "main/dispatcher", "shared/schema", "shared/capability", "shared/manifest"]) {
     verifyPackedNode(header, `dist-electron/app-capabilities/todos/${entry}.js`, failures, "Todo capability is missing from packed app.asar")
   }
+  for (const entry of ["main/service", "main/ipc", "main/dispatcher", "main/transport", "main/binding-store", "main/cloud-client", "shared/schema", "shared/capability", "shared/manifest"]) {
+    verifyPackedNode(header, `dist-electron/app-capabilities/tunnel/${entry}.js`, failures, "Tunnel capability is missing from packed app.asar")
+  }
+  for (const entry of ["tunnel-contracts.cjs", "tunnel-contracts.js", "tunnel-stream-node.cjs", "tunnel-stream-node.js"]) {
+    verifyPackedNode(header, `node_modules/@synapse/shared/dist/${entry}`, failures, "Tunnel shared contract is missing from packed app.asar")
+  }
   for (const entry of ["todos.js", "todo-contracts.cjs"]) {
     verifyPackedNode(header, `node_modules/@synapse/shared/dist/${entry}`, failures, "Todo shared contract is missing from packed app.asar")
   }
@@ -1194,6 +1223,7 @@ async function verifyResources(resourcesPath, label) {
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
   verifySkillHubRuntime(header, unpackedPath, failures)
   verifyTodoRuntime(asarPath, failures)
+  verifyTunnelRuntime(asarPath, failures)
   verifyJsonRepairRuntime(asarPath, header, failures)
   verifyTextExtractionWorker(header, unpackedPath, failures)
   verifyHtmlGenerationWorker(header, unpackedPath, failures)

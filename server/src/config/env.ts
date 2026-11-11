@@ -265,6 +265,11 @@ const envSchema = z
     path: ["SKILL_HUB_COS_BUCKET"],
     message: "Skill Hub COS bucket must be separate from every other storage domain",
   })
+  .refine(env => {
+    if (env.TUNNEL_ENABLED !== "true" || !env.TUNNEL_PUBLIC_DOMAIN || !env.APP_PUBLIC_URL) return true
+    const platform = new URL(env.APP_PUBLIC_URL).hostname.toLowerCase(), suffix = env.TUNNEL_PUBLIC_DOMAIN.toLowerCase()
+    return platform !== suffix && !platform.endsWith("." + suffix)
+  }, { path: ["TUNNEL_PUBLIC_DOMAIN"], message: "tunnel namespace must not capture the platform hostname" })
   .refine(env => env.TUNNEL_ENABLED !== "true" || (env.TUNNEL_PUBLIC_DOMAIN !== undefined && isTunnelDomain(env.TUNNEL_PUBLIC_DOMAIN)), {
     path: ["TUNNEL_PUBLIC_DOMAIN"], message: "a DNS suffix without wildcard or protocol is required when tunnels are enabled",
   })

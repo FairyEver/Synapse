@@ -58,6 +58,7 @@ export class TunnelBindingStore {
       requestId: "", port: mapping.port, revision: mapping.revision, createdAt: mapping.createdAt })
     if (pending) await this.deps.bindings.remove(pending.id)
   }
+  async discardPending(scope: TunnelScope, requestId: string): Promise<void> { await this.deps.bindings.remove(identity(scope) + ":op:" + requestId) }
   listOwnedBindings(scope: TunnelScope): Promise<TunnelBindingRecord[]> { return this.records(scope, "binding") }
   async remove(scope: TunnelScope, id: string): Promise<void> { await this.deps.bindings.remove(identity(scope) + ":" + id) }
 }

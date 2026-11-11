@@ -98,6 +98,13 @@ export class TunnelGateway {
     })
   }
   private bindData(ws: WebSocket, userId: string): void {
+    let lastPong = Date.now()
+    ws.on("pong", () => { lastPong = Date.now() })
+    const heartbeat = setInterval(() => {
+      if (Date.now() - lastPong > TUNNEL_LIMITS.heartbeatTimeoutMs) ws.terminate()
+      else if (ws.readyState === WebSocket.OPEN) ws.ping()
+    }, TUNNEL_LIMITS.heartbeatMs); heartbeat.unref()
+    ws.once("close", code => { clearInterval(heartbeat); if (![1000, 1005].includes(code)) claim?.fail("TUNNEL_DATA_FAILED") })
     let claim: ReturnType<TunnelBroker["claim"]> | undefined
     const timeout = setTimeout(() => { claim?.fail("TUNNEL_CONNECT_TIMEOUT"); ws.terminate() }, TUNNEL_LIMITS.ticketTtlMs); timeout.unref()
     const closed = () => { clearTimeout(timeout); claim?.fail("TUNNEL_DATA_FAILED") }
@@ -108,6 +115,7 @@ export class TunnelGateway {
         if (!claim && value?.type === "data-hello") claim = this.deps.broker.claim(userId, value.requestId, value.ticket, () => ws.terminate())
         else if (claim && value?.type === "data-ready") {
           clearTimeout(timeout); ws.removeListener("message", message); ws.removeListener("close", closed)
+          ws.on("message", (_raw, isBinary) => { if (!isBinary) ws.terminate() })
           const stream = boundedTunnelStream(createWebSocketStream(ws, { highWaterMark: TUNNEL_LIMITS.dataMessageBytes }), this.byteBudget)
           send(ws, { version: 1, type: "data-accepted" })
           claim.accept(stream)
