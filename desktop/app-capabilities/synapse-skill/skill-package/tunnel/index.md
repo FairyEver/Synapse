@@ -1,5 +1,9 @@
 # 内网穿透
 
+## Reaching Synapse tools
+
+The Synapse MCP server publishes only two tools: `search` and `invoke`. Read the `tunnel` domain index with `search`, then search the canonical tool name to obtain its complete schema. Invoke that exact name with the returned arguments. See [API](api-reference.md).
+
 只在用户要求公开本机服务时申请链接。任何拿到链接的人都可直接访问；申请前明确目标端口，不能推测任意本机服务。只支持本机 HTTP 端口 1–65535，支持网站、API、WebSocket 和 SSE。
 
 通过 MCP `search` 查找 `app_tunnel_mapping_*`，再用 `invoke`；参数见 [API](api-reference.md)。不使用 shell、frp 或另外创建代理。

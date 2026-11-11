@@ -1,5 +1,9 @@
 # 穿透管理 API
 
+## Reaching Synapse tools
+
+The Synapse MCP server publishes only two tools: `search` and `invoke`. Search the `tunnel` domain, obtain the desired canonical tool's complete schema, and invoke that exact name with matching arguments. Never call a catalog name without discovering it first.
+
 工具名与 capability 点替换下划线一一对应：
 
 | 工具 | 参数 |

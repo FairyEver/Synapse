@@ -2,6 +2,8 @@
 
 2026-11-11 内网穿透核心接入：新增 `tunnel` domain 六项 capability / MCP 索引和六项 typed IPC，全局 372 / 368。运行摘要事件仅 UI，后台恢复在窗口创建后执行。System App 从22增至23，可独立开窗，默认不固定 Dock；默认 Dock仍9项，Workflow、Automation、Deep Link无增量。
 
+穿透中文检索通过既有查询词表展开“内网穿透 / 穿透”“映射”“启停”，不改变检索权重或目录侧别名。权威 Skill 的 `tunnel/index.md` 与 `api-reference.md` 均声明只通过 `search` / `invoke` 调用；启动依赖、领域路由和打包门禁的测试夹具同步覆盖新增服务及六项能力，注册数量不变。
+
 2026-11-10 新增只读的 `app.mail_internal.recipient.resolve`（MCP `app_mail_internal_recipient_resolve`），在当前登录用户的共同团队内批量解析活跃成员的精确昵称。站内信 capability / MCP 索引各 18 项，全局 366 / 362。使用既有网络权限与审计，由 MCP `search` / `invoke` 调用，无新增 IPC、System App、Dock、Workflow、Automation Action 或 Deep Link。调用契约见[批量昵称解析接入指南](../agent-guides/mail-recipient-nickname-resolution.md)。
 
 2026-11-09 新增桌面 SkillHub（`skill-hub` / `skill_hub`），System App 21→22。可从启动台进入、独立开窗或手动固定；默认 Dock 仍为 9 项。目录、详情与正文、图标和打开安装器共 4 个 UI 私有 IPC（`app.skill_hub.operation.catalog_*`）。原有安装器私有 IPC、安装深链及 10 项 Hub capability / MCP 索引不变。

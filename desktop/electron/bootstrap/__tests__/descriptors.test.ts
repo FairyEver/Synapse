@@ -234,6 +234,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
       "core.mail",
       "app.todos.cloud",
+      "app.tunnel.runtime",
       "core.skill-hub",
       "core.wecom",
       "core.config",

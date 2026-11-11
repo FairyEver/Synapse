@@ -89,6 +89,8 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.action-runtime",
         "agent.conversation-window-service",
         "app.todos.cloud",
+        "app.tunnel.runtime",
+        "app.tunnel.background",
         "core.skill-hub",
         "core.skill-hub-install-provider",
         "core.skill-hub.background",
@@ -206,6 +208,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.mobile-gateway")?.dependsOn).toContain("core.mobile-workspace-files")
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
+    expect(byId.get("app.tunnel.runtime")?.dependsOn).toEqual([
+      "core.data-repository", "core.event-bus", "core.permission-guard", "core.audit-sink",
+    ])
+    expect(byId.get("app.tunnel.background")?.dependsOn).toEqual(["app.tunnel.runtime"])
     expect(byId.get("core.data-maintenance")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -415,6 +421,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.database")?.dependsOn).toEqual([
       "core.mail",
       "app.todos.cloud",
+      "app.tunnel.runtime",
       "core.skill-hub",
       "core.wecom",
       "core.config",
@@ -496,6 +503,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))
+    expect(idx("core.data-repository")).toBeLessThan(idx("app.tunnel.runtime"))
+    expect(idx("core.permission-guard")).toBeLessThan(idx("app.tunnel.runtime"))
+    expect(idx("core.audit-sink")).toBeLessThan(idx("app.tunnel.runtime"))
+    expect(idx("app.tunnel.runtime")).toBeLessThan(idx("app.tunnel.background"))
+    expect(idx("app.tunnel.runtime")).toBeLessThan(idx("core.database"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.audit-sink"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.system-notifier.integration"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.system-notifier.integration"))
