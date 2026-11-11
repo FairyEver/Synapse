@@ -11,6 +11,7 @@ const CAPABILITY_ACTIONS = [
   "add",
   "update",
   "set_completed",
+  "set_enabled",
   "update_local",
   "upsert",
   "delete",

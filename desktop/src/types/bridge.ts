@@ -1278,6 +1278,7 @@ export type SynapseBridge = {
     }
   }
   mail: import("../../app-capabilities/mail/shared/bridge").MailBridge
+  tunnel: import("../../app-capabilities/tunnel/shared/bridge").TunnelBridge
   todos: {
     image: {
       stage: (input: import("@synapse/shared/todo-contracts").TodoImageStageInput) => Promise<{ imageId: string }>

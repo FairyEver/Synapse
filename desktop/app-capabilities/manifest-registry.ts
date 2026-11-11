@@ -15,6 +15,7 @@ import { agentConversationCapabilityManifest } from "./agent/shared/manifest"
 import { terminalCapabilityManifest } from "./terminal/shared/manifest"
 import { mailCapabilityManifest } from "./mail/shared/manifest"
 import { mailInternalCapabilityManifest } from "./mail-internal/shared/manifest"
+import { tunnelCapabilityManifest } from "./tunnel/shared/manifest"
 import { todosCapabilityManifest } from "./todos/shared/manifest"
 
 export {
@@ -32,6 +33,7 @@ const appDeepLinkManifests = [
   mailInternalCapabilityManifest,
   mailCapabilityManifest,
   todosCapabilityManifest,
+  tunnelCapabilityManifest,
   skillHubCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,

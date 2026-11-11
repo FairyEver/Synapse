@@ -8,6 +8,7 @@ import type { ShareDomainEvent } from "../app-capabilities/agent/shared/share"
 
 import { createMailBridge } from "../app-capabilities/mail/shared/bridge"
 import { contextBridge, ipcRenderer, webUtils } from "electron"
+import { unwrapTunnelResult, type TunnelIpcResult } from "../app-capabilities/tunnel/shared/bridge"
 import { unwrapTodoResult, type TodoIpcResult } from "../app-capabilities/todos/shared/ipc-result"
 import type {
   DriveLocalUploadProgressEvent,
@@ -849,6 +850,18 @@ const synapseBridge: SynapseBridge = {
     },
   },
   mail: createMailBridge((channel, input) => invoke(channel)(input), createDomainEventPayloadSubscription(subscribe, "account", "mail.changed")),
+  tunnel: {
+    mapping: {
+      list: async (input = {}) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.list)(input) as TunnelIpcResult<import("@synapse/shared/tunnel-contracts").TunnelPageDto & { currentClientInstanceId: string }>),
+      get: async (id) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.get)({ id }) as TunnelIpcResult<import("@synapse/shared/tunnel-contracts").TunnelMappingDto>),
+      create: async (input) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.create)(input) as TunnelIpcResult<import("@synapse/shared/tunnel-contracts").TunnelMappingDto>),
+      update: async (id, input) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.update)({ id, ...input }) as TunnelIpcResult<import("@synapse/shared/tunnel-contracts").TunnelMappingDto>),
+      setEnabled: async (id, input) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.setEnabled)({ id, ...input }) as TunnelIpcResult<import("@synapse/shared/tunnel-contracts").TunnelMappingDto>),
+      delete: async (id, input) => unwrapTunnelResult(await invoke(IPC_CHANNELS.tunnel.delete)({ id, ...input }) as TunnelIpcResult<{ id: string; deleted: true }>),
+      onChanged: createDomainEventPayloadSubscription<{ id: string }>(subscribe, "account", "tunnel.mapping.changed"),
+      onReset: (listener) => createDomainEventPayloadSubscription(subscribe, "account", "tunnel.reset")(() => listener()),
+    },
+  },
   todos: {
     image: {
       stage: async (input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.stageImage)(input) as TodoIpcResult<{ imageId: string }>),

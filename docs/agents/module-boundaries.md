@@ -466,3 +466,10 @@ Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；�
 - `builtin.webhook-forward` 只接受 URL 与 Webhook，网络访问经过现有权限和审计。目标路径与原始查询串拼接；业务头保留，逐跳头及 Connection 指定头剔除；Host/长度/分帧由新连接生成。无模板、无重定向。
 - 总预算30秒，包括最多两次发送前连接失败重试（1秒、3秒）。连接/TLS建立前不提交 HTTP 请求；证书错误、HTTP错误、发送状态不确定、发送后断线与响应超时均不重发。响应必须完整结束且2xx才成功，正文/响应头不保存。
 - 外部调用方获得 SY 接收202，本机响应不回传；接口转发成功不代表下游审核或合并完成。旧 HTTP action 保持退役。
+
+## 内网穿透
+
+- `tunnel` 独立 System App；云端保存账号映射与永久不复用的随机子域名，本机端口授权与设备密钥分别位于 DataRepository 的 `app.tunnel.bindings`（SQLite）和 `app.tunnel.credentials`（加密），两者 local-only。不得导入、同步或克隆授权接管另一电脑映射。
+- 原设备、账号、端口、revision 与本机授权全部一致才能运行；启用意图长期保存，后台恢复不得阻塞主窗口。身份切换、撤销权限和连接换代立即终止旧流。
+- 独立控制与逐请求数据 WSS，不走 Live；只连回环 HTTP 端口，不提供任意主机、TCP 或 CONNECT。拿到公网 HTTPS 链接即可访问，不启动本机服务、不重放请求、不记录正文/Cookie/query。
+- 六项管理 capability / MCP 与 IPC 共用 dispatcher；无 Workflow、Automation、Deep Link、移动端或 Dashboard 入口。配置、流量预算与公网入口规则见[设计](../superpowers/specs/2026-11-11-tunnel-app-design.md)。生产自动续期需长期 DNSPod 验证授权；基础设施试验不等于产品上线。
