@@ -49,7 +49,7 @@ async function bootstrap(): Promise<void> {
     app.get(MobileLiveGateway).attach(app.getHttpServer())
   }
   await app.listen(env.port)
-  if (env.tunnelEnabled) await app.get(TunnelIngress).start({ host: env.tunnelIngressHost, port: env.tunnelIngressPort, publicDomain: env.tunnelPublicDomain! })
+  if (env.tunnelEnabled) await app.get(TunnelIngress).start({ host: env.tunnelIngressHost, port: env.tunnelIngressPort, publicDomain: env.tunnelPublicDomain!, requestBodyBytes: env.tunnelMaxRequestBodyBytes })
   registerHttpShutdownDeadline(app.getHttpServer())
 }
 

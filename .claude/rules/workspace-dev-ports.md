@@ -24,6 +24,7 @@ paths:
 | Console / Admin / Drive 网页 | 19700 | `dashboard/vite.config.ts`、`dashboard/package.json`；可由 `SYNAPSE_DASHBOARD_PORT` 覆盖 |
 | Server API（含 WebSocket） | 19701 | `server/package.json`、根 `package.json`；可由 `SYNAPSE_SERVER_API_PORT` 覆盖 |
 | PDF renderer 宿主机映射 | 19702 | `server/compose.dev.yml`、`scripts/dev/run-server-with-env.mjs`；可由 `PDF_RENDERER_HOST_PORT` 覆盖 |
+| Tunnel HTTP ingress（仅回环） | 19703 | `scripts/dev/run-server-with-env.mjs`；生产容器内为3002，不映射宿主机 |
 | Electron renderer | 19731 | `desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`；可由 `SYNAPSE_DEV_PORT` 覆盖 |
 | Auto 本地工具 | 19760 | `auto/src/server.ts` |
 | Auto 网页单独开发 | 19761 | `auto/web/vite.config.ts` |

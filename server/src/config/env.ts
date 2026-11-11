@@ -102,6 +102,12 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(3000),
     // 穿透独立入口，生产只允许应用容器内回环监听；未启用不接受域名申请。
     TUNNEL_ENABLED: z.enum(["true", "false"]).default("false"),
+    TUNNEL_MAX_MAPPINGS_PER_USER: z.coerce.number().int().min(1).max(100).default(100),
+    TUNNEL_MAX_STREAMS_PER_MAPPING: z.coerce.number().int().min(1).max(16).default(16),
+    TUNNEL_MAX_STREAMS_PER_USER: z.coerce.number().int().min(1).max(64).default(64),
+    TUNNEL_MAX_STREAMS_GLOBAL: z.coerce.number().int().min(1).max(256).default(256),
+    TUNNEL_MAX_REQUEST_BODY_BYTES: z.coerce.number().int().min(1).max(67108864).default(67108864),
+    TUNNEL_MAX_BUFFERED_BYTES_GLOBAL: z.coerce.number().int().min(1).max(67108864).default(67108864),
     TUNNEL_PUBLIC_DOMAIN: optionalEnvString,
     TUNNEL_INGRESS_HOST: z.enum(["127.0.0.1", "::1"]).default("127.0.0.1"),
     TUNNEL_INGRESS_PORT: z.coerce.number().int().min(1).max(65535).default(3002),
@@ -269,6 +275,12 @@ const envSchema = z
 
 export interface ServerEnv {
   readonly tunnelEnabled: boolean
+  readonly tunnelMaxMappingsPerUser: number
+  readonly tunnelMaxStreamsPerMapping: number
+  readonly tunnelMaxStreamsPerUser: number
+  readonly tunnelMaxStreamsGlobal: number
+  readonly tunnelMaxRequestBodyBytes: number
+  readonly tunnelMaxBufferedBytesGlobal: number
   readonly tunnelPublicDomain?: string
   readonly tunnelIngressHost: "127.0.0.1" | "::1"
   readonly tunnelIngressPort: number
@@ -337,6 +349,12 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
 
   return {
     tunnelEnabled: result.data.TUNNEL_ENABLED === "true",
+    tunnelMaxMappingsPerUser: result.data.TUNNEL_MAX_MAPPINGS_PER_USER,
+    tunnelMaxStreamsPerMapping: result.data.TUNNEL_MAX_STREAMS_PER_MAPPING,
+    tunnelMaxStreamsPerUser: result.data.TUNNEL_MAX_STREAMS_PER_USER,
+    tunnelMaxStreamsGlobal: result.data.TUNNEL_MAX_STREAMS_GLOBAL,
+    tunnelMaxRequestBodyBytes: result.data.TUNNEL_MAX_REQUEST_BODY_BYTES,
+    tunnelMaxBufferedBytesGlobal: result.data.TUNNEL_MAX_BUFFERED_BYTES_GLOBAL,
     tunnelPublicDomain: result.data.TUNNEL_PUBLIC_DOMAIN,
     tunnelIngressHost: result.data.TUNNEL_INGRESS_HOST,
     tunnelIngressPort: result.data.TUNNEL_INGRESS_PORT,

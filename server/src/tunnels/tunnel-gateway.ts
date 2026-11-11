@@ -10,6 +10,7 @@ import type { TunnelService } from "./tunnel.service"
 
 export interface TunnelGatewayDeps {
   service: TunnelService; devices: TunnelDeviceService; broker: TunnelBroker
+  bufferedBytes?: number
   verifyToken(token: string): Promise<{ userId: string }>
 }
 function decode(data: RawData, binary: boolean): TunnelControlMessage | null {
@@ -27,11 +28,11 @@ export class TunnelGateway {
   private readonly control = new WebSocketServer({ noServer: true, maxPayload: TUNNEL_LIMITS.controlFrameBytes, perMessageDeflate: false })
   private readonly data = new WebSocketServer({ noServer: true, maxPayload: TUNNEL_LIMITS.dataMessageBytes, perMessageDeflate: false })
   private readonly sockets = new Set<WebSocket>()
-  private readonly byteBudget = new TunnelByteBudget()
+  private readonly byteBudget: TunnelByteBudget
   private readonly pendingSockets = new Set<Duplex>()
   private server?: HttpServer
   private closing = false
-  constructor(private readonly deps: TunnelGatewayDeps) {}
+  constructor(private readonly deps: TunnelGatewayDeps) { this.byteBudget = new TunnelByteBudget(deps.bufferedBytes) }
   private readonly upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== TUNNEL_CONTROL_PATH && req.url !== TUNNEL_DATA_PATH) return
     socket.on("error", () => socket.destroy())

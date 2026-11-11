@@ -83,6 +83,8 @@ function resolveDevCommandEnv(args, processEnv, serverEnv) {
     const localPdfRendererPort = processEnv.PDF_RENDERER_HOST_PORT?.trim()
       || serverEnv.PDF_RENDERER_HOST_PORT?.trim()
       || defaultLocalPdfRendererPort
+    env.TUNNEL_INGRESS_HOST = "127.0.0.1"
+    env.TUNNEL_INGRESS_PORT = processEnv.TUNNEL_INGRESS_PORT?.trim() || serverEnv.TUNNEL_INGRESS_PORT?.trim() || "19703"
     env.APP_PUBLIC_URL = explicitPublicAppUrl || localServerPublicAppUrl
     env.DOCUMENT_PUBLIC_URL = explicitDocumentPublicUrl || localDocumentPublicUrl
     env.PDF_RENDERER_URL = processEnv.PDF_RENDERER_URL?.trim()

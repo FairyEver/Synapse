@@ -591,8 +591,8 @@ describe("server deployment configuration", () => {
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
-    expect(nginx.match(/location \/webhooks\/ \{[^}]*\}/u)?.[0]).toContain("access_log off;")
-    expect(nginx).toContain("location /webhooks/")
+    expect(nginx.match(/location ~\* \^\/webhooks\/ \{[^}]*\}/u)?.[0]).toContain("access_log off;")
+    expect(nginx).toContain("location ~* ^/webhooks/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 

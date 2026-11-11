@@ -11,3 +11,5 @@ services:
 networks:
   pdf-dev:
     driver: bridge
+
+# Tunnel HTTP ingress runs on the host at 127.0.0.1:19703; no published container port.
