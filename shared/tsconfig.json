@@ -32,6 +32,7 @@
     "src/skill-hub-package-node.ts",
     "src/archive-package-node.ts",
     "src/custom-apps.ts",
-    "src/tunnel-contracts.ts"
+    "src/tunnel-contracts.ts",
+    "src/tunnel-stream-node.ts"
   ]
 }

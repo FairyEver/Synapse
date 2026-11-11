@@ -17,7 +17,7 @@ describe("tunnel management request boundary", () => {
     const service = new TunnelService(repository, { enabled: true, publicDomain: "tunnel.test", mappingsPerUser: 100 })
     const devices = new TunnelDeviceService(repository)
     let owner = "u1"
-    @Module({ imports: [], controllers: [TunnelController], providers: [{ provide: TunnelService, useValue: service }, { provide: TunnelDeviceService, useValue: devices }] })
+    @Module({ imports: [], exports: [], controllers: [TunnelController], providers: [{ provide: TunnelService, useValue: service }, { provide: TunnelDeviceService, useValue: devices }] })
     class BoundaryModule extends TunnelModule {}
     const module = await Test.createTestingModule({ imports: [BoundaryModule] }).overrideGuard(UserAuthGuard).useValue({ canActivate(context: ExecutionContext) {
       if (!owner) throw new UnauthorizedException()

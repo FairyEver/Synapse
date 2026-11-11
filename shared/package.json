@@ -137,6 +137,17 @@
         "default": "./dist/tunnel-contracts.cjs"
       },
       "default": "./dist/tunnel-contracts.js"
+    },
+    "./tunnel-stream-node": {
+      "import": {
+        "types": "./dist/tunnel-stream-node.d.ts",
+        "default": "./dist/tunnel-stream-node.js"
+      },
+      "require": {
+        "types": "./dist/tunnel-stream-node.d.cts",
+        "default": "./dist/tunnel-stream-node.cjs"
+      },
+      "default": "./dist/tunnel-stream-node.js"
     }
   },
   "scripts": {
