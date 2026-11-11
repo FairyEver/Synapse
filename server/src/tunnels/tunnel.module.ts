@@ -11,6 +11,7 @@ import { TunnelDeviceService } from "./tunnel-device.service"
 import { TunnelBroker } from "./tunnel-broker"
 import { TunnelGateway } from "./tunnel-gateway"
 import { UserAuthService } from "../auth/user-auth.service"
+import { TunnelIngress } from "./tunnel-ingress"
 @Module({ imports: [UserAuthModule, PrismaModule], controllers: [TunnelController], providers: [TunnelRepository,
   { provide: TunnelService, inject: [TunnelRepository], useFactory: (repository: TunnelRepository) => {
     const env = loadEnv(process.env)
@@ -19,7 +20,8 @@ import { UserAuthService } from "../auth/user-auth.service"
   { provide: TunnelDeviceService, inject: [TunnelRepository], useFactory: (repository: TunnelRepository) => new TunnelDeviceService(repository) },
   { provide: TunnelBroker, inject: [TunnelService], useFactory: (service: TunnelService) => new TunnelBroker(service) },
   { provide: TunnelGateway, inject: [TunnelService, TunnelDeviceService, TunnelBroker, UserAuthService], useFactory: (service: TunnelService, devices: TunnelDeviceService, broker: TunnelBroker, auth: UserAuthService) => new TunnelGateway({ service, devices, broker, verifyToken: token => auth.verifyAccessToken(token) }) },
-], exports: [TunnelService, TunnelDeviceService, TunnelBroker, TunnelGateway] })
+  { provide: TunnelIngress, inject: [TunnelService, TunnelBroker], useFactory: (service: TunnelService, broker: TunnelBroker) => new TunnelIngress(service, broker) },
+], exports: [TunnelService, TunnelDeviceService, TunnelBroker, TunnelGateway, TunnelIngress] })
 export class TunnelModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply((_req: Request, res: Response, next: NextFunction) => { res.setHeader("Cache-Control", "private, no-store"); next() }).forRoutes(TunnelController)

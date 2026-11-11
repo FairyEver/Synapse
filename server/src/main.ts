@@ -12,6 +12,7 @@ import { createHttpSecurityMiddleware } from "./common/http-security"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 import { TunnelGateway } from "./tunnels/tunnel-gateway"
+import { TunnelIngress } from "./tunnels/tunnel-ingress"
 import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
 import { MobileLiveGateway } from "./mobile-live/mobile-live.gateway"
 import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
@@ -48,6 +49,7 @@ async function bootstrap(): Promise<void> {
     app.get(MobileLiveGateway).attach(app.getHttpServer())
   }
   await app.listen(env.port)
+  if (env.tunnelEnabled) await app.get(TunnelIngress).start({ host: env.tunnelIngressHost, port: env.tunnelIngressPort, publicDomain: env.tunnelPublicDomain! })
   registerHttpShutdownDeadline(app.getHttpServer())
 }
 
