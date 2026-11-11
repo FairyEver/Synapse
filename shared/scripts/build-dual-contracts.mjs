@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises"
 import ts from "typescript"
 
-const entries = ["cloud-table-contracts", "skill-hub-contracts", "skill-hub-frontmatter", "archive-package-node", "skill-hub-package-node", "custom-apps"]
+const entries = ["cloud-table-contracts", "skill-hub-contracts", "skill-hub-frontmatter", "archive-package-node", "skill-hub-package-node", "custom-apps", "tunnel-contracts"]
 const rewrite = (source) => source.replace(/"\.\/([a-z-]+)\.js"/g, (original, name) =>
   entries.includes(name) ? `"./${name}.cjs"` : original,
 )

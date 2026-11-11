@@ -126,6 +126,17 @@
         "default": "./dist/archive-package-node.cjs"
       },
       "default": "./dist/archive-package-node.js"
+    },
+    "./tunnel-contracts": {
+      "import": {
+        "types": "./dist/tunnel-contracts.d.ts",
+        "default": "./dist/tunnel-contracts.js"
+      },
+      "require": {
+        "types": "./dist/tunnel-contracts.d.cts",
+        "default": "./dist/tunnel-contracts.cjs"
+      },
+      "default": "./dist/tunnel-contracts.js"
     }
   },
   "scripts": {

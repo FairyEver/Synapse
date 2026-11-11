@@ -7,6 +7,16 @@ import { describe, expect, it } from "vitest"
 describe("package entrypoint", () => {
   const packageDirectory = fileURLToPath(new URL("..", import.meta.url))
 
+  it("loads the same tunnel protocol through ESM and CommonJS", () => {
+    const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
+      import { createRequire } from "node:module"
+      import * as esm from "@synapse/shared/tunnel-contracts"
+      const cjs = createRequire(import.meta.url)("@synapse/shared/tunnel-contracts")
+      process.stdout.write(JSON.stringify({ equal: JSON.stringify(esm.TUNNEL_LIMITS) === JSON.stringify(cjs.TUNNEL_LIMITS), label: cjs.createTunnelLabel(() => new Uint8Array(16)) }))
+    `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
+    expect(JSON.parse(result)).toEqual({ equal: true, label: "0".repeat(32) })
+  })
+
   it("does not load CommonJS-only modules from the ESM root entrypoint", async () => {
     const entrypoint = await readFile(new URL("../dist/index.js", import.meta.url), "utf8")
     const driveEntrypoint = await readFile(new URL("../dist/drive.js", import.meta.url), "utf8")
