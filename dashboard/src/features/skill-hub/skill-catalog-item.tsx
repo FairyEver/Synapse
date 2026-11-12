@@ -32,13 +32,13 @@ export function SkillHubIcon({ session, skill, large = false }: {
 }
 
 export function SkillInstallButton({ id, variant = 'secondary', catalogName }: {
-  id: string; variant?: 'primary' | 'secondary'; catalogName?: string
+  id: string; variant?: 'primary' | 'secondary' | 'tertiary'; catalogName?: string
 }) {
   function install() {
     try { toast.info(openSkillInSynapse(id)) }
     catch { toast.danger('无法打开 Synapse，请重试。') }
   }
-  return <Button variant={catalogName ? 'ghost' : variant} onPress={install}
+  return <Button variant={variant} onPress={install}
     aria-label={catalogName ? `安装 ${catalogName} 到 Synapse` : '安装到 Synapse'}>
     {catalogName ? '安装' : <><ArrowUpRight aria-hidden="true" /><span className="hidden min-[371px]:inline">安装到 Synapse</span><span className="min-[371px]:hidden">安装</span></>}
   </Button>
@@ -61,10 +61,10 @@ export function SkillCatalogItem({ skill, search, session, showTeam }: {
         {showTeam ? <p className="mt-1 truncate text-xs text-muted" title={skill.team.name}>{skill.team.name}</p> : null}
       </div>
     </Link>
-    <ButtonGroup variant="ghost" aria-label={`${skill.displayName} 操作`}>
-      <SkillInstallButton id={skill.id} catalogName={skill.displayName} />
+    <ButtonGroup variant="tertiary" aria-label={`${skill.displayName} 操作`}>
+      <SkillInstallButton id={skill.id} variant="tertiary" catalogName={skill.displayName} />
       <Dropdown>
-        <Button variant="ghost" isIconOnly aria-label={`更多 ${skill.displayName} 操作`}>
+        <Button variant="tertiary" isIconOnly aria-label={`更多 ${skill.displayName} 操作`}>
           <ButtonGroup.Separator />
           <ChevronDown aria-hidden="true" />
         </Button>

@@ -103,6 +103,49 @@ afterEach(() => {
 })
 
 for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${width}px`, () => {
+  it('keeps the split install control filled through hover, press and menu focus', async () => {
+    await page.viewport(width, 860)
+    stubRead()
+    const install = vi.mocked(openSkillInSynapse).mockClear().mockReturnValue('已尝试打开 Synapse')
+    const view = await mount()
+    try {
+      const main = page.getByRole('button', { name: '安装 设计检查 到 Synapse', exact: true })
+      const more = page.getByRole('button', { name: '更多 设计检查 操作', exact: true })
+      const group = page.getByRole('group', { name: '设计检查 操作', exact: true })
+      const background = (element: Element) => getComputedStyle(element).backgroundColor
+      await userEvent.hover(main)
+      await screenshot('catalog-install-hover', width)
+      expect(background(more.element())).not.toBe('rgba(0, 0, 0, 0)')
+      expect(background(main.element())).not.toBe('rgba(0, 0, 0, 0)')
+      await userEvent.hover(more)
+      await screenshot('catalog-more-hover', width)
+      expect(background(main.element())).not.toBe('rgba(0, 0, 0, 0)')
+      expect(background(more.element())).not.toBe('rgba(0, 0, 0, 0)')
+      assertFits(group.element(), width)
+      expect(install).not.toHaveBeenCalled()
+
+      main.element().focus()
+      await userEvent.keyboard('{Space>}')
+      await expect.element(main).toHaveAttribute('data-pressed', 'true')
+      expect(main.element().getBoundingClientRect().right).toBeCloseTo(more.element().getBoundingClientRect().left)
+      expect(main.element().getBoundingClientRect().height).toBe(more.element().getBoundingClientRect().height)
+      expect(background(more.element())).not.toBe('rgba(0, 0, 0, 0)')
+      await screenshot('catalog-install-pressed', width)
+      await userEvent.keyboard('{/Space}')
+      expect(install).toHaveBeenCalledExactlyOnceWith('skill_2')
+      await userEvent.tab()
+      await expect.element(more).toHaveFocus()
+      await screenshot('catalog-more-focus', width)
+      await userEvent.keyboard('{Enter}')
+      await expect.element(page.getByRole('menuitem', { name: '复制分享链接', exact: true })).toBeVisible()
+      assertFits(page.getByRole('menu').element(), width)
+      await screenshot('catalog-split-expanded', width)
+      await userEvent.keyboard('{Escape}')
+      await expect.element(more).toHaveFocus()
+      expect(install).toHaveBeenCalledTimes(1)
+    } finally { await userEvent.keyboard('{/Space}'); await view.unmount() }
+  })
+
   it('shares the full store description from both menus without installing or navigating', async () => {
     await page.viewport(width, 860)
     stubRead()
@@ -114,7 +157,8 @@ for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${widt
     try {
       const restingInstall = page.getByRole('button', { name: '安装 设计检查 到 Synapse', exact: true })
       const restingMore = page.getByRole('button', { name: '更多 设计检查 操作', exact: true })
-      expect(getComputedStyle(restingMore.element()).backgroundColor).toBe(getComputedStyle(restingInstall.element()).backgroundColor)
+      await userEvent.hover(page.getByRole('heading', { name: 'Skill Hub', exact: true }))
+      await expect.poll(() => getComputedStyle(restingMore.element()).backgroundColor === getComputedStyle(restingInstall.element()).backgroundColor).toBe(true)
       expect(getComputedStyle(restingMore.element()).color).toBe(getComputedStyle(restingInstall.element()).color)
       const trigger = page.getByRole('button', { name: `更多 ${long} 操作`, exact: true })
       await trigger.click()
