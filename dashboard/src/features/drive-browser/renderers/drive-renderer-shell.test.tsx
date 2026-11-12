@@ -681,66 +681,43 @@ describe('DriveRendererShell', () => {
     expect(toast).toHaveBeenCalledWith('已复制分享链接')
   })
 
-  it('copies a shared HTML page title and link from the floating menu', async () => {
-    const writeText = vi.fn(async () => undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
-    renderShell({
-      snapshot: baseSnapshot({
-        context: 'share',
-        current: {
-          ...baseSnapshot().current,
-          name: '产品介绍.html',
-          mimeType: 'text/html',
-          previewKind: 'html-source',
-          browserUrl: '/share/shr_webpage',
-          shareUrl: '/share/shr_webpage',
-        },
-        preview: {
-          kind: 'html-source',
-          text: '<html></html>',
-          html: null,
-          outline: null,
-          truncated: false,
-          imageUrl: null,
-          visitUrl: '/share/shr_webpage/render',
-          relativeImages: [],
-        },
-      }),
-      body: true,
-      rendererId: 'iframe',
-    })
+  it.each(['/share/shr_webpage', '/share/shr_folder/items/html_file'])(
+    'renders shared HTML without file controls at %s',
+    (browserUrl) => {
+      renderShell({
+        snapshot: baseSnapshot({
+          context: 'share',
+          current: {
+            ...baseSnapshot().current,
+            name: '产品介绍.html',
+            mimeType: 'text/html',
+            previewKind: 'html-source',
+            browserUrl,
+            shareUrl: browserUrl,
+          },
+          preview: {
+            kind: 'html-source',
+            text: '<html></html>',
+            html: null,
+            outline: null,
+            truncated: false,
+            imageUrl: null,
+            visitUrl: `${browserUrl}/render`,
+            relativeImages: [],
+          },
+        }),
+        body: true,
+        rendererId: 'iframe',
+      })
 
-    const trigger = buttonWithLabel('文件操作')
-    trigger.setPointerCapture = vi.fn()
-    trigger.releasePointerCapture = vi.fn()
-    await act(async () => {
-      trigger.dispatchEvent(
-        new MouseEvent('pointerdown', {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-        })
-      )
-      trigger.dispatchEvent(
-        new MouseEvent('pointerup', {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-        })
-      )
-    })
-    expect(menuItemTexts()).toContain('复制分享链接')
-
-    await click(getMenuItem('复制分享链接'))
-
-    expect(writeText).toHaveBeenCalledWith(
-      '网页分享：产品介绍\nhttp://localhost:3000/share/shr_webpage'
-    )
-    expect(toast).toHaveBeenCalledWith('已复制分享链接')
-  })
+      expect(document.querySelector('[aria-label="文件操作"]')).toBeNull()
+      expect(document.querySelector('[data-drive-preview-header]')).toBeNull()
+      const iframe = document.querySelector('iframe')
+      expect(iframe?.getAttribute('src')).toBe(`${browserUrl}/render`)
+      expect(iframe?.getAttribute('title')).toBe('产品介绍.html')
+      expect(iframe?.getAttribute('sandbox')).toContain('allow-same-origin')
+    }
+  )
 
   it('shows the edit unavailable reason in the shared header', () => {
     renderShell({

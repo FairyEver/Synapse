@@ -53,9 +53,9 @@ Renderer contributions always appear before system actions. Finder must not hard
 
 ### Floating HTML Controls
 
-HTML direct preview keeps a floating button because a persistent top header would cover the web page being previewed. The floating menu consumes the same system action definitions and the same renderer contribution model, but presents them inside a dropdown.
+As of 2026-11-12, shared HTML webpage previews render without a floating button, menu, or replacement header. This applies to both standalone file shares and HTML files opened within folder shares. Owner HTML previews keep the existing floating button. Access checks, render URLs, and iframe permissions remain unchanged.
 
-The floating button is used when the selected renderer is `iframe`. Other renderers use the shared preview header.
+The floating button is used for owner body previews when the selected renderer is `iframe`. Other renderers use the shared preview header.
 
 ### Renderer Contributions
 
@@ -219,14 +219,14 @@ No contribution needed.
 
 ### Iframe Renderer
 
-Use floating menu mode. No persistent header.
+Shared body previews have no preview controls. Owner body previews use floating menu mode. Neither renders a persistent header.
 
 ## Testing
 
 Add focused tests for:
 
 - non-iframe standalone Markdown files render the shared header and do not render the floating file button;
-- shared iframe HTML files render the floating button with `复制分享链接` and do not render the shared header;
+- shared iframe HTML files render the original webpage without a floating button or shared header, including HTML files within folder shares;
 - Finder file previews and standalone file previews share the same system action labels and renderer selector behavior;
 - files and folders with a share URL show `复制分享链接`, while unshared owner items do not;
 - copying a regular file share writes `文件分享：`, copying an HTML share writes `网页分享：`, and copying a folder share writes `文件夹分享：`; file and HTML names omit the final extension, folder names stay unchanged, and all variants write the absolute share URL on the second line;

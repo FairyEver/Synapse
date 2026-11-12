@@ -935,7 +935,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-reader-toolbar="true"')
   })
 
-  it('uses floating chrome for iframe html previews', () => {
+  it('renders shared HTML as a webpage without preview controls', () => {
     const snapshot = createSnapshot({
       context: 'share',
       surface: 'standalone',
@@ -951,10 +951,9 @@ describe('drive browser view model', () => {
 
     const html = renderDriveView(createElement(DriveSingleFileReaderView, { snapshot }))
 
-    expect(html).toContain('文件操作')
+    expect(html).not.toContain('文件操作')
     expect(html).not.toContain('data-drive-preview-header="true"')
-    expect(getDrivePreviewSystemMenuSections(snapshot, 'iframe').flatMap((section) => section.items.map((item) => item.id)))
-      .toContain('copy-share-link')
+    expect(html).toContain('src="/share/shr_webpage/render"')
   })
 
   it('does not offer opening a standalone file reader in another new window', () => {

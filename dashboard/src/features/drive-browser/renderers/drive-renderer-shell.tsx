@@ -297,6 +297,7 @@ function DriveRendererShellChrome({
     hasUnsavedChanges,
   })
   const useFloatingChrome = body && selected.id === 'iframe'
+  const hidePreviewChrome = useFloatingChrome && snapshot.context === 'share'
   const requestRendererChange = (id: DriveRendererId) => {
     if (id === selected.id || editContext?.reloading || editContext?.savingText)
       return
@@ -315,7 +316,7 @@ function DriveRendererShellChrome({
   }
   return (
     <FilePreviewLayout className='flex h-full min-h-0 w-full flex-col overflow-hidden bg-background'>
-      {useFloatingChrome ? (
+      {hidePreviewChrome ? null : useFloatingChrome ? (
         <DrivePreviewFloatingMenu
           snapshot={snapshot}
           rendererItems={items}
