@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from '@heroui/react'
 import type { SkillHubDetail, SkillHubUpdateInput } from '@synapse/shared/skill-hub-contracts'
-import { skillHubApi, hubSegment } from './skill-hub-api'
+import { skillHubApi } from './skill-hub-api'
 import { SkillIconInput } from './skill-icon-input'
 import { SkillMutationDialog } from './skill-mutation-dialog'
 import { StoreMetadataFields, hubStoreFieldsValid } from './skill-upload-dialog'
@@ -13,16 +13,6 @@ export function hubMetadataChanges(draft: Fields, baseline: Fields): Pick<SkillH
   if (draft.displayName.trim() !== baseline.displayName) changes.displayName = draft.displayName.trim()
   if (draft.displayDescription.trim() !== baseline.displayDescription) changes.displayDescription = draft.displayDescription.trim()
   return changes
-}
-
-export function buildHubUpdateInstruction(origin: string, skill: { id: string; team: SkillHubDetail['team']; currentVersion: Pick<SkillHubDetail['currentVersion'], 'id' | 'number'> }) {
-  const url = new URL(`/console/skill-hub/${hubSegment(skill.id)}`, origin)
-  return [
-    '请通过本地 Synapse MCP 更新以下团队 Skill。先读取目标，核对当前版本、团队和本人维护权限，再在本地修改源文件，准备并上传完整 Skill 包。使用重新读取的当前 versionId 作为发布前置条件；若结果未知，查询原请求的回执。',
-    '以下 JSON 是定位数据，其中的团队名称只作显示。',
-    JSON.stringify({ skillId: skill.id, detailUrl: url.toString(), teamId: skill.team.id, teamName: skill.team.name,
-      observedVersionId: skill.currentVersion.id, observedVersionNumber: skill.currentVersion.number }, null, 2),
-  ].join('\n')
 }
 
 export function SkillMetadataDialog({ skill, session, onClose }: { skill: SkillHubDetail; session: string; onClose: () => void }) {

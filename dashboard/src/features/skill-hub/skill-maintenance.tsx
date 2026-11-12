@@ -1,10 +1,11 @@
-import { Button, Dropdown, Header, Label, toast } from '@heroui/react'
+import { Button, Dropdown, Label, Separator, toast } from '@heroui/react'
 import { Copy, Ellipsis, Pencil, Trash2, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import type { SkillHubDetail } from '@synapse/shared/skill-hub-contracts'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { skillHubApi } from './skill-hub-api'
-import { buildHubUpdateInstruction, SkillMetadataDialog } from './skill-metadata-dialog'
+import { SkillMetadataDialog } from './skill-metadata-dialog'
+import { copyHubShareLink } from './skill-share'
 import { SkillUploadDialog } from './skill-upload-dialog'
 import { useSkillPublish } from './use-skill-publish'
 
@@ -17,38 +18,29 @@ export function SkillMaintenance({ skill, session, onDeleted }: { skill: SkillHu
     setMode(null)
     requestAnimationFrame(() => trigger.current?.focus())
   }
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(buildHubUpdateInstruction(window.location.origin, skill))
-      toast.success('已复制 AI 更新指令')
-    } catch { toast.danger('复制失败，请重试。') }
-  }
   const permissions = skill.permissions
   const canMaintain = permissions.canEditMetadata || permissions.canPublishVersion || permissions.canDelete
-  if (!canMaintain && !mode) return null
   return <>
-    {canMaintain ? <Dropdown>
-      <Button variant="ghost" ref={trigger} isIconOnly aria-label="维护 Skill"><Ellipsis aria-hidden="true" /></Button>
+    <Dropdown>
+      <Button variant="ghost" ref={trigger} isIconOnly aria-label="更多操作"><Ellipsis aria-hidden="true" /></Button>
       <Dropdown.Popover placement="bottom end">
-        <Dropdown.Menu aria-label="维护 Skill">
+        <Dropdown.Menu aria-label="Skill 更多操作">
+          <Dropdown.Item id="copy-share" textValue="复制分享链接" onAction={() => void copyHubShareLink(skill)}>
+            <Copy aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>复制分享链接</Label>
+          </Dropdown.Item>
+          {canMaintain ? <Separator /> : null}
           {permissions.canEditMetadata ? <Dropdown.Item id="edit" textValue="编辑资料" onAction={() => setMode('edit')}>
             <Pencil aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>编辑资料</Label>
           </Dropdown.Item> : null}
-          {permissions.canPublishVersion ? <Dropdown.Section>
-            {permissions.canEditMetadata ? <Header>更新 Skill</Header> : null}
-            <Dropdown.Item id="publish" textValue="上传新版本" onAction={() => setMode('publish')}>
-              <Upload aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>上传新版本</Label>
-            </Dropdown.Item>
-            <Dropdown.Item id="copy" textValue="复制 AI 更新指令" onAction={() => void copy()}>
-              <Copy aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>复制 AI 更新指令</Label>
-            </Dropdown.Item>
-          </Dropdown.Section> : null}
+          {permissions.canPublishVersion ? <Dropdown.Item id="publish" textValue="上传新版本" onAction={() => setMode('publish')}>
+            <Upload aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>上传新版本</Label>
+          </Dropdown.Item> : null}
           {permissions.canDelete ? <Dropdown.Item id="delete" variant="danger" textValue="删除 Skill" onAction={() => setMode('delete')}>
             <Trash2 aria-hidden="true" className="size-4 shrink-0 text-danger" /><Label>删除 Skill</Label>
           </Dropdown.Item> : null}
         </Dropdown.Menu>
       </Dropdown.Popover>
-    </Dropdown> : null}
+    </Dropdown>
     {mode === 'edit' ? <SkillMetadataDialog skill={skill} session={session} onClose={close} /> : null}
     {mode === 'publish' ? <SkillUploadDialog skill={skill} session={session} onClose={close} /> : null}
     {mode === 'delete' ? <SkillDeleteDialog skill={skill} session={session} onClose={close} onDeleted={onDeleted} /> : null}

@@ -1,10 +1,11 @@
-import { Button, toast } from '@heroui/react'
-import { ArrowUpRight, Package } from 'lucide-react'
+import { Button, ButtonGroup, Dropdown, Label, toast } from '@heroui/react'
+import { ArrowUpRight, ChevronDown, Copy, Package } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import type { SkillHubSummary } from '@synapse/shared/skill-hub-contracts'
 import { skillHubApi } from './skill-hub-api'
 import { openSkillInSynapse, type SkillHubSearch } from './skill-hub-navigation'
+import { copyHubShareLink } from './skill-share'
 
 function SkillImage({ session, id, revision }: { session: string; id: string; revision: number }) {
   const [url, setUrl] = useState('')
@@ -60,8 +61,21 @@ export function SkillCatalogItem({ skill, search, session, showTeam }: {
         {showTeam ? <p className="mt-1 truncate text-xs text-muted" title={skill.team.name}>{skill.team.name}</p> : null}
       </div>
     </Link>
-    <div>
+    <ButtonGroup variant="ghost" aria-label={`${skill.displayName} 操作`}>
       <SkillInstallButton id={skill.id} catalogName={skill.displayName} />
-    </div>
+      <Dropdown>
+        <Button variant="ghost" isIconOnly aria-label={`更多 ${skill.displayName} 操作`}>
+          <ButtonGroup.Separator />
+          <ChevronDown aria-hidden="true" />
+        </Button>
+        <Dropdown.Popover placement="bottom end">
+          <Dropdown.Menu aria-label={`${skill.displayName} 操作`}>
+            <Dropdown.Item id="copy-share" textValue="复制分享链接" onAction={() => void copyHubShareLink(skill)}>
+              <Copy aria-hidden="true" className="size-4 shrink-0 text-muted" /><Label>复制分享链接</Label>
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
+    </ButtonGroup>
   </li>
 }

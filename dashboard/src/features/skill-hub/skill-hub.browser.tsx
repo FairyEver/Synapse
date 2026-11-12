@@ -14,6 +14,9 @@ import { useAdminAuthStore } from '@/stores/admin-auth-store'
 import { TeamSkills } from '@/features/teams/team-skills'
 import { skillHubApi } from './skill-hub-api'
 import { normalizeSkillHubIcon } from './skill-icon-input'
+import { openSkillInSynapse } from './skill-hub-navigation'
+
+vi.mock('./skill-hub-navigation', { spy: true })
 
 const long = '一个非常长的团队 Skill 名称'.repeat(5)
 const person = { id: 'member_1', displayName: '原贡献者' }
@@ -21,7 +24,7 @@ const teams = [{ id: 'team_1', name: '产品设计组' }, { id: 'team_2', name: 
 const date = '2026-11-04T00:00:00.000Z'
 const hash = 'a'.repeat(64)
 const detail: SkillHubDetail = {
-  id: 'skill_1', team: teams[0], displayName: long, displayDescription: '跨编辑器使用团队提供的操作指南。'.repeat(5),
+  id: 'skill_1', team: teams[0], displayName: long, displayDescription: '跨编辑器使用团队提供的操作指南。'.repeat(5) + '\n第二段：完整介绍。',
   iconUrl: '/api/skill-hub/skills/skill_1/icon',
   package: { name: 'real-package', description: 'Readonly package description' },
   currentVersion: { id: 'ver_2', number: 2, contentFingerprint: `sha256:${hash}`, archiveSha256: hash },
@@ -87,7 +90,7 @@ async function mount(path = '/console/skill-hub/') {
   return render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
 }
 async function maintenance(item: string) {
-  await page.getByRole('button', { name: '维护 Skill' }).click()
+  await page.getByRole('button', { name: '更多操作' }).click()
   await page.getByRole('menuitem', { name: item, exact: true }).click()
 }
 
@@ -100,6 +103,86 @@ afterEach(() => {
 })
 
 for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${width}px`, () => {
+  it('shares the full store description from both menus without installing or navigating', async () => {
+    await page.viewport(width, 860)
+    stubRead()
+    const get = vi.mocked(skillHubApi.get)
+    const install = vi.mocked(openSkillInSynapse).mockClear().mockReturnValue('已尝试打开 Synapse')
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    const expected = `Skill：${detail.displayName}\n\n简介：${detail.displayDescription}\n\n链接：${window.location.origin}/console/skill-hub/${detail.id}`
+    const view = await mount('/console/skill-hub/?q=guide#catalog')
+    try {
+      const restingInstall = page.getByRole('button', { name: '安装 设计检查 到 Synapse', exact: true })
+      const restingMore = page.getByRole('button', { name: '更多 设计检查 操作', exact: true })
+      expect(getComputedStyle(restingMore.element()).backgroundColor).toBe(getComputedStyle(restingInstall.element()).backgroundColor)
+      expect(getComputedStyle(restingMore.element()).color).toBe(getComputedStyle(restingInstall.element()).color)
+      const trigger = page.getByRole('button', { name: `更多 ${long} 操作`, exact: true })
+      await trigger.click()
+      const menu = page.getByRole('menu')
+      await expect.element(menu).toBeVisible()
+      expect(menu.element().textContent).toBe('复制分享链接')
+      assertFits(menu.element(), width)
+      const item = page.getByRole('menuitem', { name: '复制分享链接', exact: true })
+      const icon = item.element().querySelector('svg')!
+      await expect.poll(() => icon.getBoundingClientRect().width).toBeCloseTo(16, 1)
+      expect(getComputedStyle(item.element().querySelector('[data-slot="label"]')!).fontSize).toBe('14px')
+      assertFits(menu.element(), width)
+      await userEvent.hover(item)
+      await screenshot('catalog-share-hover', width)
+      await userEvent.keyboard('{ArrowDown}')
+      await expect.element(item).toHaveFocus()
+      await screenshot('catalog-share-menu', width)
+      await userEvent.keyboard('{Enter}')
+      await expect.poll(() => clipboard.mock.calls).toEqual([[expected]])
+      await expect.element(menu).not.toBeInTheDocument()
+      await expect.element(trigger).toHaveFocus()
+      expect(install).not.toHaveBeenCalled()
+      expect(get).not.toHaveBeenCalled()
+      await expect.element(page.getByRole('searchbox')).toHaveValue('guide')
+
+      const installButton = page.getByRole('button', { name: `安装 ${long} 到 Synapse`, exact: true })
+      const left = installButton.element().getBoundingClientRect()
+      const right = trigger.element().getBoundingClientRect()
+      expect(left.right).toBeCloseTo(right.left)
+      expect(left.height).toBe(page.getByRole('button', { name: '上传 Skill', exact: true }).element().getBoundingClientRect().height)
+      expect(right.height).toBe(left.height)
+      if (width < 768) expect(right.height).toBeGreaterThanOrEqual(40)
+      expect(getComputedStyle(installButton.element()).borderTopRightRadius).toBe('0px')
+      expect(getComputedStyle(trigger.element()).borderTopLeftRadius).toBe('0px')
+      assertFits(trigger.element(), width)
+      await installButton.click()
+      expect(install).toHaveBeenCalledExactlyOnceWith(detail.id)
+
+      get.mockResolvedValue({ ...detail, permissions: { canEditMetadata: false, canPublishVersion: false, canDelete: false } })
+      await page.getByRole('link', { name: long, exact: true }).click()
+      await page.getByRole('button', { name: '更多操作', exact: true }).click()
+      await expect.element(menu).toBeVisible()
+      expect(menu.element().textContent).toBe('复制分享链接')
+      assertFits(menu.element(), width)
+      await expect.poll(() => item.element().querySelector('svg')!.getBoundingClientRect().width).toBeCloseTo(16, 1)
+      expect(getComputedStyle(item.element().querySelector('[data-slot="label"]')!).fontSize).toBe('14px')
+      await userEvent.hover(item)
+      await screenshot('detail-share-hover', width)
+      await userEvent.keyboard('{ArrowDown}')
+      await expect.element(item).toHaveFocus()
+      await screenshot('detail-share-menu', width)
+      await userEvent.keyboard('{Enter}')
+      await expect.poll(() => clipboard.mock.calls).toEqual([[expected], [expected]])
+      await expect.element(page.getByRole('button', { name: '更多操作', exact: true })).toHaveFocus()
+      expect(install).toHaveBeenCalledTimes(1)
+
+      clipboard.mockRejectedValueOnce(new Error('clipboard denied'))
+      await page.getByRole('button', { name: '更多操作', exact: true }).click()
+      await item.click()
+      await expect.element(page.getByText('复制失败，请重试。', { exact: true })).toBeVisible()
+      expect(install).toHaveBeenCalledTimes(1)
+      await page.getByRole('button', { name: '更多操作', exact: true }).click()
+      await userEvent.keyboard('{Escape}')
+      await expect.element(menu).not.toBeInTheDocument()
+      await expect.element(page.getByRole('button', { name: '更多操作', exact: true })).toHaveFocus()
+    } finally { await view.unmount() }
+  })
+
   it('shows the catalog, expands the complete team selector and opens latest-only detail', async () => {
     await page.viewport(width, 860)
     stubRead()
@@ -153,8 +236,10 @@ for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${widt
       await expect.element(upload).not.toBeInTheDocument()
       await page.getByRole('link', { name: long, exact: true }).click()
 
-      await page.getByRole('button', { name: '维护 Skill' }).click()
+      await page.getByRole('button', { name: '更多操作' }).click()
       await expect.element(page.getByRole('menu')).toBeVisible()
+      expect(page.getByRole('menu').element().textContent).toContain('复制分享链接')
+      expect(page.getByRole('menu').element().textContent).not.toContain('复制 AI 更新指令')
       assertFits(page.getByRole('menu').element(), width)
       await screenshot('maintenance-menu', width)
       await page.getByRole('menuitem', { name: '编辑资料' }).click()
@@ -169,7 +254,7 @@ for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${widt
       await expect.element(page.getByRole('textbox', { name: '商店名称' })).toHaveValue('新的商店名称')
       await screenshot('edit-conflict', width)
       await page.getByRole('button', { name: '关闭', exact: true }).click()
-      await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('维护 Skill')
+      await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('更多操作')
 
       await maintenance('上传新版本')
       await expect.element(page.getByRole('dialog', { name: '上传新版本' })).toBeVisible()
