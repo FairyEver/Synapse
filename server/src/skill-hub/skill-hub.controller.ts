@@ -102,10 +102,22 @@ export class SkillHubController {
     return this.hub.openMain(request.user!.id, idParam(id), expectedVersion(query))
   }
 
+  @Get("skills/:id/main/rendered")
+  @Header("Cache-Control", "private, no-store")
+  openMainMarkdown(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query() query: unknown) {
+    return this.hub.openMainMarkdown(request.user!.id, idParam(id), expectedVersion(query))
+  }
+
   @Get("skills/:id/file")
   @Header("Cache-Control", "private, no-store")
   openFile(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query() query: unknown) {
     return this.hub.openFile(request.user!.id, idParam(id), parseHubInput(skillHubFilePreviewQuerySchema, query))
+  }
+
+  @Get("skills/:id/file/rendered")
+  @Header("Cache-Control", "private, no-store")
+  openFileMarkdown(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query() query: unknown) {
+    return this.hub.openFileMarkdown(request.user!.id, idParam(id), parseHubInput(skillHubFilePreviewQuerySchema, query))
   }
 
   @Get("skills/:id/icon")

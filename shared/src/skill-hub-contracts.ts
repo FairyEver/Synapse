@@ -6,6 +6,7 @@ const MiB = 1024 * 1024
 export const SKILL_HUB_LIMITS = {
   mainBytes: MiB,
   filePreviewBytes: MiB,
+  renderedPreviewBytes: 16 * MiB,
   attachmentBytes: 10 * MiB,
   packageBytes: 50 * MiB,
   uploadBytes: 50 * MiB,
@@ -149,6 +150,9 @@ export const skillHubUploadResultSchema = z.strictObject({
 export const skillHubMainResultSchema = z.strictObject({ content: z.string().max(SKILL_HUB_LIMITS.mainBytes), versionId: id })
 export const skillHubFilePreviewQuerySchema = z.strictObject({ path: packagePath, expectedVersionId: id })
 export const skillHubFilePreviewResultSchema = z.strictObject({ content: z.string().max(SKILL_HUB_LIMITS.filePreviewBytes), versionId: id })
+export const skillHubMarkdownResultSchema = z.strictObject({
+  html: z.string().max(SKILL_HUB_LIMITS.renderedPreviewBytes), versionId: id,
+})
 export const skillHubPreparedSourceSchema = z.strictObject({
   preparedSourceId: id,
   team: skillHubTeamSchema,
@@ -207,6 +211,7 @@ export type SkillHubAdminPage = z.infer<typeof skillHubAdminPageSchema>
 export type SkillHubUploadInput = z.infer<typeof skillHubUploadInputSchema>
 export type SkillHubUploadResult = z.infer<typeof skillHubUploadResultSchema>
 export type SkillHubMainResult = z.infer<typeof skillHubMainResultSchema>
+export type SkillHubMarkdownResult = z.infer<typeof skillHubMarkdownResultSchema>
 export type SkillHubPreparedSource = z.infer<typeof skillHubPreparedSourceSchema>
 export type SkillHubMcpGetInput = z.infer<typeof skillHubMcpGetInputSchema>
 export type SkillHubMcpDownloadInput = z.infer<typeof skillHubMcpDownloadInputSchema>

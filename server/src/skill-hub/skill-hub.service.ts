@@ -15,6 +15,7 @@ import { hubError } from "./skill-hub-error"
 import { consumeVerifiedHubObject, openSkillHubObject, type HubObjectLocation } from "./skill-hub-object-read"
 import { SKILL_HUB_STORAGE, type SkillHubStoragePort } from "./skill-hub-storage"
 import { hubDetail, hubDetailSelect, hubMaintainers, hubSummary, hubSummarySelect, hubUnavailable, readableHubSkills } from "./skill-hub-read"
+import { renderSkillHubMarkdown } from "./skill-hub-markdown"
 import {
   bindHubUpload, checkHubRevision, checkHubVersion, findHubReceipt, getHubUpload, hubInputDigest,
   hubUploadObject, hubVersionData, lockHubRequest, lockHubSkill,
@@ -195,6 +196,11 @@ export class SkillHubService {
     }
   }
 
+  async openMainMarkdown(userId: string, skillId: string, expectedVersionId?: string) {
+    const main = await this.openMain(userId, skillId, expectedVersionId)
+    return { html: await renderSkillHubMarkdown(main.content), versionId: main.versionId }
+  }
+
   async openFile(userId: string, skillId: string, { path, expectedVersionId }: z.infer<typeof skillHubFilePreviewQuerySchema>) {
     const row = await this.latest(userId, skillId, expectedVersionId)
     const version = row.currentVersion!
@@ -211,6 +217,11 @@ export class SkillHubService {
     // Allow tabs, line breaks and form feeds while rejecting binary control bytes.
     if (/[\u0000-\u0008\u000B\u000E-\u001F\u007F]/u.test(content)) throw notPreviewable()
     return { content, versionId: version.id }
+  }
+
+  async openFileMarkdown(userId: string, skillId: string, input: z.infer<typeof skillHubFilePreviewQuerySchema>) {
+    const file = await this.openFile(userId, skillId, input)
+    return { html: await renderSkillHubMarkdown(file.content), versionId: file.versionId }
   }
 
   private async readPreviewBytes(object: HubObjectLocation, file: { path: string; size: number; sha256: string }) {

@@ -3,7 +3,10 @@ import { File } from 'lucide-react'
 import { useState } from 'react'
 import type { SkillHubDetail } from '@synapse/shared/skill-hub-contracts'
 import { ApiError } from '@/lib/api-client'
-import { useSkillHubFilePreview } from './use-skill-hub'
+import { SkillMarkdownView } from './skill-markdown-view'
+import { useSkillHubFileMarkdown, useSkillHubFilePreview } from './use-skill-hub'
+
+const markdownPath = /\.(?:md|markdown)$/iu
 
 export function SkillFileList({ skill, session, reload }: { skill: SkillHubDetail; session: string; reload: () => void }) {
   const [path, setPath] = useState<string | null>(null)
@@ -27,8 +30,11 @@ export function SkillFileList({ skill, session, reload }: { skill: SkillHubDetai
 function FilePreviewDialog({ session, id, version, path, onClose, reload }: {
   session: string; id: string; version: string; path: string; onClose: () => void; reload: () => void
 }) {
-  const preview = useSkillHubFilePreview(session, id, version, path)
-  const error = preview.error
+  const markdown = markdownPath.test(path)
+  const preview = useSkillHubFilePreview(session, id, version, path, !markdown)
+  const rendered = useSkillHubFileMarkdown(session, id, version, path, markdown)
+  const active = markdown ? rendered : preview
+  const error = active.error
   const status = error instanceof ApiError ? error.status : undefined
 
   return <Modal.Backdrop isOpen onOpenChange={(open) => { if (!open) onClose() }}>
@@ -42,8 +48,11 @@ function FilePreviewDialog({ session, id, version, path, onClose, reload }: {
           {error ? <div className="space-y-3">
             <p role="alert" className="text-sm text-danger">{error.message || '文件读取失败。'}</p>
             {status === 409 ? <Button variant="secondary" onPress={() => { onClose(); reload() }}>刷新文件列表</Button>
-              : (status === undefined || status >= 500 || status === 429) && <Button variant="secondary" onPress={() => void preview.refetch()}>重试</Button>}
-          </div> : preview.data ? (
+              : (status === undefined || status >= 500 || status === 429) && <Button variant="secondary" onPress={() => void active.refetch()}>重试</Button>}
+          </div> : markdown ? (
+            rendered.data ? <SkillMarkdownView html={rendered.data.html} />
+              : <p role="status" className="text-sm text-muted">正在读取文件…</p>
+          ) : preview.data ? (
             preview.data.content === '' ? <p className="text-sm text-muted">空文件</p>
               : <pre className="wrap-anywhere font-mono text-sm leading-relaxed whitespace-pre-wrap">{preview.data.content}</pre>
           ) : <p role="status" className="text-sm text-muted">正在读取文件…</p>}

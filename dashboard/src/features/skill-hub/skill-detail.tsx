@@ -10,8 +10,8 @@ import { skillHubApi } from './skill-hub-api'
 import type { SkillHubSearch } from './skill-hub-navigation'
 import { SkillFileList } from './skill-file-list'
 import { SkillMaintenance } from "./skill-maintenance"
-import { SkillMainView } from './skill-main-view'
-import { useSkillHubDetail, useSkillHubMain, useSkillHubSession } from './use-skill-hub'
+import { SkillMarkdownView } from './skill-markdown-view'
+import { useSkillHubDetail, useSkillHubMainMarkdown, useSkillHubSession } from './use-skill-hub'
 
 const publishedDate = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" })
 
@@ -42,7 +42,7 @@ export function SkillDetail({ skill, session, reload, onDeleted = reload }: { sk
   const active = useRef<AbortController | null>(null)
   useEffect(() => () => active.current?.abort(), [])
   const version = skill.currentVersion
-  const main = useSkillHubMain(session, skill.id, version.id, tab === 'main')
+  const main = useSkillHubMainMarkdown(session, skill.id, version.id, tab === 'main')
   async function download() {
     if (active.current) return
     const controller = new AbortController()
@@ -96,7 +96,7 @@ export function SkillDetail({ skill, session, reload, onDeleted = reload }: { sk
             <Button variant="secondary" onPress={() => { reload(); void main.refetch() }}>重新读取</Button></div>
             : main.data ? <>
               <div className="mb-2 flex items-center gap-2 text-xs text-muted"><File className="size-4" aria-hidden="true" /><code>SKILL.md</code></div>
-              <SkillMainView content={main.data.content} />
+              <SkillMarkdownView html={main.data.html} />
             </> : <Skeleton aria-label="正在读取说明" role="status" className="h-24 rounded-lg" />}
         </Tabs.Panel>
         <Tabs.Panel id="files" className="min-w-0 pt-4">

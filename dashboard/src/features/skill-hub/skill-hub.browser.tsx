@@ -69,7 +69,9 @@ function stubRead() {
     nextCursor: null,
   })
   vi.spyOn(skillHubApi, 'get').mockResolvedValue(detail)
-  vi.spyOn(skillHubApi, 'main').mockResolvedValue({ content: '# 包内说明\n\n![tracking](https://external.invalid/image.png)\n\nUse this skill.', versionId: 'ver_2' })
+  vi.spyOn(skillHubApi, 'mainMarkdown').mockResolvedValue({
+    versionId: 'ver_2', html: '<h1>包内说明</h1><p>Use this skill.</p>',
+  })
   vi.spyOn(skillHubApi, 'icon').mockImplementation(async () => {
     const canvas = new OffscreenCanvas(256, 256)
     const context = canvas.getContext('2d')!

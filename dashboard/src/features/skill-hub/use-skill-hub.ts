@@ -40,8 +40,19 @@ export function useSkillHubMain(session: string, id: string, version: string, en
     queryFn: ({ signal }) => skillHubApi.main(session, id, version, signal) })
 }
 
-export function useSkillHubFilePreview(session: string, id: string, version: string, path: string) {
-  return useQuery({ queryKey: [...hubScope(session), 'file', id, version, path], enabled: !!session, gcTime: 0, retry: false,
+export function useSkillHubMainMarkdown(session: string, id: string, version: string, enabled: boolean) {
+  return useQuery({ queryKey: [...hubScope(session), 'main-markdown', id, version], enabled: !!session && enabled, retry: false,
+    queryFn: ({ signal }) => skillHubApi.mainMarkdown(session, id, version, signal) })
+}
+
+export function useSkillHubFilePreview(session: string, id: string, version: string, path: string, enabled = true) {
+  return useQuery({ queryKey: [...hubScope(session), 'file', id, version, path], enabled: !!session && enabled, gcTime: 0, retry: false,
     refetchOnWindowFocus: false, refetchOnReconnect: false,
     queryFn: ({ signal }) => skillHubApi.preview(session, id, version, path, signal) })
+}
+
+export function useSkillHubFileMarkdown(session: string, id: string, version: string, path: string, enabled = true) {
+  return useQuery({ queryKey: [...hubScope(session), 'file-markdown', id, version, path], enabled: !!session && enabled, gcTime: 0, retry: false,
+    refetchOnWindowFocus: false, refetchOnReconnect: false,
+    queryFn: ({ signal }) => skillHubApi.previewMarkdown(session, id, version, path, signal) })
 }

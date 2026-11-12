@@ -10,6 +10,8 @@ describe("Skill Hub HTTP logging", () => {
   it("drops request material and uses fixed paths even for unrecognized Hub paths", () => {
     expect(skillHubLogRequest({ method: "GET", url: "/Api/Skill-Hub/skills/id/main?token=test", headers: { authorization: "secret" }, body: "file" }))
       .toEqual({ method: "GET", url: "/api/skill-hub/skills/:id/main" })
+    expect(skillHubLogRequest({ method: "GET", url: "/api/skill-hub/skills/id/main/rendered?expectedVersionId=secret", headers: {} }))
+      .toEqual({ method: "GET", url: "/api/skill-hub/skills/:id/main" })
     expect(skillHubLogRequest({ method: "POST", url: "/API/ADMIN/SKILL-HUB/sensitive-token" }))
       .toEqual({ method: "POST", url: "/api/admin/skill-hub" })
     expect(skillHubLogRequest({ url: "/api/skill-hub-other" })).toBeUndefined()

@@ -1,6 +1,6 @@
 const uploadPath = /^\/api\/skill-hub\/uploads\/?$/i
 const hubPath = /^\/api\/(admin\/)?skill-hub(?:\/|$)/i
-const skillsPath = /^\/skills(?:\/[^/]+(?:\/(package|main|file|icon|versions|maintainer|restore))?)?\/?$/i
+const skillsPath = /^\/skills(?:\/[^/]+(?:\/(package|main|file|icon|versions|maintainer|restore)(?:\/rendered)?)?)?\/?$/i
 
 export function isHubUploadPath(url: string): boolean {
   return uploadPath.test(url.split("?", 1)[0])
