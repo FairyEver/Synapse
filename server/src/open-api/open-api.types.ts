@@ -30,6 +30,10 @@ export function openApiRequestId(request: OpenApiRequest): string {
   return requestId
 }
 
+export function openApiRetryAfter(code: string): string {
+  return code.startsWith("DB_") ? "5" : "1"
+}
+
 export function requireOpenApiPrincipal(request: OpenApiRequest): OpenApiPrincipal {
   const principal = request.openApiPrincipal
   if (!principal) throw new OpenApiHttpError(401, "INVALID_API_KEY", "API 密钥无效。")

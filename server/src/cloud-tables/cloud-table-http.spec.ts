@@ -43,13 +43,13 @@ describe("cloud table route identity", () => {
     middleware(req, first, () => { admitted++ }); middleware(req, second, () => { admitted++ })
     expect(admitted).toBe(1)
     expect(second.code).toBe(503)
-    expect(second.body).toMatchObject({ error: { code: "SERVER_BUSY" } })
+    expect(second.body).toMatchObject({ error: { code: "QUEUE_BYTES_FULL" } })
     first.emit("finish")
   })
   it("verifies open API keys through the cloud-table transaction client instead of the core pool", async () => {
     const tx = { userApiKey: { findUnique: async () => ({ id: "key", userId: "owner", scopes: ["tables.records.read"], revokedAt: null, user: { status: "active" } }) } }
     const core = { userApiKey: { findUnique: async () => { throw new Error("core pool must not be used") } } }
-    const service = { routingOwner: () => "owner", authentication: { run: (_owner: string, _bytes: number, work: () => unknown) => work() }, db: { transaction: (work: (client: typeof tx) => unknown) => work(tx) } }
+    const service = { routingOwner: () => "owner", authentication: { runScoped: (_scope: { owner: string; key: string }, _bytes: number, work: () => unknown) => work() }, db: { transaction: (work: (client: typeof tx) => unknown) => work(tx) } }
     const guard = new CloudTableGuard(service as never, new ApiKeyService(core as never, {} as never), {} as never)
     const request = { path: "/api/open/v1/tables/table", params: { id: "table" }, headers: { authorization: `Bearer ${createApiKeySecret()}` } }
     const context = { switchToHttp: () => ({ getRequest: () => request }) }

@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Injectable } from "@nestjs/common"
 import type { Response } from "express"
 import { PinoLogger } from "nestjs-pino"
-import { openApiRequestId, toOpenApiError, type OpenApiRequest } from "./open-api.types"
+import { openApiRequestId, openApiRetryAfter, toOpenApiError, type OpenApiRequest } from "./open-api.types"
 
 @Injectable()
 @Catch()
@@ -26,7 +26,7 @@ export class OpenApiExceptionFilter implements ExceptionFilter {
       return
     }
     response.setHeader("X-Request-Id", requestId)
-    if (error.statusCode === 503) response.setHeader("Retry-After", "1")
+    if (error.statusCode === 503) response.setHeader("Retry-After", openApiRetryAfter(error.code))
     response.setHeader("Cache-Control", "no-store")
     response.status(error.statusCode).json({
       requestId,

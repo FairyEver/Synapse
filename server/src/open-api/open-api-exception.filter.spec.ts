@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { OpenApiExceptionFilter } from "./open-api-exception.filter"
+import { OpenApiHttpError } from "./open-api.types"
 
 describe("OpenApiExceptionFilter", () => {
   it("returns the stable envelope without logging sensitive exception text", () => {
@@ -34,5 +35,27 @@ describe("OpenApiExceptionFilter", () => {
       errorCode: "INTERNAL_ERROR",
       errorName: "Error",
     }, "Open API request failed")
+  })
+
+  it("sets Retry-After for a database timeout", () => {
+    const response = {
+      headersSent: false,
+      setHeader: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+      destroy: vi.fn(),
+    }
+    const host = {
+      switchToHttp: () => ({
+        getRequest: () => ({ openApiRequestId: "req-db" }),
+        getResponse: () => response,
+      }),
+    }
+    new OpenApiExceptionFilter({ error: vi.fn() } as never).catch(
+      new OpenApiHttpError(503, "DB_STATEMENT_TIMEOUT", "数据库查询超时，请稍后重试。"),
+      host as never,
+    )
+    expect(response.setHeader).toHaveBeenCalledWith("Retry-After", "5")
+    expect(response.status).toHaveBeenCalledWith(503)
   })
 })

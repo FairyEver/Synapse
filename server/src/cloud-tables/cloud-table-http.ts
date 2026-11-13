@@ -4,9 +4,10 @@ import type { NestExpressApplication } from "@nestjs/platform-express"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { ApiKeyService } from "../api-keys/api-key.service"
 import { CloudTableService, type CloudActor } from "./cloud-table.service"
-import { OpenApiHttpError, openApiRequestId, type OpenApiRequest } from "../open-api/open-api.types"
+import { OpenApiHttpError, openApiRequestId, openApiRetryAfter, type OpenApiRequest } from "../open-api/open-api.types"
 import { CLOUD_TABLE_BASE } from "./cloud-table-contract"
 import { assertJsonBudget } from "./cloud-table-validation"
+import { cloudTableQueueKey } from "./cloud-table-scheduler"
 
 export type CloudRequest = Request & { cloudActor: CloudActor }
 export function isCloudTableOpenPath(path: string): boolean { const p = path.split("?")[0]!.toLowerCase(); return p === CLOUD_TABLE_BASE || p.startsWith(`${CLOUD_TABLE_BASE}/`) }
@@ -15,7 +16,7 @@ export function cloudTableCors(path: string) { return isCloudTableOpenPath(path)
 function cloudError(req: Request, res: Response, status: number, code: string, message: string): void {
   const requestId = openApiRequestId(req as OpenApiRequest)
   res.setHeader("X-Request-Id", requestId); res.setHeader("Cache-Control", "no-store")
-  if (status === 503) res.setHeader("Retry-After", "1")
+  if (status === 503) res.setHeader("Retry-After", openApiRetryAfter(code))
   res.status(status).json({ requestId, error: { code, message } })
 }
 
@@ -24,8 +25,9 @@ export class CloudTableGuard implements CanActivate {
   constructor(private readonly service: CloudTableService, private readonly keys: ApiKeyService, private readonly users: UserAuthGuard) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<CloudRequest>()
-    const owner = req.params.id ? this.service.routingOwner(String(req.params.id)) : "root-authentication"
-    return this.service.authentication.run(owner, 0, async () => {
+    const tableId = req.params.id ? String(req.params.id) : null
+    const owner = tableId ? this.service.routingOwner(tableId) : "root-authentication"
+    return this.service.authentication.runScoped({ owner, key: cloudTableQueueKey(owner, tableId, "auth") }, 0, async () => {
       if (!isCloudTableOpenPath(req.path)) {
         try {
           const authenticated = await this.service.db.transaction(async tx => {
@@ -36,7 +38,7 @@ export class CloudTableGuard implements CanActivate {
         }
         catch (error) {
           if (error instanceof HttpException && error.getStatus() === 401) throw new OpenApiHttpError(401, "UNAUTHENTICATED", "未登录或登录已过期。")
-          if (error instanceof HttpException && error.getStatus() === 503) throw new OpenApiHttpError(503, "SERVER_BUSY", "认证服务繁忙，请稍后重试。")
+          if (error instanceof HttpException && error.getStatus() === 503) throw new OpenApiHttpError(503, "AUTH_SERVICE_BUSY", "认证服务繁忙，请稍后重试。")
           throw error
         }
         req.cloudActor = { userId: (req as AuthenticatedUserRequest).user!.id, console: true }
@@ -65,7 +67,8 @@ export function registerCloudTableIngress(app: NestExpressApplication): void {
     if (!Number.isSafeInteger(wireLength) || wireLength < 0 || wireLength > 1048576) { cloudError(req, res, 413, "REQUEST_TOO_LARGE", "请求不能超过1 MiB。"); return }
     const encoding = req.headers["content-encoding"]
     const length = encoding && String(encoding).toLowerCase() !== "identity" ? 1048576 : wireLength
-    if (active >= config.globalQueue || bytes + length > config.bytes) { cloudError(req, res, 503, "SERVER_BUSY", "服务繁忙，请稍后重试。"); return }
+    if (active >= config.globalQueue) { cloudError(req, res, 503, "GLOBAL_QUEUE_FULL", "服务繁忙，请稍后重试。"); return }
+    if (bytes + length > config.bytes) { cloudError(req, res, 503, "QUEUE_BYTES_FULL", "服务繁忙，请稍后重试。"); return }
     active++; bytes += length
     let released = false
     const release = () => { if (!released) { released = true; active--; bytes -= length } }

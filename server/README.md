@@ -22,7 +22,7 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 Console为`/console/tables`，开放API为`/api/open/v1/tables`，权威契约`/api/open/openapi.json`；文档站`/document/open-api/api/cloud-tables`可整页复制为Markdown供AI调用，不提供独立Skill，无桌面或MCP依赖。部署迁移`20261101090000_cloud_tables`后启动服务，不修改既有分享网页。
 
-`CLOUD_TABLE_*`执行预算见`.env.example`，Compose完整透传；专用连接数为执行并发加认证并发，核心`DATABASE_POOL_SIZE`不变。默认8个执行槽/owner2个，排队128/owner32/16MiB/5秒，SQL2秒、锁250毫秒。无账号容量或调用次数额度。v1必须单服务实例；扩容前实现全局调度，不能将每进程限制当成集群限制。云表使用现有数据库灾备，不新增COS存储。
+`CLOUD_TABLE_*`执行预算见`.env.example`，Compose完整透传；专用连接数为执行并发加认证并发，核心`DATABASE_POOL_SIZE`不变。默认8个执行槽/owner2个，owner内再按表+读写lane隔离（单表单lane 2个执行、16个排队），排队128/owner32/16MiB/5秒，SQL2秒、锁250毫秒。无账号容量或调用次数额度。v1必须单服务实例；扩容前实现全局调度，不能将每进程限制当成集群限制。云表使用现有数据库灾备，不新增COS存储。
 
 维护每10秒发现到期数据；默认1秒工作时间片（`CLOUD_TABLE_MAINTENANCE_MS`），单批有界并参与共享公平队列，有积压时1秒后续跑。日志/回执和数据清理分开事务，避免某张表的锁冲突阻止日志回收。字段定义含归档总量最多1MiB，单字段及默认值合计分别64KiB；列表不加载字段定义。JSON请求深度32/节点50000，避免递归校验绕过成本边界。
 

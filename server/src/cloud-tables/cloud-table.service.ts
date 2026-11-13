@@ -6,7 +6,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto"
 import type { CloudAction, CloudField, CloudMember, CloudRange, CloudTableDto } from "@synapse/shared"
 import { CloudTableMaintenance } from "./cloud-table-maintenance"
 import { CloudTableDatabase } from "./cloud-table-database"
-import { CloudTableScheduler } from "./cloud-table-scheduler"
+import { CloudTableScheduler, cloudTableQueueKey } from "./cloud-table-scheduler"
 import { authorize, assertJsonBudget, fail, normalizeValues, parseCloudTableInput as parse, validateFields } from "./cloud-table-validation"
 import { batchSchema, createTableSchema, dailySummarySchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
 import { readDailySummary, splitCloudTableAccess, validateDailySummary } from "./cloud-table-daily-summary"
@@ -21,6 +21,7 @@ type Table = CloudTable & { fields: { key: string; definition: Prisma.JsonValue;
 const retentionMs = 30 * 86400000
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const selectRow = { id: true, tableId: true, values: true, creatorUserId: true, version: true, createdAt: true, updatedAt: true, deletedAt: true } as const
+const readOperations = new Set(["publish.preflight", "table.list", "table.trash", "table.get", "schema", "daily.summary", "public.count", "logs", "member.search", "member.resolve", "records.get", "records.query", "records.count", "records.exists", "records.trash"])
 function safeCount(count: bigint): number {
   if (count > BigInt(Number.MAX_SAFE_INTEGER)) fail("COUNT_TOO_LARGE", "匹配数量超出安全整数范围，请缩小筛选范围。")
   return Number(count)
@@ -65,7 +66,8 @@ export class CloudTableService {
     const ownerId = tableId ? await this.resolveOwner(tableId) : actor.userId
     if (!ownerId) fail("INVALID_API_KEY", "此操作需要有效身份。", 401)
     const cost = operation === "records.batch" ? Math.ceil(((input as { operations?: unknown[] })?.operations?.length ?? 1) / 10) : 1
-    return this.scheduler.run(ownerId, bytes, async () => {
+    const lane = readOperations.has(operation) ? "read" : "write"
+    return this.scheduler.runScoped({ owner: ownerId, key: cloudTableQueueKey(ownerId, tableId, lane) }, bytes, async () => {
       const started = Date.now(); let status = 200, loggedTableId = tableId
       try {
         const result = await this.db.transaction(async tx => {
