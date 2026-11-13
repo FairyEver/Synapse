@@ -386,9 +386,17 @@
     {
       "resource": "document",
       "status": 200,
-      "bytes": 15384,
-      "sha256": "51ec6633d4d63377d6b5e246accff3b612522d8ef46ca58daf77ac50cf79d898",
+      "bytes": 16873,
+      "sha256": "676f2b7160bdba3a672138bb4269711ae1d20e660cd886f12734a47658ddc920",
       "exact": true
+    }
+  ],
+  "documentation_updates": [
+    {
+      "at_utc": "2026-11-13T03:29:44.739Z",
+      "change": "Directory prompt explicitly explains custom one-or-more roots and later append/remove/replace; adds direct operation examples",
+      "verification": "Document rebuilt and anonymous public download matches all local bytes; runtime source hashes unchanged",
+      "runtime_lifecycle_rerun": false
     }
   ]
 }
