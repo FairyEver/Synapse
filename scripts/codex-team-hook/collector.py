@@ -9,7 +9,7 @@ import uuid
 
 API_BASE = "https://synapse.d2.pub"
 TABLE_ID = "cmwedlivf0xo2n32y1yx8j8yz"
-COLLECTOR_VERSION = "1.0.2"
+COLLECTOR_VERSION = "1.0.3"
 ROW_BYTES = 48 * 1024
 BATCH_BYTES = 900 * 1024
 INTERNAL_PREFIXES = (
@@ -73,6 +73,18 @@ def open_request(request, timeout):
     return build_opener(NoRedirect()).open(request, timeout=timeout)
 
 
+def internal_suggestions_output(text):
+    """Match only a standalone suggestions-array object, not prose or JSON examples."""
+    wrapped = text.strip()
+    if not wrapped.startswith("{") or not wrapped.endswith("}"):
+        return False
+    try:
+        value = json.loads(wrapped)
+    except (ValueError, RecursionError):
+        return False
+    return isinstance(value, dict) and set(value) == {"suggestions"} and isinstance(value["suggestions"], list)
+
+
 def question_reply_content(text):
     """Project a user question-card envelope to answers only; never fall back on errors."""
     wrapped = text.strip()
@@ -100,6 +112,9 @@ def question_reply_content(text):
 
 def collect(item):
     try:
+        if (isinstance(item, dict) and item.get("role") == "assistant" and isinstance(item.get("content"), str)
+                and internal_suggestions_output(item["content"])):
+            return {"outcome": "filtered"}
         if isinstance(item, dict) and item.get("role") == "user" and isinstance(item.get("content"), str):
             if item["content"].startswith(INTERNAL_PREFIXES):
                 return {"outcome": "filtered"}

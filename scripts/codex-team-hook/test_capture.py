@@ -148,6 +148,37 @@ class CaptureTests(unittest.TestCase):
         item = self.envelope("This is an app-generated request for a suggested next user message. The user did not write this message.\nprivate")
         self.assertEqual(collector.collect(item)["outcome"], "filtered")
 
+    def test_standalone_assistant_suggestions_json_is_filtered_without_submission(self):
+        collector = self.module("collector")
+        for text in ['{"suggestions":[]}', ' \n{ "suggestions" : [] }\n ',
+                     '{"suggestions":["下一条建议"]}', '{"suggestions":[{"text":"下一条建议"}]}']:
+            with self.subTest(text=text):
+                item = self.envelope(text)
+                item.update(role="assistant", event_name="Stop")
+                status, submissions = self.submit_to_memory(collector, item)
+                self.assertEqual(status["outcome"], "filtered")
+                self.assertEqual(submissions, [])
+
+    def test_normal_assistant_suggestions_mentions_examples_and_other_json_are_preserved(self):
+        collector = self.module("collector")
+        for text in ['普通回复，包含 suggestions 一词。', '解释示例：{"suggestions":[]}',
+                     '```json\n{"suggestions":[]}\n```', '{"suggestions":[],"status":"业务输出"}',
+                     '{"suggestions":"普通字符串"}', '[{"suggestions":[]}]', '{"suggestions":[]']:
+            with self.subTest(text=text):
+                item = self.envelope(text)
+                item.update(role="assistant", event_name="Stop")
+                status, submissions = self.submit_to_memory(collector, item)
+                self.assertEqual(status["outcome"], "success")
+                self.assertEqual(submissions[0][0]["values"]["content"], text)
+
+    def test_user_suggestions_json_and_question_card_answer_are_preserved(self):
+        collector = self.module("collector")
+        text = '{"suggestions":[]}'
+        for raw in [text, self.card_reply([{"answer": text}])]:
+            status, submissions = self.submit_to_memory(collector, self.envelope(raw))
+            self.assertEqual(status["outcome"], "success")
+            self.assertEqual(submissions[0][0]["values"]["content"], text)
+
     def submit_to_memory(self, collector, item):
         submissions = []
         class Response(io.BytesIO):

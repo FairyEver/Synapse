@@ -51,7 +51,7 @@
 - 本地只保存姓名、目录、启停配置及本方案元数据。姓名由用户自报，不是可信身份。目标云表由远端维护，仅匿名新增，原始记录不公开，但无法防止他人冒填；成员无需登录 Sy。
 - 每次命中目录都下载远端程序，以当前用户权限执行。发布者可以持续更新代码，这不是沙箱。初始化前用一句话说明采集范围和这一权限；按 Codex 正常机制审核确切 Hook，不写入绕过开关或伪造信任哈希。
 - 默认同步，Hook 外层 15 秒，下载硬限 5 秒，执行硬限 6 秒。存在有限等待；失败放弃，无正文队列、重试、补发或常驻服务。异步会话退出可能取消 Stop，本版不默认使用。
-- 已知内部请求按特征过滤，未知内部请求及其关联回复仍可能混入。Stop 提供最新 assistant 文本，不证明所有客户端/继续回合都与已展示回复完全一致。
+- 已知内部请求按特征过滤；assistant 正文若为独立 JSON 对象、顶层仅有 suggestions 键且值为数组，视为已知内部建议输出并过滤（含空数组与非空数组）。普通文字/代码示例、带额外字段的 JSON、用户原文及卡片实际答案不按此规则过滤。其他未知内部请求及关联回复仍可能混入；Stop 字段不证明覆盖所有客户端/继续回合的已展示回复。
 - 用户提问卡片回复只收集实际填写的 answer 字符串，不上传 question、questionItemId 或包装结构。转换在下载到本机执行的 collector 内、构造 POST 之前完成；普通用户文本和助手回复保持原文，成员不用更新本地 Hook。
 - 缺回执、缺新字段或拿不到官方信任状态均是证据不足，不等于未安装。检查/诊断只兼容读取旧回执；初始化或重装中，仅在归属已确认后按下节清理，不凭缺字段盲删。
 
@@ -183,7 +183,7 @@ installation.json（0600）记录 status=installed、package_id、launcher_versi
 
 UserPromptSubmit→user/prompt；Stop→assistant/last_assistant_message。envelope v1 传随机 event_id、event_name、UTC 毫秒 event_at、session_id、turn_id、member_name、project_name、platform、role、content，不传绝对项目路径或整个 Hook payload。同轮多条输入各有 ID，不互相覆盖。
 
-当用户正文为完整 `<send_user_message_question_reply>...</send_user_message_question_reply>` 包装时，collector 解析其中 JSON 数组，仅提取每项的 answer 字符串。单题保存答案本身；多题按原顺序以空行分隔，保留每个非空答案内的空格、换行和 Unicode。空数组或全为空白字符串的答案记 filtered、不提交；包装、JSON 或答案类型异常记 invalid、不回退上传原始结构。普通文本中的标签示例和 assistant 正文不做此转换。
+当用户正文为完整 `<send_user_message_question_reply>...</send_user_message_question_reply>` 包装时，collector 解析其中 JSON 数组，仅提取每项的 answer 字符串。单题保存答案本身；多题按原顺序以空行分隔，保留每个非空答案内的空格、换行和 Unicode。空数组或全为空白字符串的答案记 filtered、不提交；包装、JSON 或答案类型异常记 invalid、不回退上传原始结构。普通文本中的标签示例和 assistant 正文不做这项答案转换；assistant 的独立建议 JSON 则按第 3 节规则在提交前过滤，记 filtered 且不发送 HTTP 请求。
 
 原始卡片正文只经本地标准输入传入 collector，不进入其网络请求；提取答案后再执行既有内容校验、分片和容量检查。原始问题、卡片 ID 和 JSON 外壳不占用云端正文，也不写入诊断回执。
 

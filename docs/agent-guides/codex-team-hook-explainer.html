@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Codex 团队 Hook 1.0.3 技术说明：统一 Markdown 入口、本地薄启动器、远端采集器、云表与更新机制。">
+<meta name="description" content="Codex 团队 Hook 1.0.4 技术说明：统一 Markdown 入口、本地薄启动器、远端采集器、云表与更新机制。">
 <title>Codex 团队 Hook · 技术方案</title>
 <style>
 /* Reuse Synapse's neutral theme tokens; this document has no external assets. */
@@ -18,14 +18,14 @@
 <body>
 <a class="skip" href="#main">跳至正文</a>
 <div class="wrap">
-  <header class="topbar"><div class="brand">SYNAPSE / CODEX TEAM HOOK</div><div class="meta">技术方案 · 1.0.3<br>2026 年 11 月 13 日</div></header>
+  <header class="topbar"><div class="brand">SYNAPSE / CODEX TEAM HOOK</div><div class="meta">技术方案 · 1.0.4<br>2026 年 11 月 13 日</div></header>
   <div class="layout">
     <nav class="contents" aria-label="章节目录">
       <a href="#architecture"><span>01</span>整体结构</a><a href="#runtime"><span>02</span>一次触发</a><a href="#updates"><span>03</span>远端更新</a><a href="#data"><span>04</span>采集与存储</a><a href="#operations"><span>05</span>安装与管理</a><a href="#boundaries"><span>06</span>状态与边界</a><a href="#evidence"><span>07</span>验证与资源</a>
     </nav>
     <main id="main">
       <div class="hero">
-        <p class="eyebrow">Architecture explained / v1.0.3</p>
+        <p class="eyebrow">Architecture explained / v1.0.4</p>
         <h1>Codex 团队 Hook<span>技术方案</span></h1>
         <p class="lead">成员把 Markdown 链接交给 AI，由 AI 安装和管理。本地 Hook 每次命中采集目录后，下载并执行远端采集器，把用户输入或最新回复写入专用云表。</p>
         <div class="facts"><span>macOS · Python 3.9+</span><span>无需成员登录 Sy</span><span>本地薄入口 · 远端维护采集逻辑</span></div>
@@ -71,7 +71,7 @@
 
       <section class="section" id="updates" aria-labelledby="updates-title">
         <div class="section-head"><span class="index">03</span><h2 id="updates-title">为什么改采集逻辑，不必逐台改 Hook</h2></div>
-        <p class="section-intro">启动器保存的是稳定脚本地址。每次命中目录都重新下载，因此发布者替换同一地址的 collector 后，下一次触发会使用新版。文档、启动器、采集器分别管理版本。当前文档为 1.0.3，launcher 仍为 1.0.1、注册格式仍为 2；collector 1.0.2 增加提问卡片答案提取，已有 Hook 下次触发即可使用。</p>
+        <p class="section-intro">启动器保存的是稳定脚本地址。每次命中目录都重新下载，因此发布者替换同一地址的 collector 后，下一次触发会使用新版。文档、启动器、采集器分别管理版本。当前文档为 1.0.4，launcher 仍为 1.0.1、注册格式仍为 2；collector 1.0.3 保留卡片答案提取并过滤独立建议输出，已有 Hook 下次触发即可使用。</p>
         <div class="update-choices" role="group" aria-label="选择更新类型">
           <button type="button" class="button" data-update="collector" aria-pressed="true">改采集逻辑</button><button type="button" class="button" data-update="document" aria-pressed="false">改操作说明</button><button type="button" class="button" data-update="launcher" aria-pressed="false">改本地启动器</button>
         </div>
@@ -92,7 +92,7 @@
         </div>
         <div class="table-wrap"><table><thead><tr><th>配置根目录示例</th><th>事件 cwd</th><th>判断</th></tr></thead><tbody><tr><td><code>/Projects/team-app</code></td><td><code>/Projects/team-app/src</code></td><td>命中，项目名为 team-app</td></tr><tr><td><code>/Projects/team-app</code></td><td><code>/Projects/team-app-old</code></td><td>范围外，不因字符串前缀相似而命中</td></tr><tr><td>一个或多个已选根目录</td><td>重叠根目录的子目录</td><td>采用最长匹配根；按真实路径解析</td></tr></tbody></table></div>
         <p class="muted">判断依据是事件 cwd。聊天中执行一次 shell cd，不表示事件 cwd 会随之改变。清空采集目录后，不匹配任何项目。</p>
-        <div class="note"><p><strong>提问卡片先提取答案，再上报。</strong>原始卡片只通过本地 stdin 进入下载后执行的 collector；构造 POST 前仅提取 answer，不上传问题、卡片 ID 或包装 JSON。多题答案按顺序用空行分隔，保留答案内部换行、空格和 Unicode。空字符串答案不提交；结构异常不回退上传原文。普通文本与助手回复不做这项转换。</p></div>
+        <div class="note"><p><strong>提问卡片先提取答案，再上报。</strong>原始卡片只通过本地 stdin 进入下载后执行的 collector；构造 POST 前仅提取 answer，不上传问题、卡片 ID 或包装 JSON。多题答案按顺序用空行分隔，保留答案内部换行、空格和 Unicode。空字符串答案不提交；结构异常不回退上传原文。普通文本与助手回复不做这项答案转换。assistant 若输出仅含 suggestions 数组的独立 JSON，则提交前记 filtered 并丢弃；普通说明、代码块、额外字段 JSON、用户原文及卡片答案不按此建议规则过滤。</p></div>
         <h3>长消息：完整分片，一次提交</h3>
         <div class="pieces" aria-label="同一事件的多个正文分片合并为原文"><span class="piece">event_id · 1 / N</span><span class="piece">event_id · 2 / N</span><span class="piece">…</span><span class="piece">event_id · N / N</span><span class="reassemble">→ 按 part_index 重组原文</span></div>
         <div class="limits"><div class="limit"><strong>48 KiB</strong><span>每条 values 的 JSON 字节上限</span></div><div class="limit"><strong>900 KiB</strong><span>单个批次整体上限</span></div><div class="limit"><strong>100 条</strong><span>每批操作数上限</span></div><div class="limit"><strong>1 次</strong><span>每条消息的提交请求</span></div></div>
@@ -136,21 +136,21 @@
         <div class="milestones"><div class="milestone"><strong>配置已写入</strong><span>文件和注册存在</span></div><div class="milestone"><strong>enabled=true</strong><span>本方案配置允许采集</span></div><div class="milestone"><strong>官方已信任</strong><span>Codex 允许执行确切定义</span></div><div class="milestone"><strong>事件已执行</strong><span>有程序运行证据</span></div><div class="milestone"><strong>表主已回读</strong><span>正文与输入/回复核对一致</span></div></div>
         <p>这些状态要分别判断。页面展示的是方案和历史验收，不是在检查你当前电脑。只看到 Hook 输出 <code>{}</code>，无法判断数据是否到达；<code>last-run: success</code> 也只是程序回执。</p>
         <div class="table-wrap"><table><thead><tr><th>outcome / 现象</th><th>说明</th></tr></thead><tbody><tr><td>skipped / 没有新回执</td><td>停用、范围外、空回复或不适用事件可能直接跳过，通常不更新 last-run。</td></tr><tr><td>filtered</td><td>命中远端已知内部请求过滤规则。</td></tr><tr><td>invalid</td><td>输入、协议、内容或容量不符合要求，不等于网络故障。</td></tr><tr><td>download_failed</td><td>下载、完整性、语法、子进程启动或下载时限失败；本次不执行 collector。</td></tr><tr><td>script_failed / script_timeout</td><td>远端程序异常或超过 6 秒；可能已发出请求，不能认定云端没有记录。</td></tr><tr><td>failed</td><td>服务器明确拒绝；本版不自动重试。</td></tr><tr><td>unknown</td><td>可能已提交，但没有有效完整回执；不重发，避免制造重复。</td></tr><tr><td>success</td><td>收到合法提交回执；仍需表主独立回读才能确认正文。</td></tr></tbody></table></div>
-        <ul class="plain-list"><li><strong>可信发布者动态代码</strong><span>每次下载的程序以当前用户权限执行，没有新增沙箱或签名体系。公开资源可读，不代表可以不信任发布者。</span></li><li><strong>有限等待，失败丢失</strong><span>同步调用外层 15 秒，无正文队列、后台常驻、自动重试或补发。超时不证明服务器未写入。</span></li><li><strong>过滤是尽力识别</strong><span>已知内部请求可过滤；未知内部请求和关联回复仍可能混入。Stop 文本也不保证覆盖所有客户端、继续回合和中断组合。</span></li><li><strong>首版范围与聊天缓存</strong><span>正式范围是 macOS + Python 3.9+；Windows 未验收。已有聊天可能缓存配置，需重新打开并独立验收；官方审核仍由成员完成。</span></li></ul>
+        <ul class="plain-list"><li><strong>可信发布者动态代码</strong><span>每次下载的程序以当前用户权限执行，没有新增沙箱或签名体系。公开资源可读，不代表可以不信任发布者。</span></li><li><strong>有限等待，失败丢失</strong><span>同步调用外层 15 秒，无正文队列、后台常驻、自动重试或补发。超时不证明服务器未写入。</span></li><li><strong>过滤是尽力识别</strong><span>已知请求和 assistant 独立 suggestions 数组 JSON 可过滤；未知内部请求和其他关联回复仍可能混入。Stop 文本也不保证覆盖所有客户端、继续回合和中断组合。</span></li><li><strong>首版范围与聊天缓存</strong><span>正式范围是 macOS + Python 3.9+；Windows 未验收。已有聊天可能缓存配置，需重新打开并独立验收；官方审核仍由成员完成。</span></li></ul>
       </section>
 
       <section class="section" id="evidence" aria-labelledby="evidence-title">
         <div class="section-head"><span class="index">07</span><h2 id="evidence-title">已经验证什么，以及从哪里继续</h2></div>
-        <p class="section-intro">以下是已有发布记录，不是页面运行时发起的测试。本轮 1.0.3 的答案提取验证，与 1.0.2 / 1.0.1 / 1.0.0 的历史验证分开记录。</p>
-        <div class="evidence-grid"><article><div class="evidence-number">37</div><h3>1.0.3 离线测试通过</h3><p>新增单题、多题、空答案、异常结构、普通文本兼容及长答案测试；原有路径、注册、分片、限时和提交回执测试继续通过。</p></article><article><div class="evidence-number">2 个版本</div><h3>既有启动器直接使用新版</h3><p>替换同一远端 URL 前准备 1.0.0、1.0.1 安装副本；替换后用原命令触发，源码、配置、命令哈希均不变。两者都只提交实际答案。</p></article><article><div class="evidence-number">7 条</div><h3>合成记录真实云端回读</h3><p>覆盖单题、多题长答案、旧启动器和异常卡片。182,030 字节答案按 5 片完整重组，异常卡片未入库；确认后仅将本轮 7 条合成记录移入回收站。</p></article></div>
-        <div class="note"><p><strong>1.0.0 历史证据：</strong>完整十项生命周期；182,000 字节长消息以 5 个分片完整重组；同链接替换远端脚本后执行新版且本地 Hook 不变；权限和原子批次负例。1.0.1 另有四组生命周期及真实回读；1.0.2 完成旧残留清理、显式重装、连续卸载三组 AI 操作和注册格式 2 的真实模型回读。上述均为历史记录，本轮未重新执行安装/卸载全套动作。</p><p>本轮独立审阅和 37 项测试通过。提取发生在内容容量检查和分片之前，结构异常不回退原文，不修改输入 envelope。1.0.2 已验证的完整卸载和缓存命令保护继续保留。真实操作使用隔离配置，未修改当前电脑的真实全局安装，也不代表成员的正式信任界面已被代为审核。</p></div>
-        <ul class="resource-list"><li><div><strong>正式操作 Markdown</strong><small>成员安装、检查、目录调整、启停、更新、卸载的统一入口</small></div><a href="https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5" target="_blank" rel="noopener noreferrer">打开文档 ↗</a></li><li><div><strong>launcher 1.0.1 源码</strong><small>版本化资源；旧版文件保留，可用于核对和回滚</small></div><a href="https://synapse.d2.pub/files/asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>动态 collector</strong><small>稳定运行地址；本页对应的发布版本为 1.0.2</small></div><a href="https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>Codex 官方 Hooks 说明</strong><small>成员按当前官方机制完成信任审核</small></div><a href="https://learn.chatgpt.com/docs/hooks" target="_blank" rel="noopener noreferrer">官方文档 ↗</a></li></ul>
-        <details><summary>发布指纹与证据文件</summary><div class="detail-content"><p>以下 SHA-256 对应 1.0.3 操作文档、注册格式 2、launcher 1.0.1 与 collector 1.0.2。collector 之后可以更新，其当时版本以实际记录为准。</p><pre>launcher  05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879
-collector 2862605dd52e97898a8d33ea059ba13ec5220e177815518a466000a92075903e
-Markdown  35e28ef4fe15e570b1e5df6681da5f96024e1a15098cbcbe97796ae230eee7a6
-注册片段  88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57</pre><p>代码与发布清单位于仓库 scripts/codex-team-hook/；本轮证据为 validation.json，历史证据为 validation-1.0.0.json、validation-1.0.1.json 和 validation-1.0.2.json。程序与文档发布文件已匿名下载并逐字节核对。</p></div></details>
+        <p class="section-intro">以下是已有发布记录，不是页面运行时发起的测试。本轮 1.0.4 的建议过滤验证，与 1.0.3 及更早版本的历史验证分开记录。</p>
+        <div class="evidence-grid"><article><div class="evidence-number">40</div><h3>1.0.4 离线测试通过</h3><p>新增独立建议 JSON 拦截与正常正文保留测试；此前的卡片答案、路径、注册、分片、限时和提交回执测试继续通过。</p></article><article><div class="evidence-number">2 个版本</div><h3>既有启动器直接使用新版</h3><p>替换同一远端 URL 前准备 1.0.0、1.0.1 安装副本；替换后用原命令触发，源码、配置、命令哈希均不变。两者都无需本地改动即可过滤建议输出。</p></article><article><div class="evidence-number">4 条</div><h3>保留内容真实云端回读</h3><p>7 种合成情形中，3 条建议输出未入库；4 条正常回复、代码示例和用户答案回读原文一致。确认后仅将本轮 4 条合成记录移入回收站。</p></article></div>
+        <div class="note"><p><strong>1.0.0 历史证据：</strong>完整十项生命周期；182,000 字节长消息以 5 个分片完整重组；同链接替换远端脚本后执行新版且本地 Hook 不变；权限和原子批次负例。1.0.1 另有四组生命周期及真实回读；1.0.2 完成旧残留清理、显式重装、连续卸载三组 AI 操作和注册格式 2 的真实模型回读。1.0.3 已验证多题答案 182,030 字节按 5 片完整重组，以及空/异常卡片不提交。上述均为历史记录，本轮未重新执行安装/卸载全套动作。</p><p>本轮独立审阅和 40 项测试通过。建议过滤只作用于 assistant 的独立单键数组对象；提问卡片仍只提取实际答案，结构异常不回退原文，不修改输入 envelope。1.0.2 已验证的完整卸载和缓存命令保护继续保留。真实操作使用隔离配置，未修改当前电脑的真实全局安装，也不代表成员的正式信任界面已被代为审核。</p></div>
+        <ul class="resource-list"><li><div><strong>正式操作 Markdown</strong><small>成员安装、检查、目录调整、启停、更新、卸载的统一入口</small></div><a href="https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5" target="_blank" rel="noopener noreferrer">打开文档 ↗</a></li><li><div><strong>launcher 1.0.1 源码</strong><small>版本化资源；旧版文件保留，可用于核对和回滚</small></div><a href="https://synapse.d2.pub/files/asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>动态 collector</strong><small>稳定运行地址；本页对应的发布版本为 1.0.3</small></div><a href="https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>Codex 官方 Hooks 说明</strong><small>成员按当前官方机制完成信任审核</small></div><a href="https://learn.chatgpt.com/docs/hooks" target="_blank" rel="noopener noreferrer">官方文档 ↗</a></li></ul>
+        <details><summary>发布指纹与证据文件</summary><div class="detail-content"><p>以下 SHA-256 对应 1.0.4 操作文档、注册格式 2、launcher 1.0.1 与 collector 1.0.3。collector 之后可以更新，其当时版本以实际记录为准。</p><pre>launcher  05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879
+collector 958aa33287ccce4cadb0ef202f7c1bf39c13604d865ea0957c33645854ecc0ae
+Markdown  b55e09bacc5b5db566d77ece4f5b4c5570d0d8ab685e7b763248a0d3d1891a40
+注册片段  88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57</pre><p>代码与发布清单位于仓库 scripts/codex-team-hook/；本轮证据为 validation.json，历史证据为 validation-1.0.0.json 至 validation-1.0.3.json。程序与文档发布文件已匿名下载并逐字节核对。</p></div></details>
       </section>
-      <footer class="footer"><p>本页解释 1.0.3 方案；launcher 1.0.1、collector 1.0.2，注册格式为 2。成员的实际操作步骤，以当次重新读取的正式 Markdown 为准。</p></footer>
+      <footer class="footer"><p>本页解释 1.0.4 方案；launcher 1.0.1、collector 1.0.3，注册格式为 2。成员的实际操作步骤，以当次重新读取的正式 Markdown 为准。</p></footer>
     </main>
   </div>
 </div>
