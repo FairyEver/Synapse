@@ -62,7 +62,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   const [contact, setContact] = useState<MailContact | null>(null)
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [pendingDelete, setPendingDelete] = useState<"selected" | "all" | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<"selected" | null>(null)
   const [compose, setCompose] = useState<ComposeStart | null>(null)
   const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
   const mail = useMail(box, search, box === "inbox" && unreadOnly, contact?.key)
@@ -95,18 +95,16 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
 
   async function performDelete() {
     if (!pendingDelete) return
+    const ids = [...selectedIds]
+    if (!ids.length) return
     try {
-      if (pendingDelete === "selected") {
-        const ids = [...selectedIds]
-        let skipped = 0
-        for (let offset = 0; offset < ids.length; offset += 100) {
-          const result = await mailRequest({ kind: "messageDeleteBatch", messageIds: ids.slice(offset, offset + 100), box })
-          skipped += result.skippedIds.length
-        }
-        if (skipped) toast.error(`${skipped} 封信件未处理`)
-      } else {
-        await mailRequest({ kind: "messageDeleteAll", box })
+      let skipped = 0
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const result = await mailRequest({ kind: "messageDeleteBatch", messageIds: ids.slice(offset, offset + 100), box })
+        skipped += result.skippedIds.length
       }
+      if (skipped) toast.error(`${skipped} 封信件未处理`)
+      setPendingDelete(null)
       mail.setSelectedId(null)
       setSelectedIds(new Set())
       setSelecting(false)
@@ -211,11 +209,18 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
               <Button type="submit" variant="ghost" size="icon" className="size-10" aria-label="搜索"><Search /></Button>
             </form>
             {contact && <div className="flex items-center gap-2 px-4 pt-3 text-sm"><span className="min-w-0 truncate font-medium" title={contact.name}>{contact.name}</span><Button variant="ghost" size="icon-xs" aria-label="解除人员筛选" onClick={() => selectContact(null)}><X /></Button></div>}
-            <div className="flex flex-wrap items-center gap-1 border-b p-2">
-              <Button type="button" size="sm" variant="ghost" onClick={() => { setSelecting(!selecting); setSelectedIds(new Set()); mail.setSelectedId(null) }}>{selecting ? "取消选择" : "选择"}</Button>
-              {selecting && <Button type="button" size="sm" variant="destructive" disabled={!selectedIds.size} onClick={() => setPendingDelete("selected")}>删除选中（{selectedIds.size}）</Button>}
-              {box === "inbox" && <><Button type="button" size="sm" variant={unreadOnly ? "secondary" : "ghost"} aria-pressed={unreadOnly} onClick={toggleUnread}>只看未读</Button>{!contact && <Button type="button" size="sm" variant="ghost" disabled={!mail.counts?.unread} onClick={() => void markAllRead()}>全部设已读</Button>}</>}
-              {!contact && <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={() => setPendingDelete("all")}>清空{box === "inbox" ? "收件箱" : "已发送"}</Button>}
+            <div role="toolbar" aria-label="信件列表工具栏" className="flex h-10 shrink-0 items-center gap-1 border-b px-2">
+              {selecting ? <>
+                <Button type="button" size="sm" variant="ghost" onClick={() => { setSelecting(false); setSelectedIds(new Set()) }}>取消选择</Button>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-live="polite">已选 {selectedIds.size} 封</span>
+                <Button type="button" size="sm" variant="destructive" className="ml-auto" disabled={!selectedIds.size} aria-label={`删除选中的 ${selectedIds.size} 封信件`} onClick={() => setPendingDelete("selected")}>删除（{selectedIds.size}）</Button>
+              </> : <>
+                {box === "inbox" && <Button type="button" size="sm" variant={unreadOnly ? "secondary" : "ghost"} aria-pressed={unreadOnly} onClick={toggleUnread}>只看未读</Button>}
+                <div className="ml-auto flex items-center gap-1">
+                  {box === "inbox" && unreadOnly && !contact && !search && (mail.counts?.unread ?? 0) > 0 && <Button type="button" size="sm" variant="ghost" onClick={() => void markAllRead()}>全部设为已读</Button>}
+                  <Button type="button" size="sm" variant="ghost" disabled={!hasListItems} onClick={() => { setSelecting(true); setSelectedIds(new Set()); mail.setSelectedId(null) }}>选择</Button>
+                </div>
+              </>}
             </div>
             {!mail.error && (mail.loading || !mail.ready) && !hasListItems ? <div role="status" aria-label="加载信件中" className="w-full max-w-3xl space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div> : null}
             {mail.error && !mail.messages.length ? <Empty>
@@ -226,8 +231,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
             {hasListItems && <ScrollArea className="min-h-0 min-w-0 flex-1" viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full">
               {mail.error && <p role="alert" className="p-3 text-sm text-destructive">{mail.error}</p>}
               {mail.messages.map((message) => <ContextMenu key={message.messageId}><ContextMenuTrigger asChild><button type="button" aria-current={!selecting && mail.selectedId === message.messageId ? "true" : undefined} aria-pressed={selecting ? selectedIds.has(message.messageId) : undefined} className={`block w-full border-b px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-ring ${mail.selectedId === message.messageId || selectedIds.has(message.messageId) ? "bg-selected" : "hover:bg-accent"}`} onClick={() => selecting ? toggleSelected(message.messageId) : openMessage(message.messageId)}>
-                {selecting && <span className="mb-1 flex items-center gap-1 text-xs text-muted-foreground"><Check className={selectedIds.has(message.messageId) ? "size-3" : "size-3 opacity-0"} />{selectedIds.has(message.messageId) ? "已选中" : "选择"}</span>}
-                <div className="flex items-center justify-between gap-2"><span className={`flex min-w-0 flex-1 items-center gap-2 text-sm ${message.readAt ? "" : "font-semibold"}`}>{box === "inbox" && !message.readAt && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />}<span className="min-w-0 truncate">{box === "inbox" ? personName(message.sender) : addressNames(message.toAddresses, message.toRecipients)}</span></span><span className="shrink-0 text-xs text-muted-foreground">{new Date(message.sentAt).toLocaleDateString()}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className={`flex min-w-0 flex-1 items-center gap-2 text-sm ${message.readAt ? "" : "font-semibold"}`}>{selecting && <span aria-hidden="true" className={`flex size-4 shrink-0 items-center justify-center rounded-sm border ${selectedIds.has(message.messageId) ? "border-primary bg-primary text-primary-foreground" : "border-input"}`}>{selectedIds.has(message.messageId) && <Check className="size-3.5" />}</span>}{box === "inbox" && !message.readAt && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />}<span className="min-w-0 truncate">{box === "inbox" ? personName(message.sender) : addressNames(message.toAddresses, message.toRecipients)}</span></span><span className="shrink-0 text-xs text-muted-foreground">{new Date(message.sentAt).toLocaleDateString()}</span></div>
                 <span className={`block truncate text-sm ${message.readAt ? "" : "font-medium"}`}>{message.relationKind === "reply" ? "回复 · " : message.relationKind === "forward" ? "转发 · " : ""}{message.subject}</span><span className="block truncate text-xs text-muted-foreground">{message.snippet}</span>
               </button></ContextMenuTrigger><ContextMenuContent>{messageActions(message).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>)}
               {mail.nextCursor && <Button type="button" variant="ghost" className="w-full" onClick={() => void mail.loadMore().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "加载失败。"))}>加载更多</Button>}
@@ -250,8 +254,8 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
           </section> : null} showDetail={showMessageColumns} />
     <MailCompose start={compose} onClose={() => setCompose(null)} onSent={() => { changeBox("sent"); mail.refresh() }} />
     <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={() => { mail.refresh(); if (!mail.selectedId && quickReply) mail.setSelectedId(quickReply.messageId) }} />
-    <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
-      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{pendingDelete === "selected" ? `删除选中的 ${selectedIds.size} 封信件？` : `清空${box === "inbox" ? "收件箱" : "已发送"}？`}</AlertDialogTitle><AlertDialogDescription>{pendingDelete === "selected" ? "只从你的信箱隐藏选中的信件。" : `将清空整个${box === "inbox" ? "收件箱" : "已发送"}，包括搜索结果和未加载的信件。`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => void performDelete()}>删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+    <AlertDialog open={pendingDelete === "selected"} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
+      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除选中的 {selectedIds.size} 封信件？</AlertDialogTitle><AlertDialogDescription>只从你的信箱隐藏选中的信件。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => void performDelete()}>删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
     </AlertDialog>
   </SystemAppWindowShell>
 }

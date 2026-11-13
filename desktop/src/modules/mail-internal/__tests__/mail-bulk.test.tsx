@@ -78,13 +78,58 @@ describe("mail bulk controls", () => {
     click("乔娜")
     expect(mocks.useMailArgs).toHaveBeenLastCalledWith("inbox", "", false, "user:writer")
     expect(document.body.textContent).not.toContain("清空收件箱")
-    expect(document.body.textContent).not.toContain("全部设已读")
-    expect(document.body.textContent).not.toContain("删除选中（1）")
+    expect(document.body.textContent).not.toContain("全部设为已读")
+    expect(document.body.textContent).not.toContain("删除（1）")
     click("只看未读")
     click("已发送")
     expect(mocks.useMailArgs).toHaveBeenLastCalledWith("sent", "", false, undefined)
     expect(document.body.textContent).toContain("全部收件人")
-    expect(document.body.textContent).toContain("清空已发送")
+    expect(document.body.textContent).not.toContain("清空已发送")
+    expect(document.body.textContent).not.toContain("全部设为已读")
+  })
+  it("keeps the toolbar limited to the actions for the current mode", () => {
+    mocks.messages = [message("first")]
+    render()
+    const toolbar = () => document.querySelector('[aria-label="信件列表工具栏"]')!
+    expect(toolbar().textContent).toContain("只看未读")
+    expect(toolbar().textContent).toContain("选择")
+    expect(toolbar().textContent).not.toContain("全部设为已读")
+    expect(toolbar().textContent).not.toContain("清空")
+    click("只看未读")
+    expect(toolbar().textContent).toContain("全部设为已读")
+    click("选择")
+    expect(toolbar().textContent).toContain("取消选择")
+    expect(toolbar().textContent).toContain("已选 0 封")
+    expect(toolbar().textContent).toContain("删除（0）")
+    expect(toolbar().textContent).not.toContain("只看未读")
+    expect(toolbar().textContent).not.toContain("全部设为已读")
+    expect(toolbar().textContent).not.toContain("清空")
+  })
+  it("offers mark-all-read only inside the unfiltered unread view", async () => {
+    mocks.messages = [message("first")]
+    mocks.request.mockResolvedValue({ updated: 2 })
+    render()
+    expect(document.body.textContent).not.toContain("全部设为已读")
+    click("只看未读")
+    click("全部设为已读")
+    await act(async () => { await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageReadAll" })
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "messageDeleteAll" }))
+  })
+  it("hides mark-all-read when search narrows the mailbox", () => {
+    mocks.messages = [message("first")]
+    render()
+    click("只看未读")
+    expect(document.body.textContent).toContain("全部设为已读")
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索信件"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "keyword")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    act(() => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
+    expect(mocks.useMailArgs).toHaveBeenLastCalledWith("inbox", "keyword", true, undefined)
+    expect(document.body.textContent).not.toContain("全部设为已读")
   })
   it("distinguishes organizations with the same name in the same team", () => {
     const common = { kind: "organization" as const, name: "运营部", teamName: "公司", unread: 0, handle: null, lastSentAt: "2026-10-16T00:00:00Z" }
@@ -113,7 +158,7 @@ describe("mail bulk controls", () => {
     click("乔娜")
     click("选择")
     click("last")
-    click("删除选中")
+    click("删除（1）")
     await act(async () => { click("删除"); await Promise.resolve() })
     mocks.messages = []; mocks.contacts = []
     render()
@@ -272,25 +317,26 @@ describe("mail bulk controls", () => {
     mocks.messages = [message("first"), message("second")]
     render()
     click("second")
-    click("删除选中")
+    click("删除（2）")
     await act(async () => { click("删除"); await Promise.resolve() })
     expect(mocks.request).toHaveBeenCalledWith({ kind: "messageDeleteBatch", messageIds: ["first", "second"], box: "inbox" })
   })
 
-  it("clears the complete mailbox after a search and preserves selection on failure", async () => {
+  it("never exposes clear-all and preserves selection after a failed deletion", async () => {
     mocks.request.mockRejectedValue(new Error("失败"))
     mocks.messages = [message("first")]
     render()
     const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索信件"]')!
     act(() => { input.value = "keyword"; input.dispatchEvent(new Event("input", { bubbles: true })) })
     click("搜索")
-    click("清空收件箱")
-    await act(async () => { click("删除"); await Promise.resolve() })
-    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageDeleteAll", box: "inbox" })
+    expect(document.body.textContent).not.toContain("清空收件箱")
+    expect(document.body.textContent).not.toContain("全部设为已读")
     click("选择")
     click("first")
-    click("删除选中")
+    click("删除（1）")
     await act(async () => { click("删除"); await Promise.resolve() })
-    expect(document.body.textContent).toContain("删除选中（1）")
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageDeleteBatch", messageIds: ["first"], box: "inbox" })
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "messageDeleteAll" }))
+    expect(document.body.textContent).toContain("删除（1）")
   })
 })
