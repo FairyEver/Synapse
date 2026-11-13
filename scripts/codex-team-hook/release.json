@@ -1,6 +1,6 @@
 {
   "package_id": "sy-team-capture",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "status": "stable",
   "supported_platforms": [
     "macos"
@@ -13,21 +13,23 @@
       "assetId": "asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
       "itemId": "cmwedn5rj0xqvn32yundfz4mn",
       "url": "https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
-      "sha256": "b91b59dccc29d32252df933c30f0bb4116fa467bf0ce0f1ef9a0f332e8a929ed"
+      "sha256": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f"
     },
     "launcher": {
-      "assetId": "asset_ybbCrdimxO36z43l9VVq4Ox2UgJ0iVPb",
-      "itemId": "cmwedn6f90xr2n32y1fndjarg",
-      "url": "https://synapse.d2.pub/files/asset_ybbCrdimxO36z43l9VVq4Ox2UgJ0iVPb",
-      "sha256": "bae596851068d9f420078e8bab3d5e7c0a1d31a8f34d571b7ddc81980593a52f"
+      "assetId": "asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC",
+      "itemId": "cmweg6dfg13wcn32ydkc0bceo",
+      "url": "https://synapse.d2.pub/files/asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC",
+      "sha256": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879"
     },
     "document": {
       "assetId": "asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
       "itemId": "cmwedp4jl0xunn32yx6v93fpk",
       "url": "https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
-      "sha256": "676f2b7160bdba3a672138bb4269711ae1d20e660cd886f12734a47658ddc920"
+      "sha256": "f3e483f4a31cb52070abc32e31cc34b242b36c6c38038e77f5fc6d34a38c6fa5"
     }
   },
-  "global_hooks_installed": false,
-  "validation_file": "validation.json"
+  "validation_file": "validation.json",
+  "launcher_version": "1.0.1",
+  "collector_version": "1.0.1",
+  "global_hooks_modified_by_publication": false
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real model runtime and synthetic one-shot cloud probes; requires --run."""
 import argparse
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -17,13 +18,41 @@ INSTALL = HOME_DIR / "hooks/sy-team-capture"
 PROJECT = WORK / "projects/company-two"
 
 
+def validate_runtime_install(release):
+    identity = {"version": release["version"], "sha256": {
+        name: release["resources"][name]["sha256"] for name in ["launcher", "collector", "document"]}}
+    state = json.loads((WORK / "lifecycle.json").read_text())
+    if state.get("release_identity") != identity:
+        raise ValueError("Runtime fixture belongs to a different/legacy release; configure a fresh --work-dir")
+    actual = hashlib.sha256((INSTALL / "launcher.py").read_bytes()).hexdigest()
+    receipt = json.loads((INSTALL / "installation.json").read_text())
+    if (actual != identity["sha256"]["launcher"] or receipt.get("launcher_sha256") != actual
+            or receipt.get("package_id") != "sy-team-capture"
+            or receipt.get("launcher_version", receipt.get("version")) != release.get("launcher_version", release["version"])):
+        raise ValueError("Runtime fixture launcher/receipt does not match the current release")
+    if json.loads((INSTALL / "config.json").read_text()).get("enabled") is not True:
+        raise ValueError("Runtime fixture is disabled")
+    return {"release_identity": identity, "launcher_sha256": actual}
+
+
 def main():
+    global WORK, HOME_DIR, INSTALL, PROJECT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--mode", choices=["model", "long", "update"], required=True)
+    parser.add_argument("--work-dir", type=Path, default=WORK)
     args = parser.parse_args()
     if not args.run:
         parser.error("--run permits a real model call or synthetic formal-table submission")
+    resolved = args.work_dir.resolve()
+    if (ROOT / "work").resolve() not in resolved.parents:
+        parser.error("--work-dir must be under this repository's work directory")
+    WORK = resolved
+    HOME_DIR = WORK / 'isolated home $scope "quoted"'
+    INSTALL = HOME_DIR / "hooks/sy-team-capture"
+    PROJECT = WORK / "projects/company-two"
+    release = json.loads((HERE / "release.json").read_text())
+    identity = validate_runtime_install(release)
     if args.mode == "model":
         hooks = json.loads((HOME_DIR / "hooks.json").read_text())["hooks"]
         events = []
@@ -37,7 +66,7 @@ def main():
                 definitions.append('{ hooks = [' + ', '.join(handlers) + '] }')
             events.append(event + ' = [' + ', '.join(definitions) + ']')
         inline = 'hooks = { ' + ', '.join(events) + ' }'
-        marker = "SY_FORMAL_HOOK_1_0_0_OK_20261113"
+        marker = "SY_FORMAL_HOOK_" + release["version"].replace(".", "_") + "_OK_20261113"
         prompt = "请不要调用任何工具。只回复：" + marker
         # Reviewed automation, only for this process; never part of member config.
         command = [shutil.which("codex"), "exec", "--ephemeral", "--json", "--sandbox", "read-only",
@@ -62,11 +91,11 @@ def main():
                        session_id="formal-acceptance-" + args.mode, turn_id="formal-acceptance-" + args.mode)
         status = module.process(payload, config, module.SCRIPT_URL)
         assert status["outcome"] == "success", status
-        import hashlib
         summary = dict(mode=args.mode, status=status, content_bytes=len(content.encode()),
                        content_sha256=hashlib.sha256(content.encode()).hexdigest())
         if args.mode == "long":
             (WORK / "long-expected.txt").write_text(content, encoding="utf-8")
+    summary.update(identity)
     (WORK / ("runtime-" + args.mode + ".json")).write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False), flush=True)
 

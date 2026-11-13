@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Stable Codex hook entry point. Never sends child output to Codex."""
 import argparse
+from http.client import HTTPException
 from datetime import datetime, timezone
 import json
 import os
@@ -12,7 +13,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 import uuid
 
-LAUNCHER_VERSION = "1.0.0"
+LAUNCHER_VERSION = "1.0.1"
 SCRIPT_URL = "https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv"
 DOWNLOAD_SECONDS = 5
 EXECUTION_SECONDS = 6
@@ -30,7 +31,7 @@ def match_project(cwd, roots):
         return None
     try:
         current = Path(cwd).resolve(strict=True)
-    except (OSError, RuntimeError):
+    except (OSError, ValueError, RuntimeError):
         return None
     if not current.is_dir():
         return None
@@ -53,7 +54,7 @@ def match_project(cwd, roots):
 def make_envelope(payload, config):
     if sys.platform != "darwin" or not isinstance(payload, dict) or not isinstance(config, dict):
         return None
-    if config.get("version") != 1 or config.get("enabled") is not True:
+    if type(config.get("version")) is not int or config["version"] != 1 or config.get("enabled") is not True:
         return None
     name = config.get("member_name")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
@@ -86,7 +87,14 @@ def download_bytes(url, destination):
     with build_opener(NoRedirect()).open(request, timeout=3) as response:
         if response.status != 200:
             raise ValueError("Download rejected")
+        expected_length = response.headers.get("Content-Length")
+        if expected_length is not None:
+            expected_length = int(expected_length)
+            if not 1 <= expected_length <= MAX_SCRIPT_BYTES:
+                raise ValueError("Script length rejected")
         data = response.read(MAX_SCRIPT_BYTES + 1)
+        if expected_length is not None and len(data) != expected_length:
+            raise ValueError("Incomplete script download")
     if not data or len(data) > MAX_SCRIPT_BYTES:
         raise ValueError("Script size rejected")
     source = data.decode("utf-8")
@@ -102,7 +110,7 @@ def download_script(url, destination):
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 timeout=DOWNLOAD_SECONDS)
         return result.returncode == 0
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return False
 
 
@@ -149,7 +157,7 @@ def main():
     if args.download:
         try:
             download_bytes(*args.download)
-        except (OSError, ValueError, SyntaxError):
+        except (OSError, ValueError, SyntaxError, HTTPException):
             return 1
         return 0
     status = {"outcome": "invalid"}
@@ -165,10 +173,10 @@ def main():
             status.update(launcher_version=LAUNCHER_VERSION,
                           recorded_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"))
             # One bounded receipt, no raw body, member name, paths or child output.
-            with tempfile.NamedTemporaryFile(dir=str(args.diagnostic.parent), delete=False) as receipt:
-                receipt.write(json.dumps(status).encode("utf-8"))
-                temporary = receipt.name
-            os.replace(temporary, args.diagnostic)
+            with tempfile.TemporaryDirectory(dir=str(args.diagnostic.parent), prefix=".sy-hook-receipt-") as folder:
+                temporary = Path(folder) / "receipt.json"
+                temporary.write_bytes(json.dumps(status).encode("utf-8"))
+                os.replace(temporary, args.diagnostic)
         except OSError:
             status = {"outcome": "diagnostic_failed"}
     print("{}")

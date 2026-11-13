@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Mutable remote collector: filtering, target, mapping and one-shot submission."""
 import json
+from http.client import HTTPException
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, HTTPRedirectHandler, build_opener
@@ -8,7 +9,7 @@ import uuid
 
 API_BASE = "https://synapse.d2.pub"
 TABLE_ID = "cmwedlivf0xo2n32y1yx8j8yz"
-COLLECTOR_VERSION = "1.0.0"
+COLLECTOR_VERSION = "1.0.1"
 ROW_BYTES = 48 * 1024
 BATCH_BYTES = 900 * 1024
 INTERNAL_PREFIXES = (
@@ -27,7 +28,7 @@ def encode(value):
 
 def build_batch(item):
     fields = ("event_id", "member_name", "project_name", "session_id", "turn_id", "role", "event_at", "platform")
-    if not isinstance(item, dict) or item.get("protocol_version") != 1:
+    if not isinstance(item, dict) or type(item.get("protocol_version")) is not int or item["protocol_version"] != 1:
         raise ValueError("Protocol rejected")
     if item.get("role") not in ("user", "assistant") or item.get("event_name") != {"user": "UserPromptSubmit", "assistant": "Stop"}[item["role"]]:
         raise ValueError("Event rejected")
@@ -87,7 +88,13 @@ def collect(item):
         with open_request(request, timeout=3) as response:
             if response.status != 201:
                 return {"outcome": "unknown"}
-            result = json.loads(response.read(65537))
+            declared = response.headers.get("Content-Length")
+            if declared is not None and not 0 < int(declared) <= 65536:
+                return {"outcome": "unknown"}
+            receipt = response.read(65537)
+            if len(receipt) > 65536 or (declared is not None and len(receipt) != int(declared)):
+                return {"outcome": "unknown"}
+            result = json.loads(receipt)
         rows = result.get("data") if isinstance(result, dict) else None
         if not isinstance(rows, list) or len(rows) != count or any(
                 not isinstance(r, dict) or not isinstance(r.get("id"), str) or not r["id"]
@@ -96,7 +103,7 @@ def collect(item):
         return {"outcome": "success"}
     except HTTPError as error:
         return {"outcome": "unknown" if error.code >= 500 else "failed"}
-    except (URLError, OSError, ValueError, TypeError):
+    except (URLError, OSError, ValueError, TypeError, HTTPException):
         # Unknown is intentional: a response can be lost after the server commits.
         return {"outcome": "unknown"}
 

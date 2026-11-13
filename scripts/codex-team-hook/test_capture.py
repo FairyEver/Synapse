@@ -11,6 +11,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 import io
 import shlex
+from http.client import HTTPResponse, IncompleteRead
 
 HERE = Path(__file__).resolve().parent
 
@@ -83,6 +84,34 @@ class CaptureTests(unittest.TestCase):
             for cwd in [".", str(file), str(Path(folder) / "missing")]:
                 self.assertIsNone(launcher.match_project(cwd, [folder]))
 
+    def test_boolean_schema_version_is_rejected(self):
+        launcher = self.module("launcher")
+        collector = self.module("collector")
+        with tempfile.TemporaryDirectory() as folder:
+            config = dict(version=True, enabled=True, member_name="member", project_roots=[folder])
+            payload = dict(cwd=folder, hook_event_name="UserPromptSubmit", prompt="hello", session_id="s", turn_id="t")
+            with self.subTest(layer="launcher"):
+                self.assertIsNone(launcher.make_envelope(payload, config))
+        with self.subTest(layer="collector"):
+            item = self.envelope()
+            item["protocol_version"] = True
+            with self.assertRaises(ValueError):
+                collector.build_batch(item)
+
+    def test_truncated_download_never_creates_executable(self):
+        launcher = self.module("launcher")
+        class Response(io.BytesIO):
+            status = 200
+            headers = {"Content-Length": "200"}
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "collector.py"
+            response = Response(b'print("syntactically valid but incomplete")\n')
+            with patch.object(launcher, "build_opener") as opener:
+                opener.return_value.open.return_value = response
+                with self.assertRaises(ValueError):
+                    launcher.download_bytes("https://example.test/script", target)
+            self.assertFalse(target.exists())
+
     def test_outside_scope_does_not_download(self):
         launcher = self.module("launcher")
         with tempfile.TemporaryDirectory() as folder:
@@ -136,13 +165,72 @@ class CaptureTests(unittest.TestCase):
         with patch.object(collector, "open_request", side_effect=HTTPError("https://test", 503, "busy", {}, None)):
             self.assertEqual(collector.collect(self.envelope())["outcome"], "unknown")
 
+    def test_truncated_submission_response_is_unknown_without_retry(self):
+        collector = self.module("collector")
+        class Response(io.BytesIO):
+            status = 201
+            headers = {}
+            def read(self, size=-1):
+                raise IncompleteRead(b'{"data":', 20)
+        with patch.object(collector, "open_request", return_value=Response()) as request:
+            self.assertEqual(collector.collect(self.envelope())["outcome"], "unknown")
+            self.assertEqual(request.call_count, 1)
+
     def test_invalid_success_receipt_is_unknown(self):
         collector = self.module("collector")
         class Response(io.BytesIO):
             status = 201
+            headers = {}
         for receipt in [{"data": [{"id": "row"}]}, {"data": [{"id": "row", "version": True}]}]:
             with patch.object(collector, "open_request", return_value=Response(json.dumps(receipt).encode())):
                 self.assertEqual(collector.collect(self.envelope())["outcome"], "unknown")
+
+    def test_real_http_response_requires_complete_bounded_receipt(self):
+        collector = self.module("collector")
+        body = b'{"data":[{"id":"row","version":1}]}'
+        class Socket:
+            def __init__(self, data):
+                self.data = data
+            def makefile(self, *args):
+                return io.BytesIO(self.data)
+        for declared, actual, expected in [(len(body), body, "success"), (200, body, "unknown"),
+                                           (65537, body + b" " * 65537, "unknown")]:
+            with self.subTest(declared=declared):
+                wire = b"HTTP/1.1 201 Created\r\nContent-Length: " + str(declared).encode() + b"\r\n\r\n" + actual
+                response = HTTPResponse(Socket(wire))
+                response.begin()
+                with patch.object(collector, "open_request", return_value=response) as request:
+                    self.assertEqual(collector.collect(self.envelope())["outcome"], expected)
+                    self.assertEqual(request.call_count, 1)
+
+    def test_runtime_acceptance_rejects_old_or_modified_install_before_run(self):
+        runtime = self.module("runtime_acceptance")
+        self.assertTrue(hasattr(runtime, "validate_runtime_install"), "Missing runtime release guard")
+        import hashlib
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            install = root / "install"
+            install.mkdir()
+            source = b'LAUNCHER_VERSION = "1.0.1"\n'
+            sha = hashlib.sha256(source).hexdigest()
+            release = {"version": "1.0.1", "launcher_version": "1.0.1", "resources": {
+                name: {"sha256": sha if name == "launcher" else name + "-sha"}
+                for name in ["launcher", "collector", "document"]}}
+            identity = {"version": release["version"], "sha256": {
+                name: item["sha256"] for name, item in release["resources"].items()}}
+            (install / "launcher.py").write_bytes(source)
+            (install / "installation.json").write_text(json.dumps(dict(package_id="sy-team-capture",
+                launcher_version="1.0.1", launcher_sha256=sha)))
+            (install / "config.json").write_text('{"enabled":true}')
+            with patch.object(runtime, "WORK", root), patch.object(runtime, "INSTALL", install):
+                (root / "lifecycle.json").write_text('{"results":[{"verified":true}]}')
+                with self.assertRaises(ValueError):
+                    runtime.validate_runtime_install(release)
+                (root / "lifecycle.json").write_text(json.dumps({"release_identity": identity}))
+                self.assertEqual(runtime.validate_runtime_install(release)["launcher_sha256"], sha)
+                (install / "launcher.py").write_bytes(source + b"# changed\n")
+                with self.assertRaises(ValueError):
+                    runtime.validate_runtime_install(release)
 
     def test_remote_stdout_cannot_enter_codex_context(self):
         launcher = self.module("launcher")
@@ -164,6 +252,12 @@ class CaptureTests(unittest.TestCase):
     def test_download_deadline_returns_failure_without_retry(self):
         launcher = self.module("launcher")
         with patch.object(launcher.subprocess, "run", side_effect=subprocess.TimeoutExpired("download", 5)) as run:
+            self.assertFalse(launcher.download_script("https://invalid.test/code", Path("unused")))
+            self.assertEqual(run.call_count, 1)
+
+    def test_download_spawn_failure_is_download_failure(self):
+        launcher = self.module("launcher")
+        with patch.object(launcher.subprocess, "run", side_effect=OSError("cannot spawn")) as run:
             self.assertFalse(launcher.download_script("https://invalid.test/code", Path("unused")))
             self.assertEqual(run.call_count, 1)
 
@@ -189,10 +283,52 @@ class CaptureTests(unittest.TestCase):
                                     text=True, capture_output=True, timeout=5)
             self.assertEqual(result.stdout, "{}\n")
             data = json.loads(diagnostic.read_bytes())
-            self.assertEqual(data["launcher_version"], "1.0.0")
+            self.assertEqual(data["launcher_version"], "1.0.1")
             self.assertRegex(data["recorded_at"], r"^\d{4}-\d\d-\d\dT.*Z$")
             self.assertNotIn("SECRET", diagnostic.read_text())
             self.assertLessEqual(diagnostic.stat().st_size, 512)
+
+    def test_failed_receipt_replace_leaves_no_orphan(self):
+        self.module("launcher")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = root / "config.json"
+            config.write_text("{}")
+            diagnostic = root / "last-run.json"
+            diagnostic.mkdir()
+            before = {p.name for p in root.iterdir()}
+            result = subprocess.run([sys.executable, str(HERE / "launcher.py"), "--config", str(config),
+                                     "--diagnostic", str(diagnostic)], input="malformed", text=True,
+                                    capture_output=True, timeout=5)
+            self.assertEqual(result.stdout, "{}\n")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual({p.name for p in root.iterdir()}, before)
+
+    def test_legacy_acceptance_checkpoint_cannot_skip_new_release(self):
+        acceptance = self.module("acceptance")
+        self.assertTrue(hasattr(acceptance, "validate_checkpoint"), "Missing release identity guard")
+        release = {"version": "1.0.1", "resources": {name: {"sha256": name + "-sha"}
+                   for name in ["launcher", "collector", "document"]}}
+        with self.assertRaises(ValueError):
+            acceptance.validate_checkpoint({"results": [{"case": "initialize", "verified": True}]}, release)
+
+    def test_builder_rejects_version_label_mismatch(self):
+        builder = self.module("build_document")
+        import hashlib
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            resources = {}
+            for name, constant in [("launcher", "LAUNCHER_VERSION"), ("collector", "COLLECTOR_VERSION")]:
+                source = (constant + ' = "1.0.0"\n').encode()
+                (root / (name + ".py")).write_bytes(source)
+                resources[name] = {"url": "https://example.test/" + name, "sha256": hashlib.sha256(source).hexdigest()}
+            (root / "release.json").write_text(json.dumps({"version": "1.0.1", "launcher_version": "1.0.1",
+                  "collector_version": "1.0.1", "status": "stable", "resources": resources}))
+            (root / "operations.template.md").write_text("# {{VERSION}}\n")
+            with patch.object(builder, "HERE", root), patch.object(builder, "DOC", root / "result.md"):
+                with self.assertRaises(ValueError):
+                    builder.main()
+            self.assertFalse((root / "result.md").exists())
 
     def test_shell_command_preserves_special_filename(self):
         self.module("launcher")

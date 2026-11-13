@@ -32,6 +32,26 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def validate_checkpoint(state, release):
+    identity = {"version": release["version"],
+                "sha256": {name: release["resources"][name]["sha256"] for name in ["launcher", "collector", "document"]}}
+    if (state.get("results") or state.get("sentinel_hooks")) and state.get("release_identity") != identity:
+        raise ValueError("Acceptance checkpoint belongs to a different/legacy release; use a fresh --work-dir")
+    state["release_identity"] = identity
+
+
+def set_work_directory(path):
+    global WORK, HOME_DIR, INSTALL, PROJECTS
+    resolved = Path(path).resolve()
+    root = (ROOT / "work").resolve()
+    if resolved == root or root not in resolved.parents:
+        raise ValueError("Acceptance --work-dir must be under this repository's work directory")
+    WORK = resolved
+    HOME_DIR = WORK / 'isolated home $scope "quoted"'
+    INSTALL = HOME_DIR / "hooks/sy-team-capture"
+    PROJECTS = [WORK / "projects/company-one", WORK / "projects/company-two"]
+
+
 def snapshot():
     return {str(p.relative_to(HOME_DIR)): [digest(p), p.stat().st_mtime_ns, stat.S_IMODE(p.stat().st_mode)]
             for p in HOME_DIR.rglob("*") if p.is_file()}
@@ -78,7 +98,7 @@ def validate_installed(release, roots):
         assert Path(args[0]).is_absolute() and Path(args[0]).is_file()
     receipt = read_json(INSTALL / "installation.json")
     assert receipt["package_id"] == "sy-team-capture"
-    assert receipt["version"] == "1.0.0"
+    assert receipt.get("launcher_version", receipt.get("version")) == release.get("launcher_version", release["version"])
     assert receipt["launcher_sha256"] == release["resources"]["launcher"]["sha256"]
     for name in ["launcher.py", "config.json", "installation.json"]:
         assert stat.S_IMODE((INSTALL / name).stat().st_mode) == 0o600
@@ -132,13 +152,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--phase", choices=["configure", "uninstall"], required=True)
+    parser.add_argument("--work-dir", type=Path, default=WORK)
     args = parser.parse_args()
     if not args.run:
         parser.error("--run explicitly permits real AI calls and isolated configuration writes")
-    WORK.mkdir(parents=True, exist_ok=True)
+    set_work_directory(args.work_dir)
     release = read_json(HERE / "release.json")
     state_path = WORK / "lifecycle.json"
     state = read_json(state_path) if state_path.exists() else {"results": []}
+    validate_checkpoint(state, release)
+    WORK.mkdir(parents=True, exist_ok=True)
     ensure_fixture(state)
     write_json(state_path, state)
     url = release["resources"]["document"]["url"]
