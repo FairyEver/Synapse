@@ -1,0 +1,150 @@
+# Codex 团队 Hook 操作指南
+
+版本：{{VERSION}} · 状态：{{STATUS}} · 正式支持：macOS · Python 3.9+
+
+这份 Markdown 是全部操作的说明入口。用户只需说「请根据 `<本文件链接>` 初始化hook」，或将动作换成检查状态、诊断、修改目录、启用、停用、更新、卸载。链接由用户提供，不绑定某个文档地址。每次操作先重新读取文件，不沿用旧聊天缓存的步骤。
+
+## 1. AI 先选择动作
+
+| 用户动作 | 执行章节 | 允许的效果 |
+|---|---|---|
+| 初始化、安装 | 4 | 安装本方案文件、注册两个 Hook、生成回执 |
+| 检查状态、看看装好了没 | 5 | 只读，不初始化、不修复、不上报 |
+| 诊断、排查 | 6 | 默认只读，可获取公开源码但不执行、不上报 |
+| 修改姓名、匹配目录 | 7 | 只修改明确指定的本地配置项 |
+| 启用、停用 | 7 | 只修改本方案 enabled |
+| 更新、升级 | 8 | 只升级本方案，保留用户配置和其他 Hook |
+| 卸载、移除 | 9 | 只移除归属明确的条目，旧会话兼容入口保留 |
+
+仅执行用户请求的动作；无法判断时询问缺失信息，不把检查或诊断当成修复授权。姓名、目录已在会话提供时直接复用，不要求用户复制长提示词或重复授权。缺少必要值时只询问该项。
+
+这些章节是给 AI 的操作步骤，不是 launcher 的管理命令；禁止编造 `--status`、`--install`、`--diagnose`、`--uninstall` 等参数。不要求用户安装 Synapse 客户端或提供 Sy 账号凭据。成员操作不包含建云表、改权限、替换公开素材或发送通知。
+
+当前若为「验收中」，只允许明确指定隔离配置目录的验收，普通成员初始化需等待正式可用；检查、诊断、停用和卸载不受此限制。Windows 未验收，不执行正式安装。
+
+## 2. 行为和边界
+
+在用户选择的一个或多个项目目录内，采集 Codex 的输入正文和最新最终回复字段。Hook 读取事件 cwd，匹配根目录及子目录；不跟随 shell cd，也不采附件、思考、工具输出或中间进度。不匹配时只做本地检查，不下载、不上报、不保存正文。
+
+本地只配置姓名、项目目录和启停状态；姓名是自报信息，不是可信身份。目标云表、过滤和发送逻辑由远端程序维护。云表仅允许匿名新增，原始数据不公开；知道公开入口的人仍可以提交，不能防止冒填。
+
+每次匹配事件下载最新程序并以当前用户权限运行，安装者信任发布者持续更新代码；它不是沙箱。初始化前用一句话说明这一点及采集范围。按正常 Codex 机制审核确切 Hook；不写入信任绕过开关，不自动信任其他 Hook。
+
+默认同步，单事件外层超时 15 秒；下载硬限 5 秒、执行硬限 6 秒。存在有限网络等待。失败放弃，不保存正文队列、不重试、不补发、不安装常驻服务。超时、断连或服务端 5xx 的结果可能未知，不等于没有写入。异步模式在短命 CLI 退出时可能丢失最终回复，本版不默认使用。
+
+已知内部请求按特征过滤，未知内部请求及其关联回复可能混入；不承诺可靠识别所有真人来源。Stop 的 last_assistant_message 是当前能取得的最新回复文本，不证明所有客户端状态下都与已展示内容完全一致。
+
+## 3. 正式资源与文件归属
+
+包标识：`sy-team-capture`；协议：envelope v1；文档和发布版本：{{VERSION}}。
+
+| 资源 | 地址 / SHA-256 |
+|---|---|
+| 稳定启动器 | [launcher.py.txt]({{LAUNCHER_URL}}) |
+| 启动器 SHA-256 | `{{LAUNCHER_SHA256}}` |
+| 动态程序 | [collector.py.txt]({{COLLECTOR_URL}}) |
+
+动态程序内容会更新，其下载地址在该部署内保持稳定。文档链接不是动态程序地址；换文档链接不会自动改写已安装启动器的地址。正式资源与演示资源相互独立，不把演示版自动迁移成正式投递。
+
+默认 Codex 配置目录：实际 CODEX_HOME（若已配置），否则 `~/.codex`。不要修改该环境变量。仅当用户或验收上下文明示隔离配置目录时，使用该目录代替默认位置。
+
+本方案目录：`<Codex配置目录>/hooks/sy-team-capture/`，文件：launcher.py、config.json、installation.json、last-run.json 和本方案 backups/。配置目录外的任意路径不能仅凭回执就判定归本方案所有；不跟随可疑符号链接写入或清理。
+
+## 4. 初始化
+
+1. 确认 macOS、Codex 支持两个事件、Python ≥3.9；通过 `sys.executable` 获取实际解释器绝对路径。缺少依赖则报告前提，不自动安装额外包。先读现有 hooks.json、config.toml 和本方案回执；存在试验来源、不同程序源、多个安装或归属不明条目时报告冲突，不覆盖、不静默迁移。
+2. 简述第 2 节边界，取得姓名及一个或多个绝对项目目录。规范化真实路径并确认现存目录；展示解析结果。重叠目录取最长匹配根，项目名为根目录名称。已安装且来源相同则核对并复用，不重复注册或重置姓名、目录、enabled。
+3. 创建本方案目录及备份目录（0700），修改已有文件前备份。完整下载启动器，核对上表 SHA-256、Python 语法和静态 SCRIPT_URL 与资源清单一致后，保存为 launcher.py（0600）。下载失败不写入半个源文件；已有文件采用同目录临时文件和原子替换。
+4. 创建或保留 config.json（0600），结构如下；不写入目标表 ID、API Key 或 token。
+
+```json
+{"version":1,"enabled":true,"member_name":"实际姓名","project_roots":["实际项目绝对路径"]}
+```
+
+5. 从参数数组生成命令，不能手拼 shell 字符串；路径含空格、引号、反引号或 `$()` 时也必须安全。下面函数生成两个 handler 的片段，**合并到现有 JSON**，保留 description、其他事件、同事件其他 group/handler。重复初始化按精确参数和安装回执识别自己，不生成重复 group。
+
+```python
+import shlex
+
+def hook_fragment(python_executable, installation_directory):
+    from pathlib import Path
+    root = Path(installation_directory)
+    args = [python_executable, str(root / "launcher.py"),
+            "--config", str(root / "config.json"),
+            "--diagnostic", str(root / "last-run.json")]
+    handler = {"type": "command", "command": shlex.join(args),
+               "async": False, "timeout": 15}
+    return {"hooks": {event: [{"hooks": [dict(handler)]}]
+                      for event in ["UserPromptSubmit", "Stop"]}}
+```
+
+JSON 交给序列化器编码，不把 JSON 转义当成 shell 转义。保存前检查原文件未被其他进程改写，冲突时重读合并。若相同逻辑已存在 inline TOML，先核对来源，不能再追加一个 JSON 副本。不能安全解析/修改时报告，不覆盖整个 config.toml。
+
+6. 仅在必要时启用官方 features.hooks，保留其他配置。正式使用通过 CLI `/hooks` 或桌面 Settings > Hooks / Review hooks 审核。无法读取权威信任状态时写 unknown，不伪造 trusted_hash，不使用绕过审核参数。
+7. 保存 installation.json（0600）：package_id、version、实际 documentation_url、installation_directory、python_executable、launcher_sha256、collector_url、精确 registered_handlers、owned_files、backup_paths、trust_status、已验证/未验证项。owned_files 只列本目录内相对文件；登记来源、备份路径和公开 URL 不包含账号凭据。
+8. 按用户授权做一轮合成输入/回复验收；安装授权包含该一次验收，不能借机采真实敏感样本。可让用户在匹配项目新建聊天完成，已有运行中聊天需重新打开并独立核对。只看到 `{}` 不代表投递成功；last-run success 是程序回执，只有表主回读才能确认云端内容。需要表主配合时准确说明，不向成员索取管理员 Key。
+
+初始化完成简短报告安装位置、姓名和目录、信任状态、实际验收与下一步。缺少官方审核时必须说「已配置，待审核」，不能说已经完整启用。
+
+## 5. 检查状态（只读）
+
+读取实际配置和安装回执，检查两个 handler、是否重复、命令绝对路径和参数、async=false/timeout=15、文件权限、配置结构及真实目录。源码只读取和静态解析，不 import 或执行；解释器版本检查不启动模型会话。last-run.json 若存在可读取，缺失就报告尚无执行回执，不能为检查新建文件或新发消息。
+
+把本地 SCRIPT_URL 与清单比较；用官方可用的只读 Hook 列表/界面确认启用和信任，拿不到则未知，不猜 API 或信任哈希。给出未安装、残留、不完整、停用、待审核、当前项目未匹配或配置可用等状态。配置可用、已信任、已执行、云端已回读是不同事实。
+
+缺回执的旧安装可按默认目录和精确命令发现，不能据此断言未安装或删除文件。检查不得修复、初始化、下载执行代码、修改时间戳或生成新回执。
+
+## 6. 诊断（默认只读）
+
+先按第 5 节检查，再逐层定位：
+
+1. 事件条件：Hook 是否启用/信任、聊天是否早于安装打开、cwd 是否命中。不要操作用户应用或把 shell cd 当成 cwd 变化。
+2. 本地入口：解释器、权限、shell 转义、JSON/TOML 合并、两个事件和超时。静态解析，不通过运行 launcher 来假装只读。
+3. 公开资源：有界 HTTPS GET/HEAD，检查文档、启动器及动态程序可达性、字节/语法和清单一致性；不执行下载内容，不发送成员姓名、目录或正文，不 import 代码获取 URL。
+4. 回执：skipped 表示未满足采集条件且通常不写 last-run；filtered 为规则过滤；invalid 为输入/容量不适用；download_failed、script_failed、script_timeout 为对应边界失败；failed 为 HTTP 明确拒绝；unknown 是结果未知。last-run 仅保留最近一次，不能据此证明全部历史消息都到达。
+5. 云端：匿名读返回 403 是预期权限，不表示新增一定失败。成员无权读表，不索取表主凭据，不自动查询/重发。默认诊断不写云表；只有用户明确要求测试上报时才执行一次合成测试。
+
+仅诊断时报告证据、原因和修复建议；用户已明确要求修复或测试时执行对应动作，不重复询问已有授权。错误报告不包含完整正文、用户凭据或无关配置。
+
+## 7. 修改配置、启用与停用
+
+先读原 config.json 并备份，验证用户要变更的值；只改指定字段，其他字段原样保留。追加/移除/替换目录按原意处理，缺少目录才询问；用规范化路径保存。修改目录不重置姓名，修改姓名不重置 enabled。
+
+停用仅将 enabled 设为 false，启用仅设为 true，不改全局 features.hooks 或其他 Hook。未安装时报告未安装，不借启用指令初始化。配置每次事件读取，后续调用生效，不启动或重启 Codex。
+
+成功后同步自己的 installation.json；最近执行回执不是配置，不改写 last-run。写配置前核对原版本/字节，避免覆盖并发修改。
+
+## 8. 更新 Hook
+
+重新读本文并执行只读检查。当前启动器版本和 SHA 相同则报告已是当前版，不重复添加条目；显式更新动作可同步文档来源/验收信息，但不重置用户配置。
+
+远端 collector 的内容更新本来就每次下载，不需要逐台安装。启动器、协议或 collector URL 变更才下载核对并替换本地代码；先备份，只更新可确认归属的文件/条目，保留姓名、目录、enabled 和其他 Hook，再按必要程度重新审核。演示来源或归属冲突不自动迁移。
+
+回滚使用发布者保留的审核过的旧源码与清单，不整份恢复历史全局配置。文档 URL 可更换并记录为新来源，不作为锁定成员只能用原链接的条件。
+
+## 9. 卸载
+
+1. 只读定位精确安装目录、回执及 registered_handlers。用 shlex.split 和规范化路径核对完整命令参数，不仅按 UserPromptSubmit/Stop 名称、sy-team-capture 子串或 URL 批量删除。归属不明项只报告，保留。
+2. 先停用本方案 config，再备份待改全局配置；在其实际来源移除本方案 handler，保留同 group 其他 handler、同事件其他 group、其他事件和设置。不整份覆盖 config.toml 或 hooks.json，不回滚全局 features.hooks。
+3. 不清空 hooks.state。只通过当前官方契约处理能精确确认属于本方案的信任项；不能安全定位时保留并报告，不猜 key，不主动创建新信任条目。
+4. 旧聊天可能缓存命令。将本目录 launcher.py 原子替换为下面的无操作兼容入口（0600），保留 disabled 配置及回执；不读 stdin，不联网，不写任何数据。不要将仅安装文件校验所用的原源码备份当成待执行入口。
+
+```python
+if __name__ == "__main__":
+    print("{}")
+```
+
+5. 在回执中标记 uninstalled，列明保留兼容入口的原因。能确认旧聊天/在途进程结束且无引用时，才清理回执列出的独占文件；不强制杀 Codex，不跟随符号链接，不删除父目录或别人的文件。重复卸载应报告已卸载，保留其他配置。
+6. 只读复验没有本方案活动注册且 enabled=false。准确报告「注册已移除，保留停用兼容入口」，不宣称目录全空。已有在途任务可能在 15 秒窗口内完成，本方案不能撤销已提交 HTTP 请求。
+
+卸载不删除云表、历史记录、公开素材或用户项目，亦不发送测试消息。
+
+## 10. 运行接口与限制
+
+两个事件：UserPromptSubmit→user/prompt，Stop→assistant/last_assistant_message。envelope v1 包含随机 event_id、event_name、UTC 毫秒 event_at、session_id、turn_id、member_name、project_name、platform、role、content。不传绝对项目路径或整个 Hook payload。空正文、缺 ID 或类型错误跳过；同轮多条输入分别保留。
+
+本地输入上限 4 MiB，下载源码上限 256 KiB。正文按实际 UTF-8 JSON 字节分片，每条 values≤48 KiB、单批≤900 KiB、最多100条；按 event_id 和 part_index 重组。一条消息仅一个原子批次，超限、NUL 或未配对代理字符整条放弃，不截断。云表系统 ID、时间、版本由服务端生成，匿名 creatorUserId=null。
+
+last-run.json 只含 outcome、event_id（有效事件时）、launcher_version、recorded_at，不含正文、姓名、目录或远端任意输出。所有正常 Hook 调用只向 Codex 输出 `{}`，不提供上下文、阻止或续写指令。临时源码和子进程输出在本次调用后清理，不是待发送队列。
+
+正式验收范围：macOS 的运行、隔离初始化和操作生命周期；不等于每个用户的全局信任界面已代其操作。Windows、所有旧聊天/steering/中断组合尚未正式验收。[Codex 官方 Hooks](https://learn.chatgpt.com/docs/hooks) 为事件与信任机制依据。

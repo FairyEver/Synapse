@@ -1,0 +1,33 @@
+{
+  "package_id": "sy-team-capture",
+  "version": "1.0.0",
+  "status": "stable",
+  "supported_platforms": [
+    "macos"
+  ],
+  "python_minimum": "3.9",
+  "table_id": "cmwedlivf0xo2n32y1yx8j8yz",
+  "table_name": "Codex 团队对话记录",
+  "resources": {
+    "collector": {
+      "assetId": "asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
+      "itemId": "cmwedn5rj0xqvn32yundfz4mn",
+      "url": "https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
+      "sha256": "b91b59dccc29d32252df933c30f0bb4116fa467bf0ce0f1ef9a0f332e8a929ed"
+    },
+    "launcher": {
+      "assetId": "asset_ybbCrdimxO36z43l9VVq4Ox2UgJ0iVPb",
+      "itemId": "cmwedn6f90xr2n32y1fndjarg",
+      "url": "https://synapse.d2.pub/files/asset_ybbCrdimxO36z43l9VVq4Ox2UgJ0iVPb",
+      "sha256": "bae596851068d9f420078e8bab3d5e7c0a1d31a8f34d571b7ddc81980593a52f"
+    },
+    "document": {
+      "assetId": "asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
+      "itemId": "cmwedp4jl0xunn32yx6v93fpk",
+      "url": "https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
+      "sha256": "51ec6633d4d63377d6b5e246accff3b612522d8ef46ca58daf77ac50cf79d898"
+    }
+  },
+  "global_hooks_installed": false,
+  "validation_file": "validation.json"
+}
