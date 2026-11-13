@@ -39,7 +39,7 @@
 | 采集器发布版本 | `{{COLLECTOR_VERSION}}`，实际运行版本以投递记录为准 |
 | 动态采集器地址 | [collector.py.txt]({{COLLECTOR_URL}}) |
 
-文档入口可更换；运行时的动态采集器地址在同一部署内保持稳定。改远端过滤、字段映射或目标表时，只替换 collector 内容，不要求成员升级启动器。文档或 collector 版本变化本身不是本地升级条件；启动器版本/源码、协议、运行地址或注册命令格式变化才需要本地更新。本次文档为 1.0.2，运行源码仍为 1.0.1，更新点是注册格式 2 和清理流程。
+文档入口可更换；运行时的动态采集器地址在同一部署内保持稳定。改远端过滤、字段映射或目标表时，只替换 collector 内容，不要求成员升级启动器。文档或 collector 版本变化本身不是本地升级条件；启动器版本/源码、协议、运行地址或注册命令格式变化才需要本地更新。当前各组件版本见上表；1.0.2 引入的注册格式 2 和清理流程继续保留。
 
 目标配置目录是实际 CODEX_HOME（如果已配置），否则为 `~/.codex`；不要修改该环境变量。用户或验收上下文明确指定隔离目录时，以该目录为操作目标，不能再修改真实全局配置。
 
@@ -52,6 +52,7 @@
 - 每次命中目录都下载远端程序，以当前用户权限执行。发布者可以持续更新代码，这不是沙箱。初始化前用一句话说明采集范围和这一权限；按 Codex 正常机制审核确切 Hook，不写入绕过开关或伪造信任哈希。
 - 默认同步，Hook 外层 15 秒，下载硬限 5 秒，执行硬限 6 秒。存在有限等待；失败放弃，无正文队列、重试、补发或常驻服务。异步会话退出可能取消 Stop，本版不默认使用。
 - 已知内部请求按特征过滤，未知内部请求及其关联回复仍可能混入。Stop 提供最新 assistant 文本，不证明所有客户端/继续回合都与已展示回复完全一致。
+- 用户提问卡片回复只收集实际填写的 answer 字符串，不上传 question、questionItemId 或包装结构。转换在下载到本机执行的 collector 内、构造 POST 之前完成；普通用户文本和助手回复保持原文，成员不用更新本地 Hook。
 - 缺回执、缺新字段或拿不到官方信任状态均是证据不足，不等于未安装。检查/诊断只兼容读取旧回执；初始化或重装中，仅在归属已确认后按下节清理，不凭缺字段盲删。
 
 ## 4. 初始化：检查残留 → 必要清理 → 重新收集 → 安装 → 审核
@@ -181,6 +182,10 @@ installation.json（0600）记录 status=installed、package_id、launcher_versi
 ## 10. 运行协议与容量
 
 UserPromptSubmit→user/prompt；Stop→assistant/last_assistant_message。envelope v1 传随机 event_id、event_name、UTC 毫秒 event_at、session_id、turn_id、member_name、project_name、platform、role、content，不传绝对项目路径或整个 Hook payload。同轮多条输入各有 ID，不互相覆盖。
+
+当用户正文为完整 `<send_user_message_question_reply>...</send_user_message_question_reply>` 包装时，collector 解析其中 JSON 数组，仅提取每项的 answer 字符串。单题保存答案本身；多题按原顺序以空行分隔，保留每个非空答案内的空格、换行和 Unicode。空数组或全为空白字符串的答案记 filtered、不提交；包装、JSON 或答案类型异常记 invalid、不回退上传原始结构。普通文本中的标签示例和 assistant 正文不做此转换。
+
+原始卡片正文只经本地标准输入传入 collector，不进入其网络请求；提取答案后再执行既有内容校验、分片和容量检查。原始问题、卡片 ID 和 JSON 外壳不占用云端正文，也不写入诊断回执。
 
 输入≤4 MiB、源码≤256 KiB；有 Content-Length 时核对完整长度，再验证 UTF-8/语法。正文按实际 UTF-8 JSON 分片，每条 values≤48 KiB、单批≤900 KiB、最多100条，一条消息只发一个原子批次。按 event_id、part_index 重组；超限或不能无损存储则放弃，不截断、不拆多批。云表系统 ID/时间/版本由服务端生成，匿名 creatorUserId=null。
 

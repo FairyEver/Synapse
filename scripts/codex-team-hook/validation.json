@@ -1,184 +1,179 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
+  "verified_at_utc": "2026-11-13T06:04:27.320Z",
   "launcher_version": "1.0.1",
-  "collector_version": "1.0.1",
+  "collector_version": "1.0.2",
   "registration_version": 2,
-  "verified_at_utc": "2026-11-13T05:00:42.979Z",
-  "platform": "macos",
-  "python_version": "3.9.6",
-  "codex_version": "codex-cli 0.167.0-alpha.4.1",
-  "unit_tests_passed": 31,
+  "unit_tests_passed": 37,
   "python_sources_compile": true,
   "document_rebuild_identical": true,
-  "embedded_registration_source_exact": true,
-  "release_identity": {
-    "version": "1.0.2",
-    "sha256": {
-      "launcher": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879",
-      "collector": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f",
-      "document": "b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09"
-    }
+  "change_scope": "Remote question-card answer projection only; no member Hook update required",
+  "normalization": {
+    "role": "user",
+    "wrapper": "send_user_message_question_reply",
+    "only_field": "answer",
+    "multiple_separator": "\n\n",
+    "nonempty_answer_text_preserved": true,
+    "empty_answers": "filtered without POST",
+    "malformed": "invalid without raw fallback",
+    "normal_text_and_assistant_unchanged": true,
+    "before_capacity_and_splitting": true
   },
-  "registration_sha256": "88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57",
   "source_sha256": {
     "launcher": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879",
-    "collector": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f"
+    "collector": "2862605dd52e97898a8d33ea059ba13ec5220e177815518a466000a92075903e",
+    "document": "35e28ef4fe15e570b1e5df6681da5f96024e1a15098cbcbe97796ae230eee7a6"
   },
-  "source_runtime_files_changed": false,
-  "lifecycle": [
-    {
-      "case": "initialize_over_legacy_residue",
-      "elapsed_seconds": 231.372,
-      "thread_ids": [
-        "01a1d33d-9a32-72d1-8d84-05a93b9f8e74"
-      ],
-      "fresh_configuration": true,
-      "old_profile_and_run_evidence_removed": true,
-      "actual_registration_version": 2,
-      "verified": true
-    },
-    {
-      "case": "explicit_reinstall",
-      "elapsed_seconds": 185.253,
-      "thread_ids": [
-        "01a1d341-53f6-7c91-9d70-b242a8a633ad"
-      ],
-      "fresh_configuration": true,
-      "old_profile_and_run_evidence_removed": true,
-      "actual_registration_version": 2,
-      "verified": true
-    },
-    {
-      "case": "uninstall_twice",
-      "elapsed_seconds": 159.547,
-      "thread_ids": [
-        "01a1d344-2791-7cd0-b43d-af80503fac03"
-      ],
-      "complete_directory_removal": true,
-      "no_sibling_temporary_or_backup_files": true,
-      "cached_commands_noop_without_stdin": true,
-      "no_files_recreated": true,
-      "verified": true
-    }
+  "existing_launcher_versions_verified": [
+    "1.0.0",
+    "1.0.1"
   ],
-  "lifecycle_scope": "1.0.2 targeted rerun: initialize after owned legacy uninstall residue, explicit reinstall of an existing installation with old profile/disabled state, then full uninstall and repeated uninstall in one AI turn",
-  "seed": {
-    "status": "uninstalled",
-    "stale_handlers_in_mixed_groups": true,
-    "legacy_member": "OLD-NOT-TO-REUSE",
-    "legacy_root": "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-clean-102/ai-fixture/projects/old-not-to-reuse",
-    "enabled": false,
-    "baseline_files": [
-      "config.toml",
-      "hooks.json",
-      "unrelated.py"
-    ]
+  "local_files_prepared_before_remote_replacement": true,
+  "local_hook_files_config_and_commands_unchanged": true,
+  "before_and_after_local_sha256": {
+    "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103/installed-1.0.1/launcher.py": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879",
+    "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103/installed-1.0.1/config.json": "3d2b5ddfedd220d1afb251aed35ab18952d20ba28e1f46e9ad0a0951b7eb8548",
+    "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103/installed-1.0.0/launcher.py": "bae596851068d9f420078e8bab3d5e7c0a1d31a8f34d571b7ddc81980593a52f",
+    "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103/installed-1.0.0/config.json": "3d2b5ddfedd220d1afb251aed35ab18952d20ba28e1f46e9ad0a0951b7eb8548",
+    "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103/installed-commands.json": "d7c6ab0becf6e48b0ba144ee324799242be359239c1d2211a4da26b74895ea21"
   },
-  "runtime_model": {
-    "mode": "model",
-    "exit": 0,
-    "final_exact": true,
-    "prompt": "请不要调用任何工具。只回复：SY_FORMAL_HOOK_1_0_2_OK_20261113",
-    "final": "SY_FORMAL_HOOK_1_0_2_OK_20261113",
-    "thread_ids": [
-      "01a1d341-229c-7ba3-ae49-892c344d2321"
-    ],
-    "elapsed_seconds": 12.642,
-    "release_identity": {
-      "version": "1.0.2",
-      "sha256": {
-        "launcher": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879",
-        "collector": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f",
-        "document": "b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09"
-      }
-    },
-    "launcher_sha256": "05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879"
-  },
-  "runtime_receipt_before_reinstall": {
-    "outcome": "success",
-    "event_id": "01dbb624-8132-42f9-9d2b-139086b470b0",
-    "launcher_version": "1.0.1",
-    "recorded_at": "2026-11-13T04:53:51.858Z"
-  },
-  "model_owner_readback": {
-    "exact": true,
-    "data": [
+  "owner_readback": {
+    "session_id": "question-reply-probe-038c3043-97b4-4463-b9b9-5a9f8efd7004",
+    "local_hook_files_config_and_commands_unchanged": true,
+    "collector_version": "1.0.2",
+    "records": 7,
+    "cases": [
       {
-        "id": "ctr_b1a0562ace2e40e09ee521d7e493c2be",
-        "values": {
-          "event_id": "f31d334e-98c9-45b8-8928-4ce1903fd89d",
-          "member_name": "FormalAcceptance20261113",
-          "project_name": "company-two",
-          "session_id": "01a1d341-229c-7ba3-ae49-892c344d2321",
-          "turn_id": "01a1d341-2a2c-7851-81f7-f098159a62e6",
-          "role": "user",
-          "event_at": "2026-11-13T04:53:47.765Z",
-          "part_index": 1,
-          "part_count": 1,
-          "content": "请不要调用任何工具。只回复：SY_FORMAL_HOOK_1_0_2_OK_20261113",
-          "collector_version": "1.0.1",
-          "platform": "macos"
-        },
-        "creatorUserId": null,
-        "version": 1,
-        "createdAt": "2026-11-13T04:53:48.512Z",
-        "updatedAt": "2026-11-13T04:53:48.512Z",
-        "deletedAt": null
+        "case": "current_single",
+        "launcher_version": "1.0.1",
+        "turn_id": "answer-probe-current_single-12cc2a5b-41c0-4baa-8aa0-baab75272081",
+        "event_id": "b35f60c4-d77b-4178-80ad-6424eb1c8c4a",
+        "outcome": "success",
+        "expected_bytes": 24,
+        "expected_sha256": "eb518fb89ad62923ebbd1129a7bc3e6a85e531886230a4b6d7d3056fc91b89a4",
+        "rows": 1,
+        "content_exact": true,
+        "question_and_card_metadata_absent": true,
+        "records": [
+          {
+            "id": "ctr_d1b56f91b11a4c45b459d78f0222ff0c",
+            "version": 1,
+            "part_index": 1,
+            "part_count": 1
+          }
+        ]
       },
       {
-        "id": "ctr_0774ea1458e844479f008deaa90c0a2e",
-        "values": {
-          "event_id": "01dbb624-8132-42f9-9d2b-139086b470b0",
-          "member_name": "FormalAcceptance20261113",
-          "project_name": "company-two",
-          "session_id": "01a1d341-229c-7ba3-ae49-892c344d2321",
-          "turn_id": "01a1d341-2a2c-7851-81f7-f098159a62e6",
-          "role": "assistant",
-          "event_at": "2026-11-13T04:53:51.165Z",
-          "part_index": 1,
-          "part_count": 1,
-          "content": "SY_FORMAL_HOOK_1_0_2_OK_20261113",
-          "collector_version": "1.0.1",
-          "platform": "macos"
-        },
-        "creatorUserId": null,
-        "version": 1,
-        "createdAt": "2026-11-13T04:53:51.904Z",
-        "updatedAt": "2026-11-13T04:53:51.904Z",
-        "deletedAt": null
+        "case": "current_multiple_long",
+        "launcher_version": "1.0.1",
+        "turn_id": "answer-probe-current_multiple_long-99e2174f-ff60-4b37-9051-3dbf4702d05f",
+        "event_id": "1801998f-c8d8-4620-910c-378a5e29fc62",
+        "outcome": "success",
+        "expected_bytes": 182030,
+        "expected_sha256": "ef4e81155791716ca8bdfe42d6c33bd8dc31e97fabc6a72db8be8d5c550f0c90",
+        "rows": 5,
+        "content_exact": true,
+        "question_and_card_metadata_absent": true,
+        "records": [
+          {
+            "id": "ctr_579c69bda4da4cccadb0a38093f126d8",
+            "version": 1,
+            "part_index": 1,
+            "part_count": 5
+          },
+          {
+            "id": "ctr_2e385528a0ef4e6b874d9fc8ee77ef3c",
+            "version": 1,
+            "part_index": 2,
+            "part_count": 5
+          },
+          {
+            "id": "ctr_b5e474297f2e4c0cb8ec5832a3f01eb9",
+            "version": 1,
+            "part_index": 3,
+            "part_count": 5
+          },
+          {
+            "id": "ctr_2b3e0da9fade4e8f99a9e9352e7ef8d3",
+            "version": 1,
+            "part_index": 4,
+            "part_count": 5
+          },
+          {
+            "id": "ctr_a2d7aa56962345f99faeafe1bfc9acb3",
+            "version": 1,
+            "part_index": 5,
+            "part_count": 5
+          }
+        ]
+      },
+      {
+        "case": "legacy_single",
+        "launcher_version": "1.0.0",
+        "turn_id": "answer-probe-legacy_single-c2c7c312-183e-473d-b990-a3899a66bef0",
+        "event_id": "529e93f1-5421-4803-bce2-876cd79e24d9",
+        "outcome": "success",
+        "expected_bytes": 30,
+        "expected_sha256": "512607ac672903a381bb51c434e54d573cf7ee01e65a97b9de3f18c3aa20788d",
+        "rows": 1,
+        "content_exact": true,
+        "question_and_card_metadata_absent": true,
+        "records": [
+          {
+            "id": "ctr_00682e461ddd4edcb2b10b03f3f92136",
+            "version": 1,
+            "part_index": 1,
+            "part_count": 1
+          }
+        ]
+      },
+      {
+        "case": "malformed",
+        "launcher_version": "1.0.1",
+        "turn_id": "answer-probe-malformed-f97702c3-be80-425a-b58a-b19053069124",
+        "event_id": "05df3b94-607a-476d-987e-83dca5522997",
+        "outcome": "invalid",
+        "expected_bytes": 0,
+        "expected_sha256": null,
+        "rows": 0,
+        "no_submission": true
       }
     ]
   },
   "sample_cleanup": {
+    "session_id": "question-reply-probe-038c3043-97b4-4463-b9b9-5a9f8efd7004",
     "soft_deleted_records": [
       {
-        "id": "ctr_b1a0562ace2e40e09ee521d7e493c2be",
+        "id": "ctr_00682e461ddd4edcb2b10b03f3f92136",
         "version": 2
       },
       {
-        "id": "ctr_0774ea1458e844479f008deaa90c0a2e",
+        "id": "ctr_579c69bda4da4cccadb0a38093f126d8",
+        "version": 2
+      },
+      {
+        "id": "ctr_d1b56f91b11a4c45b459d78f0222ff0c",
+        "version": 2
+      },
+      {
+        "id": "ctr_2e385528a0ef4e6b874d9fc8ee77ef3c",
+        "version": 2
+      },
+      {
+        "id": "ctr_b5e474297f2e4c0cb8ec5832a3f01eb9",
+        "version": 2
+      },
+      {
+        "id": "ctr_2b3e0da9fade4e8f99a9e9352e7ef8d3",
+        "version": 2
+      },
+      {
+        "id": "ctr_a2d7aa56962345f99faeafe1bfc9acb3",
         "version": 2
       }
     ],
-    "active_sample_count_after": 0,
-    "scope": "Only the two verified synthetic records with session_id 01a1d341-229c-7ba3-ae49-892c344d2321; no other records touched"
-  },
-  "unrelated_hooks_and_toml_preserved": true,
-  "uninstall_installation_directory_absent": true,
-  "uninstall_sibling_temporary_or_backup_files_absent": true,
-  "cached_new_commands_noop_without_stdin": true,
-  "cached_new_commands_exit_code": 0,
-  "cached_new_commands_stdout": "{}\n",
-  "cached_new_commands_stderr": "",
-  "cached_new_commands_recreated_files": false,
-  "legacy_direct_cached_commands_retroactively_fixed": false,
-  "legacy_chat_reopen_required": true,
-  "review": {
-    "important_findings_fixed": 1,
-    "historical_spec_minor_fixed": true,
-    "blocking_findings_after_fixes": 0,
-    "unit_tests_independently_verified": 31,
-    "actual_v1_command_with_v2_receipt_rejected": true
+    "active_test_records_after": 0,
+    "scope": "Only seven synthetic records created by these probes. Existing team records unchanged."
   },
   "public_files": [
     {
@@ -191,60 +186,43 @@
     {
       "resource": "collector",
       "status": 200,
-      "bytes": 5311,
-      "sha256": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f",
+      "bytes": 6620,
+      "sha256": "2862605dd52e97898a8d33ea059ba13ec5220e177815518a466000a92075903e",
       "exact": true
     },
     {
       "resource": "document",
       "status": 200,
-      "bytes": 23135,
-      "sha256": "b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09",
+      "bytes": 24191,
+      "sha256": "35e28ef4fe15e570b1e5df6681da5f96024e1a15098cbcbe97796ae230eee7a6",
       "exact": true
     }
   ],
+  "review": {
+    "blocking_findings": 0,
+    "unit_tests_independently_verified": 37,
+    "deep_json_and_surrogate_rejected": true,
+    "literal_close_tag_inside_answer_preserved": true
+  },
   "historical_validation_files": [
     "validation-1.0.0.json",
-    "validation-1.0.1.json"
+    "validation-1.0.1.json",
+    "validation-1.0.2.json"
   ],
-  "historical_only_checks": [
-    "ten-case full lifecycle",
-    "real long-message owner reassembly",
-    "same-URL collector replacement while local hook unchanged",
-    "full permission and atomicity negative probes",
-    "1.0.1 combined read-only status/diagnosis filesystem snapshot"
-  ],
-  "table_permission_snapshot": {
-    "table_id": "cmwedlivf0xo2n32y1yx8j8yz",
-    "schema_version": 2,
-    "anonymous": {
-      "create": true,
-      "read": false,
-      "update": false,
-      "delete": false
-    },
-    "permissions_not_modified": true
-  },
-  "official_global_trust_metadata_cleanup_automated": false,
-  "normal_member_trust_ui_automated": false,
+  "historical_lifecycle_and_model_runs_not_rerun": true,
+  "existing_team_records_modified": false,
+  "global_configuration_modified": false,
   "windows_verified": false,
-  "global_configuration_modified_by_this_update": false,
-  "raw_logs_local_directory": "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-clean-102",
   "pushed": false,
   "synapse_app_released_or_deployed": false,
+  "raw_logs_local_directory": "/Users/liyang/Documents/code/github/Synapse/work/codex-team-hook-answers-103",
   "explainer": {
     "share_url": "https://synapse.d2.pub/share/shr_9NFKPQ03EAY0BJ99S2R56JX0ATVD5E9D",
     "item_id": "cmweh2bw216m3n32yi7isun8q",
-    "bytes": 47009,
-    "sha256": "a628f2c2cf42dec512868efbd7d22ca59bc8a55aaf863cbf7359a79bea960443",
     "cloud_copy_exact": true,
-    "dom_checks": {
-      "runtime_combinations": 16,
-      "update_choices": 3,
-      "management_prompts": 11,
-      "clipboard_success_and_fallback": true,
-      "dom_errors": [],
-      "browser_visual_verified": false
-    }
+    "sha256": "0cd41f0d4e4f4e4e9b051528aaaee2cd0b4573c65ddacb7a8471b3772e3d4974",
+    "bytes": 47812,
+    "static_checks": true,
+    "browser_visual_verified": false
   }
 }

@@ -1,6 +1,6 @@
 {
   "package_id": "sy-team-capture",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "status": "stable",
   "supported_platforms": [
     "macos"
@@ -13,7 +13,7 @@
       "assetId": "asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
       "itemId": "cmwedn5rj0xqvn32yundfz4mn",
       "url": "https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv",
-      "sha256": "f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f"
+      "sha256": "2862605dd52e97898a8d33ea059ba13ec5220e177815518a466000a92075903e"
     },
     "launcher": {
       "assetId": "asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC",
@@ -25,12 +25,12 @@
       "assetId": "asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
       "itemId": "cmwedp4jl0xunn32yx6v93fpk",
       "url": "https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
-      "sha256": "b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09"
+      "sha256": "35e28ef4fe15e570b1e5df6681da5f96024e1a15098cbcbe97796ae230eee7a6"
     }
   },
   "validation_file": "validation.json",
   "launcher_version": "1.0.1",
-  "collector_version": "1.0.1",
+  "collector_version": "1.0.2",
   "global_hooks_modified_by_publication": false,
   "registration_version": 2,
   "registration_sha256": "88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57"

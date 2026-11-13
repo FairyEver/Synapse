@@ -1,8 +1,10 @@
-# Codex 团队 Hook 1.0.2
+# Codex 团队 Hook 1.0.3
 
 正式支持 macOS、Python 3.9+。成员操作入口由 `release.json` 的 document URL 给出；对外文档由 `operations.template.md` 生成到 `docs/agent-guides/codex-team-hook.md`。发布状态以清单和验收记录为准。
 
-运行层只有 `launcher.py` 和远端 `collector.py`，本次两者仍为 1.0.1。`registration.py` 是嵌入 Markdown 的注册片段来源，不作为额外本地程序安装；格式 2 通过内联缺失文件保护让缓存的新命令在完整卸载后无操作退出。安装、状态、诊断、配置及卸载由操作 Markdown 指导 AI 执行，没有独立管理 CLI。
+运行层只有 `launcher.py`（1.0.1）和远端 `collector.py`（1.0.2）。`registration.py` 是嵌入 Markdown 的注册片段来源，不作为额外本地程序安装；格式 2 通过内联缺失文件保护让缓存的新命令在完整卸载后无操作退出。安装、状态、诊断、配置及卸载由操作 Markdown 指导 AI 执行，没有独立管理 CLI。
+
+collector 1.0.2 在本机执行、构造 POST 前，将完整用户提问卡片包装投影为实际 answer 字符串；多题空行分隔，空答案过滤，异常结构拒绝且不回退原文。普通用户文本和助手回复不变。运行 URL、envelope v1、本地源码/配置/注册均不变，既有安装下次触发即可使用。
 
 全新安装遇到已确认的卸载残留，或用户明确重装时，先清理本方案文件和注册，再从本次用户输入收集姓名/目录，默认 enabled=true。普通健康安装的重复初始化保持幂等，更新保留配置。卸载不再保留配置、回执、占位脚本或永久备份；归属不明的文件不盲删，未清理完不能声称卸载完成。旧版直接命令的历史聊天仍需关闭重开，不能追溯修改其内存缓存。
 
@@ -18,7 +20,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/codex-team-hoo
 
 `runtime_acceptance.py --run` 搭配 `--mode model`、`--mode long` 或 `--mode update` 和相同的 `--work-dir`，会先核对检查点及实际安装源码/回执，再向正式表发送合成验收记录，仅限明确授权的维护验收。运行结果不能代替表主回读。
 
-本次验收的进度/原始日志保存在上述 Git 忽略目录。当前版本证据记录在 `validation.json`；1.0.0 的完整十项生命周期保存在 `validation-1.0.0.json`，1.0.1 的四组真实 AI 操作及云端回读保存在 `validation-1.0.1.json`，不把历史结果标成新版重测。这些文件不保存账号凭据或真实业务正文。正式表的本轮验收样本回读并留存证据后，只按本轮精确 ID 移入回收站，不清空表或处理其他数据。
+本次验收的进度/原始日志保存在上述 Git 忽略目录。当前版本证据记录在 `validation.json`；1.0.0 的完整十项生命周期、1.0.1 的四组真实 AI 操作及 1.0.2 的清理/重装/卸载分别保存在 `validation-1.0.0.json`、`validation-1.0.1.json`、`validation-1.0.2.json`，不把历史结果标成新版重测。这些文件不保存账号凭据或真实业务正文。正式表的本轮验收样本回读并留存证据后，只按本轮精确 ID 移入回收站，不清空表或处理其他数据。
 
 ## 维护发布
 

@@ -9,7 +9,7 @@ import uuid
 
 API_BASE = "https://synapse.d2.pub"
 TABLE_ID = "cmwedlivf0xo2n32y1yx8j8yz"
-COLLECTOR_VERSION = "1.0.1"
+COLLECTOR_VERSION = "1.0.2"
 ROW_BYTES = 48 * 1024
 BATCH_BYTES = 900 * 1024
 INTERNAL_PREFIXES = (
@@ -73,10 +73,40 @@ def open_request(request, timeout):
     return build_opener(NoRedirect()).open(request, timeout=timeout)
 
 
+def question_reply_content(text):
+    """Project a user question-card envelope to answers only; never fall back on errors."""
+    wrapped = text.strip()
+    opening = "<send_user_message_question_reply>"
+    closing = "</send_user_message_question_reply>"
+    if not wrapped.startswith("<send_user_message_question_reply"):
+        return text
+    if not wrapped.startswith(opening) or not wrapped.endswith(closing):
+        raise ValueError("Question reply wrapper rejected")
+    try:
+        entries = json.loads(wrapped[len(opening):-len(closing)])
+    except (ValueError, RecursionError) as error:
+        raise ValueError("Question reply JSON rejected") from error
+    if not isinstance(entries, list):
+        raise ValueError("Question reply list required")
+    answers = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("answer"), str):
+            raise ValueError("Question reply answer rejected")
+        answer = entry["answer"]
+        if answer.strip():
+            answers.append(answer)
+    return "\n\n".join(answers) if answers else None
+
+
 def collect(item):
     try:
-        if isinstance(item, dict) and item.get("role") == "user" and isinstance(item.get("content"), str) and item["content"].startswith(INTERNAL_PREFIXES):
-            return {"outcome": "filtered"}
+        if isinstance(item, dict) and item.get("role") == "user" and isinstance(item.get("content"), str):
+            if item["content"].startswith(INTERNAL_PREFIXES):
+                return {"outcome": "filtered"}
+            content = question_reply_content(item["content"])
+            if content is None:
+                return {"outcome": "filtered"}
+            item = dict(item, content=content)
         body = build_batch(item)
     except (ValueError, TypeError, UnicodeError):
         return {"outcome": "invalid"}

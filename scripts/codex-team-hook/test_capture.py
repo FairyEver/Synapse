@@ -148,6 +148,96 @@ class CaptureTests(unittest.TestCase):
         item = self.envelope("This is an app-generated request for a suggested next user message. The user did not write this message.\nprivate")
         self.assertEqual(collector.collect(item)["outcome"], "filtered")
 
+    def submit_to_memory(self, collector, item):
+        submissions = []
+        class Response(io.BytesIO):
+            status = 201
+            def __init__(self, data):
+                super().__init__(data)
+                self.headers = {"Content-Length": str(len(data))}
+        def receive(request, timeout):
+            operations = json.loads(request.data)["operations"]
+            submissions.append(operations)
+            return Response(json.dumps({"data": [{"id": "row-" + str(index), "version": 1}
+                                                  for index in range(len(operations))]}).encode())
+        with patch.object(collector, "open_request", side_effect=receive):
+            status = collector.collect(item)
+        return status, submissions
+
+    def card_reply(self, entries):
+        return "<send_user_message_question_reply>\n" + json.dumps(entries, ensure_ascii=False) + "\n</send_user_message_question_reply>"
+
+    def test_question_reply_submits_only_actual_answer_without_mutating_input(self):
+        collector = self.module("collector")
+        raw = self.card_reply([{"questionItemId": "PRIVATE-CARD-ID", "question": "PRIVATE-QUESTION",
+                                "answer": "先只运行统计采集"}])
+        item = self.envelope(raw)
+        status, submissions = self.submit_to_memory(collector, item)
+        self.assertEqual(status["outcome"], "success")
+        self.assertEqual(len(submissions), 1)
+        self.assertEqual(submissions[0][0]["values"]["content"], "先只运行统计采集")
+        self.assertNotIn("PRIVATE", json.dumps(submissions))
+        self.assertNotIn("send_user_message_question_reply", json.dumps(submissions))
+        self.assertEqual(item["content"], raw)
+
+    def test_multiple_question_answers_preserve_text_order_and_unicode(self):
+        collector = self.module("collector")
+        first, second = '  方案 A\n补充说明 🧪  ', '引号"与\\路径'
+        raw = " \n" + self.card_reply([{"answer": first, "question": "PRIVATE"}, {"answer": " \n "},
+                                      {"answer": second, "questionItemId": "PRIVATE"}]) + "\n "
+        status, submissions = self.submit_to_memory(collector, self.envelope(raw))
+        self.assertEqual(status["outcome"], "success")
+        self.assertEqual(submissions[0][0]["values"]["content"], first + "\n\n" + second)
+
+    def test_empty_question_answers_are_filtered_without_submission(self):
+        collector = self.module("collector")
+        for entries in [[], [{"answer": ""}], [{"answer": " \n\t "}]]:
+            with self.subTest(entries=entries):
+                status, submissions = self.submit_to_memory(collector, self.envelope(self.card_reply(entries)))
+                self.assertEqual(status["outcome"], "filtered")
+                self.assertEqual(submissions, [])
+
+    def test_malformed_question_reply_never_falls_back_to_raw_structure(self):
+        collector = self.module("collector")
+        malformed = [self.card_reply({"answer": "text"}), self.card_reply([{"question": "PRIVATE"}]),
+                     self.card_reply([{"answer": {"text": "PRIVATE"}}]), self.card_reply([{"answer": 123}]),
+                     self.card_reply([{"answer": "valid"}, {"answer": None}]),
+                     '<send_user_message_question_reply>not JSON</send_user_message_question_reply>',
+                     '<send_user_message_question_reply bad="true">[]</send_user_message_question_reply>',
+                     self.card_reply([{"answer": "text"}]) + " unexpected trailing structure",
+                     '<send_user_message_question_reply>[{"answer":"text"}]',
+                     self.card_reply([{"answer": "bad\x00answer"}])]
+        for raw in malformed:
+            with self.subTest(raw=raw[:100]):
+                status, submissions = self.submit_to_memory(collector, self.envelope(raw))
+                self.assertEqual(status["outcome"], "invalid")
+                self.assertEqual(submissions, [])
+
+    def test_normal_user_text_and_assistant_question_examples_are_unchanged(self):
+        collector = self.module("collector")
+        wrapper = self.card_reply([{"answer": "example", "question": "literal example"}])
+        for role, content in [("user", "普通文字\n保持原文"), ("user", "解释这个例子：" + wrapper), ("assistant", wrapper)]:
+            item = self.envelope(content)
+            item.update(role=role, event_name="Stop" if role == "assistant" else "UserPromptSubmit")
+            status, submissions = self.submit_to_memory(collector, item)
+            self.assertEqual(status["outcome"], "success")
+            self.assertEqual(submissions[0][0]["values"]["content"], content)
+
+    def test_question_answer_is_normalized_before_lossless_splitting_and_budget(self):
+        collector = self.module("collector")
+        answer = '中文🧪\\"\n' * 14000
+        raw = self.card_reply([{"question": "PRIVATE", "answer": answer}])
+        status, submissions = self.submit_to_memory(collector, self.envelope(raw))
+        self.assertEqual(status["outcome"], "success")
+        self.assertEqual(len(submissions), 1)
+        rows = [op["values"] for op in submissions[0]]
+        self.assertGreater(len(rows), 1)
+        self.assertEqual("".join(row["content"] for row in rows), answer)
+        status, submissions = self.submit_to_memory(collector, self.envelope(self.card_reply([
+            {"question": "PRIVATE" * 150000, "answer": "只保留短答案"}])))
+        self.assertEqual(status["outcome"], "success")
+        self.assertEqual(submissions[0][0]["values"]["content"], "只保留短答案")
+
     def test_submission_failure_is_not_retried(self):
         collector = self.module("collector")
         attempts = []
