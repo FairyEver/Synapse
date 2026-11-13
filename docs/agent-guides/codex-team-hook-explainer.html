@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Codex 团队 Hook 1.0.1 技术说明：统一 Markdown 入口、本地薄启动器、远端采集器、云表与更新机制。">
+<meta name="description" content="Codex 团队 Hook 1.0.2 技术说明：统一 Markdown 入口、本地薄启动器、远端采集器、云表与更新机制。">
 <title>Codex 团队 Hook · 技术方案</title>
 <style>
 /* Reuse Synapse's neutral theme tokens; this document has no external assets. */
@@ -18,14 +18,14 @@
 <body>
 <a class="skip" href="#main">跳至正文</a>
 <div class="wrap">
-  <header class="topbar"><div class="brand">SYNAPSE / CODEX TEAM HOOK</div><div class="meta">技术方案 · 1.0.1<br>2026 年 11 月 13 日</div></header>
+  <header class="topbar"><div class="brand">SYNAPSE / CODEX TEAM HOOK</div><div class="meta">技术方案 · 1.0.2<br>2026 年 11 月 13 日</div></header>
   <div class="layout">
     <nav class="contents" aria-label="章节目录">
       <a href="#architecture"><span>01</span>整体结构</a><a href="#runtime"><span>02</span>一次触发</a><a href="#updates"><span>03</span>远端更新</a><a href="#data"><span>04</span>采集与存储</a><a href="#operations"><span>05</span>安装与管理</a><a href="#boundaries"><span>06</span>状态与边界</a><a href="#evidence"><span>07</span>验证与资源</a>
     </nav>
     <main id="main">
       <div class="hero">
-        <p class="eyebrow">Architecture explained / v1.0.1</p>
+        <p class="eyebrow">Architecture explained / v1.0.2</p>
         <h1>Codex 团队 Hook<span>技术方案</span></h1>
         <p class="lead">成员把 Markdown 链接交给 AI，由 AI 安装和管理。本地 Hook 每次命中采集目录后，下载并执行远端采集器，把用户输入或最新回复写入专用云表。</p>
         <div class="facts"><span>macOS · Python 3.9+</span><span>无需成员登录 Sy</span><span>本地薄入口 · 远端维护采集逻辑</span></div>
@@ -71,7 +71,7 @@
 
       <section class="section" id="updates" aria-labelledby="updates-title">
         <div class="section-head"><span class="index">03</span><h2 id="updates-title">为什么改采集逻辑，不必逐台改 Hook</h2></div>
-        <p class="section-intro">启动器保存的是稳定脚本地址。每次命中目录都重新下载，因此发布者替换同一地址的 collector 后，下一次触发会使用新版。文档、启动器、采集器分别管理版本。</p>
+        <p class="section-intro">启动器保存的是稳定脚本地址。每次命中目录都重新下载，因此发布者替换同一地址的 collector 后，下一次触发会使用新版。文档、启动器、采集器分别管理版本。本次文档 1.0.2 更新清理流程和注册格式 2，launcher / collector 源码仍为 1.0.1。</p>
         <div class="update-choices" role="group" aria-label="选择更新类型">
           <button type="button" class="button" data-update="collector" aria-pressed="true">改采集逻辑</button><button type="button" class="button" data-update="document" aria-pressed="false">改操作说明</button><button type="button" class="button" data-update="launcher" aria-pressed="false">改本地启动器</button>
         </div>
@@ -119,15 +119,15 @@
         <div class="section-head"><span class="index">05</span><h2 id="operations-title">所有管理动作，共用一份 Markdown</h2></div>
         <p class="section-intro">给成员的是一句话。具体步骤写在远端 Markdown 中，AI 每次接到管理请求都重新读取。姓名和采集目录由成员确定，可设置一个或多个目录，之后随时追加、移除或替换。</p>
         <div class="command-builder">
-          <div class="command-actions"><div><label for="management-action">要让 AI 做什么</label><select id="management-action"><option value="初始化hook">初始化</option><option value="检查我现在的状态">检查状态</option><option value="诊断我的hook">诊断</option><option value="追加采集目录 &lt;要新增的绝对目录&gt;">追加目录</option><option value="移除采集目录 &lt;要移除的绝对目录&gt;">移除目录</option><option value="将采集目录替换为 &lt;一个或多个绝对目录&gt;">替换目录</option><option value="停用我的hook">停用</option><option value="启用我的hook">启用</option><option value="更新我的hook">更新</option><option value="卸载我的hook">卸载</option></select></div><button type="button" class="button" id="copy-command">复制这句话</button></div>
+          <div class="command-actions"><div><label for="management-action">要让 AI 做什么</label><select id="management-action"><option value="初始化hook">初始化</option><option value="重新安装hook">先清理再重装</option><option value="检查我现在的状态">检查状态</option><option value="诊断我的hook">诊断</option><option value="追加采集目录 &lt;要新增的绝对目录&gt;">追加目录</option><option value="移除采集目录 &lt;要移除的绝对目录&gt;">移除目录</option><option value="将采集目录替换为 &lt;一个或多个绝对目录&gt;">替换目录</option><option value="停用我的hook">停用</option><option value="启用我的hook">启用</option><option value="更新我的hook">更新</option><option value="卸载我的hook">卸载</option></select></div><button type="button" class="button" id="copy-command">复制这句话</button></div>
           <label class="sr-only" for="command-preview">可转发给成员的完整提示词</label><textarea id="command-preview" readonly spellcheck="false">请根据 https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5 初始化hook</textarea><div id="copy-status" role="status" aria-live="polite"></div>
         </div>
-        <details open><summary>初始化：AI 具体会做什么</summary><div class="detail-content"><p>先检查已有安装和归属 → 复用已明确的姓名、目录，缺什么才询问 → 下载并校验 launcher → 创建权限受限的配置和安装回执 → 合并 UserPromptSubmit / Stop 两个 handler，保留其他 Hook → 按 Codex 正常机制审核 → 用合成输入和回复验收。</p><p>初始化提问会明确目录可自定义多个、以后可增删改。重复初始化不重复注册；已停用或卸载后重新初始化时保留原 enabled=false，明确请求启用才改变它。</p></div></details>
+        <details open><summary>初始化：AI 具体会做什么</summary><div class="detail-content"><p>先检查已有安装和归属 → 复用已明确的姓名、目录，缺什么才询问 → 下载并校验 launcher → 创建权限受限的配置和安装回执 → 合并 UserPromptSubmit / Stop 两个 handler，保留其他 Hook → 按 Codex 正常机制审核 → 用合成输入和回复验收。</p><p>初始化先检查残留。已确认的卸载残留先清理，再重新收集本次姓名与目录；明确重装时也先删除旧安装，新配置默认 enabled=true，不静默复用旧姓名、目录或停用状态。只有完整健康安装的普通重复初始化保持幂等。</p></div></details>
         <details><summary>检查、诊断：默认只读</summary><div class="detail-content"><p>读取配置、回执、源码和必要权限，核对命令转义、事件、版本、目录匹配和最近 outcome。可有界获取公开文件做静态检查，但不执行 collector、不发测试记录、不创建备份或回执。无法读取官方信任状态时报告 unknown。</p><p>诊断只给证据、原因和建议。用户明确请求修复或测试上报时，才执行对应变更。</p></div></details>
         <details><summary>配置和启停：只修改指定字段</summary><div class="detail-content"><p>姓名、目录、enabled 分别修改；先验证、备份并核对并发变更。修改目录不重置姓名，也不启用停用中的 Hook。后续事件重新读取配置，不补采旧消息。启停只影响本方案，不关闭其他 Hook。</p></div></details>
-        <details><summary>升级：先判断本地入口是否需要变</summary><div class="detail-content"><p>文档或 collector 更新本身不要求重装。启动器版本、源码、协议或运行地址确实变化时，才备份并升级本方案，保留成员配置和其他注册。本次 1.0.1 有 launcher 修复，已装旧版的成员可使用上面的“更新”提示词。</p></div></details>
-        <details><summary>卸载：移除自己的注册，保留兼容入口</summary><div class="detail-content"><p>识别本方案的精确参数和回执，备份、停用，再精确移除自己的两个 handler。旧聊天可能缓存命令，因此 launcher 留为只输出 {} 的无操作文件，并保留 disabled 配置和卸载回执；不会关闭全局 Hook 或删除其他方案。</p><p>已在途的请求可能在 15 秒窗口内完成。卸载不会删除云表、历史记录、公开素材或用户项目；确认无旧进程引用后，才能清理可证明独占的残留。</p></div></details>
-        <details><summary>电脑上实际留下哪些文件</summary><div class="detail-content"><p>默认目录 <code>~/.codex/hooks/sy-team-capture/</code>；如已设置 CODEX_HOME，则使用对应配置目录，AI 不修改该环境变量。</p><div class="table-wrap"><table><thead><tr><th>文件</th><th>用途</th></tr></thead><tbody><tr><td>launcher.py</td><td>薄启动器；安装时核对发布源码 SHA-256</td></tr><tr><td>config.json</td><td>version=1、enabled、member_name、project_roots</td></tr><tr><td>installation.json</td><td>安装来源、版本、SHA、精确 handler、归属和审核/验证情况</td></tr><tr><td>last-run.json</td><td>最近一次脱敏 outcome、event_id、launcher_version、recorded_at</td></tr><tr><td>backups/</td><td>本方案变更前的备份</td></tr></tbody></table></div><p>目录权限为 0700，主要文件为 0600。两个事件注册合并到 Codex 配置中；必要时只修改 features.hooks 对应字段。命令通过参数数组和 shlex.join 生成，安全处理空格、引号和 $() 等特殊路径。</p></div></details>
+        <details><summary>升级：先判断本地入口是否需要变</summary><div class="detail-content"><p>文档或 collector 更新本身不要求重装。启动器版本、源码、协议或运行地址确实变化时，才备份并升级本方案，保留成员配置和其他注册。本次 1.0.2 的注册格式增加内联缺失文件保护，即使 launcher 源码不变，也须更新旧的直接调用命令。更新保留成员配置；“重新安装”则先清理再全新配置。</p></div></details>
+        <details><summary>卸载：删除本方案文件和注册</summary><div class="detail-content"><p>证明归属后，临时备份、停用并精确移除本方案 handler；等待有限在途窗口，再删除本方案 launcher、配置、回执、last-run、备份和已确认缓存，最终移除安装目录。成功后清理临时副本，不保留占位脚本或把旧配置搬到别处。保留其他 Hook；未知文件不盲删，未清理完不能报告完成。</p><p>格式 2 的注册命令自带内联保护：安装文件已删除时输出 {}、退出 0，不读输入、不重建目录。旧版聊天缓存的直接 Python 命令无法追溯修改，需关闭重开。官方全局信任记录无法安全定位时单独报告未核实，不清空全局数据库。卸载不删除云表、历史记录、公开素材或用户项目。</p></div></details>
+        <details><summary>电脑上实际留下哪些文件</summary><div class="detail-content"><p>默认目录 <code>~/.codex/hooks/sy-team-capture/</code>；如已设置 CODEX_HOME，则使用对应配置目录，AI 不修改该环境变量。</p><div class="table-wrap"><table><thead><tr><th>文件</th><th>用途</th></tr></thead><tbody><tr><td>launcher.py</td><td>薄启动器；安装时核对发布源码 SHA-256</td></tr><tr><td>config.json</td><td>version=1、enabled、member_name、project_roots</td></tr><tr><td>installation.json</td><td>安装来源、版本、SHA、精确 handler、归属和审核/验证情况</td></tr><tr><td>last-run.json</td><td>最近一次脱敏 outcome、event_id、launcher_version、recorded_at</td></tr><tr><td>backups/</td><td>本方案变更前的备份</td></tr></tbody></table></div><p>目录权限为 0700，主要文件为 0600。两个事件使用注册格式 2 的内联缺失文件保护，合并到 Codex 配置中；无需多装一个保护文件。必要时只修改 features.hooks 对应字段。命令通过参数数组和 shlex.join 生成，安全处理空格、引号和 $() 等特殊路径。</p></div></details>
       </section>
 
       <section class="section" id="boundaries" aria-labelledby="boundaries-title">
@@ -140,15 +140,16 @@
 
       <section class="section" id="evidence" aria-labelledby="evidence-title">
         <div class="section-head"><span class="index">07</span><h2 id="evidence-title">已经验证什么，以及从哪里继续</h2></div>
-        <p class="section-intro">以下是已有发布记录，不是页面运行时发起的测试。1.0.1 的本轮结果和 1.0.0 的历史验证分开记录。</p>
-        <div class="evidence-grid"><article><div class="evidence-number">27</div><h3>1.0.1 离线测试通过</h3><p>覆盖路径边界、转义、输出隔离、限时、分片原文、截断下载/回执、异常处理和验收身份校验。</p></article><article><div class="evidence-number">4 组</div><h3>1.0.1 真实 AI 操作</h3><p>隔离安装、合并只读检查与诊断、卸载、停用状态下重新初始化。保留预置的其他 Hook；只读检查前后文件内容、权限和修改时间一致。</p></article><article><div class="evidence-number">2 条</div><h3>1.0.1 真实云端回读</h3><p>真实 Codex 输入与最终回复逐字一致，collector_version 为 1.0.1。核对后仅将本轮两条合成记录移入回收站。</p></article></div>
-        <div class="note"><p><strong>1.0.0 历史证据：</strong>完整十项生命周期；182,000 字节长消息以 5 个分片完整重组；同链接替换远端脚本后执行新版且本地 Hook 不变；权限和原子批次负例。这些没有冒充 1.0.1 的重新全量验收。</p><p>本轮独立审阅发现的两项 Important 均已修复并复测。真实操作使用隔离配置，不代表成员的正式信任界面已被代为审核，也没有启用真实全局 Hook。</p></div>
+        <p class="section-intro">以下是已有发布记录，不是页面运行时发起的测试。1.0.2 的本轮结果与 1.0.1 / 1.0.0 的历史验证分开记录。</p>
+        <div class="evidence-grid"><article><div class="evidence-number">31</div><h3>1.0.2 离线测试通过</h3><p>覆盖原有采集链路，以及缺失文件保护、特殊路径、精确注册识别、无残留卸载校验；实际命令必须为格式 2，不能只相信回执。</p></article><article><div class="evidence-number">3 组</div><h3>1.0.2 真实 AI 操作</h3><p>旧残留清理后全新初始化、完整安装显式重装、卸载后再次卸载。旧姓名/目录和执行回执未被沿用；最终目录消失、无旁边临时副本，保留混合组内其他 Hook。</p></article><article><div class="evidence-number">2 条</div><h3>1.0.2 新注册链路回读</h3><p>实际格式 2 命令触发真实 Codex 输入与最终回复，云端逐字一致；运行 collector 仍为 1.0.1。核对后仅将本轮两条合成记录移入回收站。</p></article></div>
+        <div class="note"><p><strong>1.0.0 历史证据：</strong>完整十项生命周期；182,000 字节长消息以 5 个分片完整重组；同链接替换远端脚本后执行新版且本地 Hook 不变；权限和原子批次负例。1.0.1 另有四组生命周期及真实回读。上述均为历史记录，没有冒充 1.0.2 的重新全量验收。</p><p>本轮独立审阅发现的命令格式验收盲点已修复并复测。安装文件全部删除后，实际缓存的新命令仍输出 {}、退出 0，不读取 stdin，也未重建文件。真实操作使用隔离配置，未修改当前电脑的真实全局安装，也不代表成员的正式信任界面已被代为审核。</p></div>
         <ul class="resource-list"><li><div><strong>正式操作 Markdown</strong><small>成员安装、检查、目录调整、启停、更新、卸载的统一入口</small></div><a href="https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5" target="_blank" rel="noopener noreferrer">打开文档 ↗</a></li><li><div><strong>launcher 1.0.1 源码</strong><small>版本化资源；旧版文件保留，可用于核对和回滚</small></div><a href="https://synapse.d2.pub/files/asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>动态 collector</strong><small>稳定运行地址；本页对应的发布版本为 1.0.1</small></div><a href="https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>Codex 官方 Hooks 说明</strong><small>成员按当前官方机制完成信任审核</small></div><a href="https://learn.chatgpt.com/docs/hooks" target="_blank" rel="noopener noreferrer">官方文档 ↗</a></li></ul>
-        <details><summary>发布指纹与证据文件</summary><div class="detail-content"><p>以下 SHA-256 对应本页引用的 1.0.1 发布快照。collector 之后可以更新，其当时版本以实际记录为准。</p><pre>launcher  05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879
+        <details><summary>发布指纹与证据文件</summary><div class="detail-content"><p>以下 SHA-256 对应 1.0.2 操作文档与注册片段，以及 1.0.1 运行源码。collector 之后可以更新，其当时版本以实际记录为准。</p><pre>launcher  05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879
 collector f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f
-Markdown  f3e483f4a31cb52070abc32e31cc34b242b36c6c38038e77f5fc6d34a38c6fa5</pre><p>代码与发布清单位于仓库 scripts/codex-team-hook/；本轮证据为 validation.json，历史证据为 validation-1.0.0.json。程序与文档发布文件已匿名下载并逐字节核对。</p></div></details>
+Markdown  b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09
+注册片段  88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57</pre><p>代码与发布清单位于仓库 scripts/codex-team-hook/；本轮证据为 validation.json，历史证据为 validation-1.0.0.json 和 validation-1.0.1.json。程序与文档发布文件已匿名下载并逐字节核对。</p></div></details>
       </section>
-      <footer class="footer"><p>本页解释 1.0.1 已实现方案。成员的实际操作步骤，以当次重新读取的正式 Markdown 为准。</p></footer>
+      <footer class="footer"><p>本页解释 1.0.2 操作方案；运行源码仍为 1.0.1，注册格式为 2。成员的实际操作步骤，以当次重新读取的正式 Markdown 为准。</p></footer>
     </main>
   </div>
 </div>
@@ -205,7 +206,7 @@ function renderRuntime() {
 const updates = {
   collector:["替换同一链接的 collector","例如更换目标表、过滤规则或字段映射，保持 envelope v1 兼容。","无需修改本地 Hook","只要协议和运行地址兼容，姓名、目录、注册命令都保持原样。","下一次命中目录的事件","已在运行的请求可能仍执行旧版；失败的历史消息不会补采。"],
   document:["替换同一链接的 Markdown","例如调整提问文案、诊断流程、目录增删改步骤或注意事项。","下次管理时仍发同一链接","AI 重新读取最新说明；已运行的 Hook 不会因文档修改而自行重装。","下一次读取文档的管理动作","运行时不读取 Markdown，改文档不会直接改变已安装代码或配置。"],
-  launcher:["发布新启动器并更新 Markdown","例如修复本地下载校验、执行方式、协议或运行地址。","根据同一文档更新我的hook","AI 备份、校验、替换自己的文件和必要注册，保留姓名、目录、enabled 和其他 Hook。","该成员完成本地更新之后","仅发布新文件不会自动替换成员电脑上的 launcher；必要时重新审核确切 Hook。"]
+  launcher:["发布启动器或注册格式并更新 Markdown","例如修复本地下载校验、执行方式、协议、运行地址或注册格式。","根据同一文档更新我的hook","AI 备份、校验、替换自己的文件和必要注册，保留姓名、目录、enabled 和其他 Hook。","该成员完成本地更新之后","仅发布新内容不会自动替换成员电脑上的文件或注册；必要时重新审核确切 Hook。"]
 };
 function renderUpdate(key) {
   const ids=["update-where","update-example","update-member","update-member-detail","update-when","update-when-detail"];

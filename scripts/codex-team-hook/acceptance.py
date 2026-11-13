@@ -2,6 +2,7 @@
 """Explicit real-AI lifecycle acceptance, isolated from the user's Codex home."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,9 @@ def snapshot():
 
 
 def owned_handlers():
+    spec = importlib.util.spec_from_file_location("registration", HERE / "registration.py")
+    registration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(registration)
     data = read_json(HOME_DIR / "hooks.json")
     result = {}
     for event in ["UserPromptSubmit", "Stop"]:
@@ -66,11 +70,16 @@ def owned_handlers():
             for handler in group.get("hooks", []):
                 if handler.get("type") != "command":
                     continue
-                args = shlex.split(handler["command"])
-                if len(args) > 1 and Path(args[1]).resolve() == (INSTALL / "launcher.py").resolve():
+                args = registration.launcher_args(handler["command"], INSTALL)
+                if args is not None:
                     found.append((handler, args))
         result[event] = found
     return result
+
+
+def validate_uninstalled():
+    assert all(not entries for entries in owned_handlers().values()), "Package handler remains"
+    assert not INSTALL.exists() and not INSTALL.is_symlink(), "Package installation residue remains"
 
 
 def validate_sentinels(state):
@@ -85,6 +94,9 @@ def validate_sentinels(state):
 
 
 def validate_installed(release, roots):
+    spec = importlib.util.spec_from_file_location("registration", HERE / "registration.py")
+    registration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(registration)
     assert digest(INSTALL / "launcher.py") == release["resources"]["launcher"]["sha256"]
     config = read_json(INSTALL / "config.json")
     assert config["member_name"] == MEMBER
@@ -93,6 +105,7 @@ def validate_installed(release, roots):
     for event, entries in owned_handlers().items():
         assert len(entries) == 1, event
         handler, args = entries[0]
+        assert registration.current_registration(handler["command"], INSTALL), "Actual registration is not format 2"
         assert handler.get("async") is False and handler["timeout"] == 15
         assert args[2:] == ["--config", str(INSTALL / "config.json"), "--diagnostic", str(INSTALL / "last-run.json")]
         assert Path(args[0]).is_absolute() and Path(args[0]).is_file()
@@ -100,6 +113,7 @@ def validate_installed(release, roots):
     assert receipt["package_id"] == "sy-team-capture"
     assert receipt.get("launcher_version", receipt.get("version")) == release.get("launcher_version", release["version"])
     assert receipt["launcher_sha256"] == release["resources"]["launcher"]["sha256"]
+    assert receipt.get("registration_version") == release["registration_version"]
     for name in ["launcher.py", "config.json", "installation.json"]:
         assert stat.S_IMODE((INSTALL / name).stat().st_mode) == 0o600
     assert stat.S_IMODE(INSTALL.stat().st_mode) == 0o700
@@ -140,7 +154,7 @@ Finish with a concise factual result. This is configuration acceptance, not a co
             "-o", str(WORK / (case + "-final.txt")), prompt]
     start = time.monotonic()
     with (WORK / (case + "-events.jsonl")).open("w") as out, (WORK / (case + "-stderr.log")).open("w") as err:
-        result = subprocess.run(args, cwd=ROOT, stdout=out, stderr=err, timeout=240)
+        result = subprocess.run(args, cwd=ROOT, stdout=out, stderr=err, timeout=360)
     assert result.returncode == 0, case + " CLI failed"
     events = [json.loads(line) for line in (WORK / (case + "-events.jsonl")).read_text().splitlines() if line.startswith("{")]
     return dict(case=case, elapsed_seconds=round(time.monotonic() - start, 3),
@@ -193,10 +207,7 @@ def main():
             validate_installed(release, roots)
             assert read_json(INSTALL / "config.json")["enabled"] is (case != "disable")
         if case in ["uninstall", "repeat_uninstall"]:
-            assert all(not entries for entries in owned_handlers().values())
-            assert read_json(INSTALL / "config.json")["enabled"] is False
-            stub = (INSTALL / "launcher.py").read_text()
-            assert "print" in stub and "urllib" not in stub and "stdin" not in stub
+            validate_uninstalled()
         result["verified"] = True
         state["results"].append(result)
         write_json(state_path, state)

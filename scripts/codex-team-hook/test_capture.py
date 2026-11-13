@@ -222,11 +222,24 @@ class CaptureTests(unittest.TestCase):
             (install / "installation.json").write_text(json.dumps(dict(package_id="sy-team-capture",
                 launcher_version="1.0.1", launcher_sha256=sha)))
             (install / "config.json").write_text('{"enabled":true}')
-            with patch.object(runtime, "WORK", root), patch.object(runtime, "INSTALL", install):
+            with patch.object(runtime, "WORK", root), patch.object(runtime, "HOME_DIR", root), patch.object(runtime, "INSTALL", install):
                 (root / "lifecycle.json").write_text('{"results":[{"verified":true}]}')
                 with self.assertRaises(ValueError):
                     runtime.validate_runtime_install(release)
                 (root / "lifecycle.json").write_text(json.dumps({"release_identity": identity}))
+                self.assertEqual(runtime.validate_runtime_install(release)["launcher_sha256"], sha)
+                receipt = json.loads((install / "installation.json").read_text())
+                receipt["registration_version"] = 2
+                (install / "installation.json").write_text(json.dumps(receipt))
+                release["registration_version"] = 2
+                legacy = shlex.join([sys.executable, str(install / "launcher.py"), "--config", str(install / "config.json"),
+                                     "--diagnostic", str(install / "last-run.json")])
+                (root / "hooks.json").write_text(json.dumps({"hooks": {event: [{"hooks": [{"type":"command", "command":legacy,
+                  "async":False,"timeout":15}]}] for event in ["UserPromptSubmit", "Stop"]}}))
+                with self.assertRaises(ValueError):
+                    runtime.validate_runtime_install(release)
+                registration = self.module("registration")
+                (root / "hooks.json").write_text(json.dumps(registration.hook_fragment(sys.executable, install)))
                 self.assertEqual(runtime.validate_runtime_install(release)["launcher_sha256"], sha)
                 (install / "launcher.py").write_bytes(source + b"# changed\n")
                 with self.assertRaises(ValueError):
@@ -342,6 +355,73 @@ class CaptureTests(unittest.TestCase):
                                     shell=True, cwd=folder, input="{}", text=True, capture_output=True, timeout=5)
             self.assertEqual(result.stdout, "{}\n")
             self.assertFalse((root / "UNEXPECTED").exists())
+
+    def test_cached_registration_after_full_removal_is_noop_without_stdin(self):
+        self.assertTrue((HERE / "registration.py").is_file(), "Missing inline registration guard")
+        registration = self.module("registration")
+        with tempfile.TemporaryDirectory() as folder:
+            installation = Path(folder) / 'removed $scope "quoted"'
+            command = registration.hook_fragment(sys.executable, installation)["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+            child = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, cwd=folder)
+            try:
+                self.assertEqual(child.wait(timeout=2), 0)
+                self.assertEqual(child.stdout.read(), b"{}\n")
+                self.assertEqual(child.stderr.read(), b"")
+                self.assertFalse(installation.exists())
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait()
+                child.stdin.close()
+                child.stdout.close()
+                child.stderr.close()
+
+    def test_guarded_registration_preserves_exact_arguments(self):
+        self.assertTrue((HERE / "registration.py").is_file(), "Missing guarded registration")
+        registration = self.module("registration")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / 'entry $(touch UNEXPECTED) "quoted"'
+            root.mkdir()
+            (root / "launcher.py").write_text('import json,sys\nprint(json.dumps(sys.argv))\n')
+            handler = registration.hook_fragment(sys.executable, root)["hooks"]["Stop"][0]["hooks"][0]
+            result = subprocess.run(handler["command"], shell=True, cwd=folder,
+                                    input="", text=True, capture_output=True, timeout=3)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(json.loads(result.stdout), [str(root / "launcher.py"), "--config", str(root / "config.json"),
+                                                       "--diagnostic", str(root / "last-run.json")])
+            self.assertFalse((Path(folder) / "UNEXPECTED").exists())
+
+    def test_registration_ownership_accepts_exact_v1_v2_but_not_lookalikes(self):
+        self.assertTrue((HERE / "registration.py").is_file(), "Missing registration parser")
+        registration = self.module("registration")
+        root = Path("/tmp/sy-team-capture-example")
+        legacy = [sys.executable, str(root / "launcher.py"), "--config", str(root / "config.json"),
+                  "--diagnostic", str(root / "last-run.json")]
+        current = registration.hook_fragment(sys.executable, root)["hooks"]["Stop"][0]["hooks"][0]["command"]
+        self.assertEqual(registration.launcher_args(current, root), legacy)
+        self.assertEqual(registration.launcher_args(shlex.join(legacy), root), legacy)
+        self.assertIsNone(registration.launcher_args(shlex.join(legacy + ["--other"]), root))
+        self.assertIsNone(registration.launcher_args(current.replace(str(root / "config.json"), "/tmp/other.json"), root))
+        self.assertIsNone(registration.launcher_args(current.replace("runpy.run_path", "exec"), root))
+        self.assertIsNone(registration.launcher_args(123, root))
+        self.assertTrue(hasattr(registration, "current_registration"), "Missing actual registration version check")
+        self.assertTrue(registration.current_registration(current, root))
+        self.assertFalse(registration.current_registration(shlex.join(legacy), root))
+
+    def test_complete_uninstall_validation_rejects_any_package_residue(self):
+        acceptance = self.module("acceptance")
+        self.assertTrue(hasattr(acceptance, "validate_uninstalled"), "Missing full-removal validation")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            install = root / "hooks/sy-team-capture"
+            (root / "hooks.json").write_text('{"hooks":{}}')
+            with patch.object(acceptance, "HOME_DIR", root), patch.object(acceptance, "INSTALL", install):
+                acceptance.validate_uninstalled()
+                install.mkdir(parents=True)
+                (install / "config.json").write_text('{"enabled":false,"member_name":"OLD"}')
+                with self.assertRaises(AssertionError):
+                    acceptance.validate_uninstalled()
 
 
 if __name__ == "__main__":

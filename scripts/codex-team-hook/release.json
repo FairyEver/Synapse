@@ -1,6 +1,6 @@
 {
   "package_id": "sy-team-capture",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "status": "stable",
   "supported_platforms": [
     "macos"
@@ -25,11 +25,13 @@
       "assetId": "asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
       "itemId": "cmwedp4jl0xunn32yx6v93fpk",
       "url": "https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5",
-      "sha256": "f3e483f4a31cb52070abc32e31cc34b242b36c6c38038e77f5fc6d34a38c6fa5"
+      "sha256": "b654a187d98641b77f55d9d3cff7ad8a1e358501c2b572666f634c242d585c09"
     }
   },
   "validation_file": "validation.json",
   "launcher_version": "1.0.1",
   "collector_version": "1.0.1",
-  "global_hooks_modified_by_publication": false
+  "global_hooks_modified_by_publication": false,
+  "registration_version": 2,
+  "registration_sha256": "88556a3c1d6148b7a85b2d8067478f742e7f4d4024d53843402ecf9b364a0f57"
 }

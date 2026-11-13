@@ -32,6 +32,19 @@ def validate_runtime_install(release):
         raise ValueError("Runtime fixture launcher/receipt does not match the current release")
     if json.loads((INSTALL / "config.json").read_text()).get("enabled") is not True:
         raise ValueError("Runtime fixture is disabled")
+    if "registration_version" in release and receipt.get("registration_version") != release["registration_version"]:
+        raise ValueError("Runtime fixture registration version does not match the current release")
+    if "registration_version" in release:
+        spec = importlib.util.spec_from_file_location("registration", HERE / "registration.py")
+        registration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(registration)
+        hooks = json.loads((HOME_DIR / "hooks.json").read_text()).get("hooks", {})
+        for event in ["UserPromptSubmit", "Stop"]:
+            owned = [handler for group in hooks.get(event, []) for handler in group.get("hooks", [])
+                     if handler.get("type") == "command" and registration.launcher_args(handler.get("command"), INSTALL) is not None]
+            if (len(owned) != 1 or not registration.current_registration(owned[0]["command"], INSTALL)
+                    or owned[0].get("async") is not False or owned[0].get("timeout") != 15):
+                raise ValueError("Runtime fixture actual registration does not match format 2")
     return {"release_identity": identity, "launcher_sha256": actual}
 
 

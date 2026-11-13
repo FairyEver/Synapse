@@ -21,9 +21,19 @@ def main():
                                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == constant for t in node.targets)), None)
         if source_version != release.get(name + "_version", release["version"]):
             raise ValueError("Source/manifest version mismatch: " + name)
+    registration = (HERE / "registration.py").read_text(encoding="utf-8")
+    if hashlib.sha256(registration.encode("utf-8")).hexdigest() != release["registration_sha256"]:
+        raise ValueError("Source/manifest hash mismatch: registration")
+    registration_tree = ast.parse(registration)
+    registration_version = next((ast.literal_eval(node.value) for node in registration_tree.body
+                                 if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "REGISTRATION_VERSION" for t in node.targets)), None)
+    if registration_version != release["registration_version"]:
+        raise ValueError("Source/manifest version mismatch: registration")
     values = {"VERSION": release["version"],
               "LAUNCHER_VERSION": release.get("launcher_version", release["version"]),
               "COLLECTOR_VERSION": release.get("collector_version", release["version"]),
+              "REGISTRATION_VERSION": str(release["registration_version"]),
+              "REGISTRATION_SOURCE": registration.rstrip(),
               "STATUS": "正式可用" if release["status"] == "stable" else "验收中",
               "LAUNCHER_URL": release["resources"]["launcher"]["url"],
               "LAUNCHER_SHA256": release["resources"]["launcher"]["sha256"],
