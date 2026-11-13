@@ -1,0 +1,207 @@
+{
+  "date": "2026-11-13",
+  "purpose": "Synthetic-data-only Codex team hook pilot",
+  "table_id": "cmweb87wj0s3yn32y9jn6mw46",
+  "table_name": "Codex团队Hook链路试验_2026-11-13",
+  "anonymous": {
+    "create": true,
+    "read": false,
+    "update": false,
+    "delete": false
+  },
+  "script_asset_id": "asset_rbKu7B3gkHoEQo7q4u7vYEiiNvhEI5lw",
+  "script_url": "https://synapse.d2.pub/files/asset_rbKu7B3gkHoEQo7q4u7vYEiiNvhEI5lw",
+  "global_hooks_installed": false,
+  "windows_runtime_verified": false,
+  "long_message": {
+    "exact": true,
+    "parts": 5,
+    "bytes": 182000,
+    "ids": [
+      "ctr_371d9da0cbbb475094ecc9b01953fbd4",
+      "ctr_de7d6186c33740e7b906822a6f5aa323",
+      "ctr_69c8af8c860d4c44a38a3121f118a82a",
+      "ctr_4edfb38d37bc430390c70366dc221e1b",
+      "ctr_aafb38d4076641c086ccbc1f01d0141e"
+    ]
+  },
+  "sync_thread_id": "01a1d295-f13a-7b23-8171-46f612bc1ab6",
+  "sync_records": [
+    {
+      "id": "ctr_81611b92df76450696f79c94dfc476e5",
+      "event_id": "c9abac0e-4ccd-471e-ab5c-06f02a4d77a5",
+      "session_id": "01a1d295-f13a-7b23-8171-46f612bc1ab6",
+      "turn_id": "01a1d295-f86d-7f73-bdaa-d20f6e24cf43",
+      "role": "user",
+      "content": "请不要调用任何工具。只回复：SY_CODEX_PILOT_SYNC_OK_20261113",
+      "collector_version": "pilot-v2"
+    },
+    {
+      "id": "ctr_d908a1af3c474ace89295b9c8da5e96e",
+      "event_id": "cfec1828-36ea-48b6-b1ba-eeff74e40105",
+      "session_id": "01a1d295-f13a-7b23-8171-46f612bc1ab6",
+      "turn_id": "01a1d295-f86d-7f73-bdaa-d20f6e24cf43",
+      "role": "assistant",
+      "content": "SY_CODEX_PILOT_SYNC_OK_20261113",
+      "collector_version": "pilot-v2"
+    }
+  ],
+  "async_thread_id": "01a1d293-c2e3-73a3-a27f-a398708b0c45",
+  "async_result": "Only user prompt persisted; Stop canceled at CLI exit",
+  "default_async": false,
+  "markdown_asset_id": "asset_hteNuYclquwONy38GKhx0In3D6Vz9XwI",
+  "markdown_url": "https://synapse.d2.pub/files/asset_hteNuYclquwONy38GKhx0In3D6Vz9XwI",
+  "launcher_asset_id": "asset_6i3r5qWJ8IdFtmytgV6iQ7VGWq0AfuHb",
+  "launcher_url": "https://synapse.d2.pub/files/asset_6i3r5qWJ8IdFtmytgV6iQ7VGWq0AfuHb",
+  "cloud_checks": [
+    {
+      "case": "v2",
+      "status": {
+        "outcome": "success",
+        "event_id": "8a3eb192-5ff2-4594-875e-cb0b39a3d342"
+      }
+    },
+    {
+      "case": "filter",
+      "status": {
+        "outcome": "filtered",
+        "event_id": "7fd66add-572d-4b89-9561-8a544aa8535a"
+      }
+    },
+    {
+      "case": "long",
+      "status": {
+        "outcome": "success",
+        "event_id": "2b7efd05-6fa5-4108-9b9d-c4029a2a5351"
+      },
+      "content_bytes": 182000,
+      "content_sha256": "3e630ec8894333750edffe7b32032415d4333461c10f944368b3827aa63389d5"
+    },
+    {
+      "case": "outside",
+      "status": {
+        "outcome": "skipped"
+      }
+    },
+    {
+      "case": "missing_download",
+      "status": {
+        "outcome": "download_failed",
+        "event_id": "f38806d4-9c3d-4427-ba2e-ec7a9c000d59"
+      }
+    },
+    {
+      "case": "anonymous_read",
+      "http_status": 403
+    },
+    {
+      "case": "anonymous_query",
+      "http_status": 403
+    },
+    {
+      "case": "anonymous_update",
+      "http_status": 403
+    },
+    {
+      "case": "anonymous_delete",
+      "http_status": 403
+    },
+    {
+      "case": "anonymous_count",
+      "http_status": 403
+    }
+  ],
+  "fault_checks": [
+    {
+      "case": "SY_TEST_SCRIPT_FAILURE",
+      "status": {
+        "outcome": "script_failed",
+        "event_id": "24b41e60-4994-4276-8eb5-e22446a62a84"
+      },
+      "seconds": 0.638
+    },
+    {
+      "case": "SY_TEST_TIMEOUT",
+      "status": {
+        "outcome": "script_timeout",
+        "event_id": "46de0c22-be87-493e-b42c-f111b7ddc164"
+      },
+      "seconds": 6.471
+    },
+    {
+      "case": "SY_TEST_HTTP_FAILURE",
+      "status": {
+        "outcome": "failed",
+        "event_id": "d59d55f3-32a6-48b5-8fde-476c5f3ae311"
+      },
+      "seconds": 0.7
+    }
+  ],
+  "source_sha256": {
+    "launcher.py": "3031d33102b002202ba52718d3b79435f6e0f18aa129693801e91d997bb9796f",
+    "collector.py": "916bca1588d6fb9f03eeab7a0f363d863c7312af90aa19a505704e40e97293cd"
+  },
+  "codex_version": "0.167.0-alpha.4.1",
+  "python_version": "3.9.6",
+  "collector_version": "pilot-v2",
+  "real_download_failure": {
+    "mode": "download-failure",
+    "exit": 0,
+    "elapsed_seconds": 9.915,
+    "thread_ids": [
+      "01a1d297-7c30-7e10-a16f-d3890a06265c"
+    ],
+    "prompt": "请不要调用任何工具。只回复：SY_CODEX_PILOT_DOWNLOAD_FAILURE_OK_20261113",
+    "final": "SY_CODEX_PILOT_DOWNLOAD_FAILURE_OK_20261113",
+    "final_exact": true,
+    "launcher_sha256": "3031d33102b002202ba52718d3b79435f6e0f18aa129693801e91d997bb9796f"
+  },
+  "ai_install": {
+    "launcher_exact": true,
+    "launcher_sha256": "3031d33102b002202ba52718d3b79435f6e0f18aa129693801e91d997bb9796f",
+    "events": [
+      "UserPromptSubmit",
+      "Stop"
+    ],
+    "async": false,
+    "timeout": 15,
+    "source": "Downloaded from public Markdown and launcher URLs by real Codex AI",
+    "global_registered": false,
+    "guide_snapshot_sha256": "079d280cab64ba51410016d5def95bc7cde933cd7a74903d1bdd4fc133da0704",
+    "cloud_verification": {
+      "thread_id": "01a1d29c-0cab-7ed1-9f6f-69b0ee452792",
+      "exact": true,
+      "rows": [
+        {
+          "id": "ctr_b34c2f41b426409189e8044894bc474b",
+          "event_id": "2cb27764-3b24-4d42-9425-8e4d3512094a",
+          "member_name": "AI隔离安装试验成员",
+          "session_id": "01a1d29c-0cab-7ed1-9f6f-69b0ee452792",
+          "turn_id": "01a1d29c-12d3-7750-9342-2e180176e04f",
+          "role": "user",
+          "content": "请不要调用任何工具。只回复：SY_AI_INSTALLED_HOOK_OK_20261113",
+          "collector_version": "pilot-v2"
+        },
+        {
+          "id": "ctr_ea2a174789cd482983bfe25bba70e86b",
+          "event_id": "18372278-32d7-4f98-8fa9-fdede079e0b0",
+          "member_name": "AI隔离安装试验成员",
+          "session_id": "01a1d29c-0cab-7ed1-9f6f-69b0ee452792",
+          "turn_id": "01a1d29c-12d3-7750-9342-2e180176e04f",
+          "role": "assistant",
+          "content": "SY_AI_INSTALLED_HOOK_OK_20261113",
+          "collector_version": "pilot-v2"
+        }
+      ]
+    },
+    "initial_attempt": "Default workspace-write sandbox denied DNS; enabled network only for isolated test process, reran successfully"
+  },
+  "review": {
+    "tests_passed": 12,
+    "important_finding_fixed": "Generate POSIX command with shlex.join, not manually quoted paths",
+    "quoted_path_execution_verified": true,
+    "windows_verified": false,
+    "unresolved_blocking_findings": 0
+  },
+  "publishing_workaround": "Existing Sy strict UTF-8 decode of 4096-byte prefix can split a character; align Markdown prefix with a small ASCII comment, no server changes"
+}
