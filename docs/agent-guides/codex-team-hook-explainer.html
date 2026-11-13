@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Codex 团队 Hook 1.0.1 技术说明：统一 Markdown 入口、本地薄启动器、远端采集器、云表与更新机制。">
+<title>Codex 团队 Hook · 技术方案</title>
+<style>
+/* Reuse Synapse's neutral theme tokens; this document has no external assets. */
+:root{color-scheme:light;--background:oklch(1 0 0);--foreground:oklch(.145 0 0);--primary:oklch(.205 0 0);--primary-foreground:oklch(.985 0 0);--muted:oklch(.97 0 0);--muted-foreground:oklch(.556 0 0);--border:oklch(.922 0 0);--ring:oklch(.708 0 0);--selected:oklch(.945 0 0)}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--background);color:var(--foreground);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC",sans-serif;font-size:15px;line-height:1.8}a{color:inherit;text-underline-offset:4px}a:hover{text-decoration-thickness:2px}button,select,textarea{font:inherit;color:inherit}button,a,select,summary,textarea{-webkit-tap-highlight-color:var(--selected)}:focus-visible{outline:2px solid var(--ring);outline-offset:4px}button{cursor:pointer}button:disabled{cursor:default;opacity:.65}[hidden]{display:none!important}.wrap{max-width:1256px;margin:auto;padding:0 40px}.topbar{display:flex;justify-content:space-between;gap:20px;padding:24px 0;border-bottom:1px solid var(--border);font-size:13px}.brand{font-weight:650;letter-spacing:.04em}.meta,.muted{color:var(--muted-foreground)}.layout{display:grid;grid-template-columns:168px minmax(0,1fr);gap:56px}.contents{position:sticky;top:32px;align-self:start;padding-top:64px;font-size:13px}.contents a{display:block;padding:9px 0;text-decoration:none;color:var(--muted-foreground)}.contents a:hover,.contents a:focus-visible{color:var(--foreground)}.contents span{font-family:monospace;display:inline-block;width:26px;font-size:11px}main{min-width:0}.hero{padding:65px 0 45px}.eyebrow{margin:0 0 20px;font-family:ui-monospace,"SF Mono",monospace;letter-spacing:.08em;font-size:11px;text-transform:uppercase;color:var(--muted-foreground)}h1{margin:0;font-size:clamp(34px,4.6vw,58px);letter-spacing:-.04em;line-height:1.18;font-weight:650}h1 span{display:block}.lead{font-size:18px;line-height:1.9;max-width:720px;margin:28px 0 24px}.facts{display:flex;gap:12px 24px;flex-wrap:wrap;font-size:12px;color:var(--muted-foreground)}.facts span{border-left:2px solid var(--border);padding-left:12px}.section{padding:43px 0 48px;border-top:1px solid var(--border);scroll-margin-top:24px}.section-head{display:flex;gap:18px;align-items:baseline;margin-bottom:24px}.index{font:12px ui-monospace,"SF Mono",monospace;color:var(--muted-foreground)}h2{margin:0;font-size:25px;line-height:1.4;letter-spacing:-.02em;font-weight:620}h3{font-size:17px;margin:0 0 10px;font-weight:620}p{margin:0 0 16px}.section-intro{max-width:700px;color:var(--muted-foreground);margin-bottom:28px}.overview{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:30px 0 24px}.node{position:relative;padding:16px 14px 18px 0;border-top:2px solid var(--primary);min-width:0}.node+.node{padding-left:18px}.node+.node:before{content:"→";position:absolute;left:-5px;top:45px;background:var(--background);color:var(--muted-foreground)}.node small{font:10px ui-monospace,"SF Mono",monospace;text-transform:uppercase;color:var(--muted-foreground)}.node strong{display:block;margin:8px 0 6px;font-size:16px;font-weight:620}.node p{margin:0;font-size:12px;line-height:1.8;color:var(--muted-foreground)}.note{border-left:2px solid var(--border);padding:2px 0 2px 18px;font-size:14px;margin:22px 0}.note p:last-child{margin-bottom:0}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:30px}.definition{border-top:1px solid var(--border);padding-top:18px}.definition p{font-size:14px;color:var(--muted-foreground)}code,pre,textarea{font-family:ui-monospace,"SF Mono",Menlo,monospace}code{font-size:.86em;overflow-wrap:anywhere}p code,td code,li code{background:var(--muted);padding:2px 5px;border-radius:3px}pre{margin:16px 0 0;padding:20px;background:var(--muted);border-radius:6px;overflow:auto;max-width:100%;font-size:12px;line-height:1.8;tab-size:2}.controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:16px 22px;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}label{display:block;font-size:12px;color:var(--muted-foreground);margin-bottom:7px}select{border:1px solid var(--border);background:var(--background);border-radius:5px;padding:9px 32px 9px 11px;max-width:100%;min-height:42px;font-size:14px}.button{border:1px solid var(--border);border-radius:5px;min-height:42px;padding:9px 16px;background:var(--background);font-size:14px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}.button.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}.button:hover{background:var(--muted)}.button.primary:hover{opacity:.85;background:var(--primary)}.demo-caption{font-size:12px;color:var(--muted-foreground);margin:14px 0 22px}.runtime{list-style:none;margin:0;padding:0;counter-reset:flow}.runtime li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:14px;padding:16px 0;border-bottom:1px solid var(--border);align-items:start}.runtime li:before{counter-increment:flow;content:counter(flow,decimal-leading-zero);font:12px ui-monospace,"SF Mono",monospace;padding-top:5px;color:var(--muted-foreground)}.runtime h3{margin:0 0 3px;font-size:15px}.runtime p{margin:0;font-size:13px;color:var(--muted-foreground)}.state{font-size:11px;line-height:1.8;white-space:nowrap;padding:2px 7px;background:var(--muted);border-radius:3px;min-width:46px;text-align:center}.runtime li[data-state="done"] .state{background:var(--primary);color:var(--primary-foreground)}.runtime li[data-state="stop"] .state{border:1px solid var(--primary);background:var(--background);font-weight:650}.runtime li[data-state="skip"]{color:var(--muted-foreground)}.result{margin-top:24px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;padding:20px 0;border-top:2px solid var(--primary)}.result code{font-size:12px;font-weight:650}.result p{margin:0;font-size:14px}.result small{display:block;font-size:12px;color:var(--muted-foreground);margin-top:5px}.update-choices{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 22px}.update-choices button[aria-pressed="true"]{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}.update-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:25px}.update-grid article{padding-top:18px;border-top:1px solid var(--border)}.update-grid .label{display:block;font-size:11px;color:var(--muted-foreground);margin-bottom:7px}.update-grid p{font-size:14px;margin:0}.table-wrap{overflow-x:auto;margin:22px 0}table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}th{font-weight:550;color:var(--muted-foreground);font-size:11px;padding:11px 12px 11px 0;border-bottom:1px solid var(--border)}td{padding:14px 12px 14px 0;vertical-align:top;border-bottom:1px solid var(--border)}td:first-child{font-weight:550}.limits{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;margin:26px 0}.limit{padding-top:16px;border-top:1px solid var(--border)}.limit strong{display:block;font-size:24px;font-weight:550;letter-spacing:-.03em}.limit span{font-size:11px;color:var(--muted-foreground)}.pieces{display:flex;gap:10px;margin:20px 0;align-items:center;flex-wrap:wrap}.piece{padding:9px 14px;background:var(--muted);font-size:12px;font-family:ui-monospace,"SF Mono",monospace}.reassemble{font-size:12px;color:var(--muted-foreground)}.plain-list{padding:0;list-style:none;margin:0}.plain-list li{padding:13px 0;border-bottom:1px solid var(--border);font-size:14px}.plain-list li strong{display:block;font-size:14px;margin-bottom:3px}.plain-list li span{color:var(--muted-foreground);font-size:13px}.command-builder{margin:26px 0 20px}.command-builder .command-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}textarea{display:block;width:100%;min-height:110px;resize:vertical;border:1px solid var(--border);border-radius:5px;background:var(--muted);padding:16px;font-size:12px;line-height:1.9;overflow-wrap:anywhere}#copy-status{min-height:24px;font-size:12px;color:var(--muted-foreground);margin-top:8px}details{border-bottom:1px solid var(--border)}summary{cursor:pointer;padding:18px 22px 18px 0;font-size:15px;font-weight:550;list-style:none;position:relative}summary::-webkit-details-marker{display:none}summary:after{content:"+";position:absolute;right:0;font:18px ui-monospace,monospace;font-weight:400}details[open] summary:after{content:"−"}.detail-content{padding:0 0 22px;font-size:14px;color:var(--muted-foreground)}.detail-content p:last-child{margin:0}.milestones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin:24px 0}.milestone{padding:14px 16px 0 0;border-top:2px solid var(--border)}.milestone strong{display:block;font-size:14px;margin-bottom:4px}.milestone span{font-size:12px;color:var(--muted-foreground)}.evidence-number{font:28px ui-monospace,"SF Mono",monospace;font-weight:550;letter-spacing:-.04em;margin:0 0 6px}.evidence-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}.evidence-grid article{padding-top:18px;border-top:1px solid var(--border)}.evidence-grid p{font-size:13px;color:var(--muted-foreground)}.resource-list{list-style:none;padding:0;margin:0}.resource-list li{display:flex;justify-content:space-between;gap:18px;padding:15px 0;border-bottom:1px solid var(--border);font-size:13px}.resource-list small{color:var(--muted-foreground);display:block}.resource-list a{align-self:center;white-space:nowrap}.footer{border-top:1px solid var(--border);padding:26px 0 42px;font-size:12px;color:var(--muted-foreground)}.footer p{margin:0}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.skip{position:absolute;left:20px;top:-100px;z-index:2;background:var(--background);padding:10px}.skip:focus{top:10px}
+@media(max-width:1050px){.layout{grid-template-columns:135px minmax(0,1fr);gap:30px}.wrap{padding:0 28px}.node{padding-right:8px}.node+.node{padding-left:14px}.node strong{font-size:14px}.milestones{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}}
+@media(max-width:760px){.wrap{padding:0 22px}.topbar{padding:18px 0;align-items:flex-start}.meta{text-align:right;font-size:11px}.layout{display:block}.contents{position:static;display:flex;gap:4px 17px;flex-wrap:wrap;padding-top:18px;padding-bottom:15px;border-bottom:1px solid var(--border)}.contents a{padding:3px 0;font-size:12px}.contents span{width:auto;margin-right:5px;font-size:10px}.hero{padding:42px 0 32px}.lead{font-size:16px;margin-top:22px}.section{padding:32px 0 38px}.section-head{gap:12px;margin-bottom:20px}h2{font-size:22px}.overview{grid-template-columns:1fr;margin:24px 0}.node,.node+.node{padding:13px 0 13px 32px;border-top:0;border-left:2px solid var(--border)}.node+.node:before{content:"↓";left:-7px;top:-4px;padding:0 0 3px}.node strong{font-size:15px;display:inline;margin-left:12px}.node p{margin:6px 0 0;max-width:420px}.two-col,.update-grid{grid-template-columns:1fr;gap:22px}.controls{gap:15px}.controls>div{flex:1 1 135px}.controls select{width:100%}.controls>button{width:100%}.runtime li{grid-template-columns:25px minmax(0,1fr) auto;gap:8px}.runtime h3{font-size:14px}.runtime p{font-size:12px}.state{font-size:10px;min-width:40px;padding:2px 5px}.result{grid-template-columns:1fr;gap:9px}.update-choices button{flex:1 1 auto}.limits{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.milestones{grid-template-columns:1fr 1fr;gap:20px}.milestone{padding-right:14px}.evidence-grid{grid-template-columns:1fr}.evidence-number{font-size:25px}.resource-list li{align-items:start;gap:12px}.resource-list a{font-size:12px}.table-wrap{margin:18px 0}td,th{min-width:95px}td:last-child{min-width:170px}.command-actions>div{flex:1 1 150px}.command-actions select{width:100%}pre{padding:16px;font-size:11px}textarea{min-height:145px}.footer{padding-bottom:30px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{.contents,.controls,.update-choices,.command-builder,.skip{display:none}.wrap{max-width:none;padding:0}.layout{display:block}.hero{padding-top:25px}.section{break-inside:avoid}.topbar{padding-top:0}a{text-decoration:none}body{font-size:11pt}.section-intro,.muted{color:var(--foreground)}details .detail-content{display:block}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳至正文</a>
+<div class="wrap">
+  <header class="topbar"><div class="brand">SYNAPSE / CODEX TEAM HOOK</div><div class="meta">技术方案 · 1.0.1<br>2026 年 11 月 13 日</div></header>
+  <div class="layout">
+    <nav class="contents" aria-label="章节目录">
+      <a href="#architecture"><span>01</span>整体结构</a><a href="#runtime"><span>02</span>一次触发</a><a href="#updates"><span>03</span>远端更新</a><a href="#data"><span>04</span>采集与存储</a><a href="#operations"><span>05</span>安装与管理</a><a href="#boundaries"><span>06</span>状态与边界</a><a href="#evidence"><span>07</span>验证与资源</a>
+    </nav>
+    <main id="main">
+      <div class="hero">
+        <p class="eyebrow">Architecture explained / v1.0.1</p>
+        <h1>Codex 团队 Hook<span>技术方案</span></h1>
+        <p class="lead">成员把 Markdown 链接交给 AI，由 AI 安装和管理。本地 Hook 每次命中采集目录后，下载并执行远端采集器，把用户输入或最新回复写入专用云表。</p>
+        <div class="facts"><span>macOS · Python 3.9+</span><span>无需成员登录 Sy</span><span>本地薄入口 · 远端维护采集逻辑</span></div>
+      </div>
+
+      <section class="section" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-head"><span class="index">01</span><h2 id="architecture-title">五个角色，各自负责什么</h2></div>
+        <div class="overview" aria-label="Markdown 由 AI 读取，AI 安装本地启动器；启动器下载远端采集器；采集器写入云表">
+          <div class="node"><small>Public document</small><strong>操作 Markdown</strong><p>解释安装、检查、诊断、配置、更新、卸载。</p></div>
+          <div class="node"><small>Member's AI</small><strong>成员的 AI</strong><p>读取说明，询问姓名与目录，修改本机配置。</p></div>
+          <div class="node"><small>Local entry</small><strong>本地 launcher</strong><p>响应 Codex 事件，匹配目录，下载并调用远端程序。</p></div>
+          <div class="node"><small>Remote logic</small><strong>远端 collector</strong><p>执行过滤、字段映射、正文分片和单次提交。</p></div>
+          <div class="node"><small>Private records</small><strong>专用云表</strong><p>匿名新增；原始对话不向匿名访问者开放读取。</p></div>
+        </div>
+        <div class="note"><p><strong>Markdown 是给 AI 看的操作规程。</strong>它不参与每条消息的上报，也不会在每次 Hook 触发时重新读取。运行时下载的是 collector 脚本。</p></div>
+        <div class="two-col">
+          <div class="definition"><h3>安装与管理这一层</h3><p>“根据这个文件初始化 / 检查 / 卸载” → AI 重新读取同一份 Markdown → 只执行本次请求的动作。管理操作没有另一套 launcher CLI。</p></div>
+          <div class="definition"><h3>消息采集这一层</h3><p>Codex 事件 → 本地启动器 → 远端脚本 → 云表。这里由程序自动执行，AI 不需要每轮自行决定是否上报。</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="runtime" aria-labelledby="runtime-title">
+        <div class="section-head"><span class="index">02</span><h2 id="runtime-title">一条消息，如何走完整条链路</h2></div>
+        <p class="section-intro">选择一个情形，查看程序会执行到哪里。目录判断发生在下载之前；超时和异常最终都返回正常 Hook 输出，不要求 Codex 中断对话。</p>
+        <div class="controls">
+          <div><label for="demo-event">触发事件</label><select id="demo-event"><option value="user">用户提交输入</option><option value="assistant">AI 生成最终回复</option></select></div>
+          <div><label for="demo-scope">事件所在目录</label><select id="demo-scope"><option value="inside">命中采集目录</option><option value="outside">范围外</option></select></div>
+          <div><label for="demo-outcome">网络 / 执行情形</label><select id="demo-outcome"><option value="success">完整提交回执</option><option value="download_failed">下载失败</option><option value="script_timeout">执行超时</option><option value="unknown">提交回执丢失或截断</option></select></div>
+          <button type="button" class="button primary" id="demo-run">演示一次事件</button>
+        </div>
+        <p class="demo-caption">本页为交互示意，仅改变页面展示，不运行 Hook、不下载脚本、不提交记录。外层超时 15 秒；下载硬限 5 秒；远端执行硬限 6 秒。</p>
+        <ol class="runtime" id="runtime-steps">
+          <li data-state="done"><div><h3>Codex 触发事件</h3><p>UserPromptSubmit 提供 prompt；Stop 提供 last_assistant_message。</p></div><span class="state">已触发</span></li>
+          <li data-state="done"><div><h3>读取配置，匹配 cwd</h3><p>检查 enabled、姓名、根目录；按真实路径和路径组件匹配。</p></div><span class="state">命中</span></li>
+          <li data-state="done"><div><h3>重新下载 collector</h3><p>请求稳定的公开 HTTPS 地址，校验长度、UTF-8 和 Python 语法。</p></div><span class="state">已下载</span></li>
+          <li data-state="done"><div><h3>执行远端逻辑</h3><p>标准输入传 envelope v1；过滤、字段映射、分片在 collector 中处理。</p></div><span class="state">已执行</span></li>
+          <li data-state="done"><div><h3>一次原子提交</h3><p>一条消息的所有分片装入一个批次；不自动重试或补发。</p></div><span class="state">有回执</span></li>
+          <li data-state="done"><div><h3>保存脱敏回执，输出 {}</h3><p>记录 outcome 等元数据，清理临时文件；远端任意输出不会注入模型上下文。</p></div><span class="state">已结束</span></li>
+        </ol>
+        <div class="result" id="demo-result" role="status" aria-live="polite"><code>outcome: success</code><div><p>收到合法的完整提交回执。</p><small>这仍不等于表主已经独立回读正文；两者是不同证据。</small></div></div>
+        <noscript><p class="note">当前环境没有运行 JavaScript，以上展示正常成功路径；其他情形见第 6 节。</p></noscript>
+      </section>
+
+      <section class="section" id="updates" aria-labelledby="updates-title">
+        <div class="section-head"><span class="index">03</span><h2 id="updates-title">为什么改采集逻辑，不必逐台改 Hook</h2></div>
+        <p class="section-intro">启动器保存的是稳定脚本地址。每次命中目录都重新下载，因此发布者替换同一地址的 collector 后，下一次触发会使用新版。文档、启动器、采集器分别管理版本。</p>
+        <div class="update-choices" role="group" aria-label="选择更新类型">
+          <button type="button" class="button" data-update="collector" aria-pressed="true">改采集逻辑</button><button type="button" class="button" data-update="document" aria-pressed="false">改操作说明</button><button type="button" class="button" data-update="launcher" aria-pressed="false">改本地启动器</button>
+        </div>
+        <div class="update-grid" id="update-result" aria-live="polite">
+          <article><span class="label">发布者改哪里</span><h3 id="update-where">替换同一链接的 collector</h3><p id="update-example">例如更换目标表、过滤规则或字段映射，保持 envelope v1 兼容。</p></article>
+          <article><span class="label">成员做什么</span><h3 id="update-member">无需修改本地 Hook</h3><p id="update-member-detail">只要协议和运行地址兼容，姓名、目录、注册命令都保持原样。</p></article>
+          <article><span class="label">何时使用新内容</span><h3 id="update-when">下一次命中目录的事件</h3><p id="update-when-detail">已在运行的请求可能仍执行旧版；失败的历史消息不会补采。</p></article>
+        </div>
+        <div class="note"><p>初始化时，AI 核对 launcher 的固定 SHA-256。collector 则是发布者可更新的程序，运行时不通过固定 SHA 将其锁死；它以成员当前用户权限执行。成员需要信任这个发布者。</p></div>
+        <div class="table-wrap"><table><thead><tr><th>本地启动器负责</th><th>远端采集器负责</th></tr></thead><tbody><tr><td>读取本机姓名、目录、启停配置</td><td>内部请求过滤规则</td></tr><tr><td>按事件 cwd 判断是否在范围内</td><td>目标云表和字段映射</td></tr><tr><td>下载、限时执行、隔离程序输出</td><td>原文分片、容量判断、单次 POST</td></tr><tr><td>标准 envelope、脱敏最近回执</td><td>判断服务器回执是否完整有效</td></tr></tbody></table></div>
+      </section>
+
+      <section class="section" id="data" aria-labelledby="data-title">
+        <div class="section-head"><span class="index">04</span><h2 id="data-title">发什么、存什么、谁能看</h2></div>
+        <div class="two-col">
+          <div><h3>只取事件提供的正文</h3><ul class="plain-list"><li><strong>UserPromptSubmit → user</strong><span>读取 prompt，记录用户这次提交的输入。</span></li><li><strong>Stop → assistant</strong><span>读取 last_assistant_message；不回扫整个聊天或 transcript。</span></li><li><strong>附带必要元数据</strong><span>成员自报姓名、匹配根目录名称、会话/轮次 ID、事件 ID、时间、平台和版本。</span></li></ul></div>
+          <div><h3>不主动收集其他内容</h3><ul class="plain-list"><li><strong>不单独读取附件、思考或工具输出</strong><span>正文中本来包含这些文字时，仍按正文原样处理。</span></li><li><strong>不发送完整 Hook payload</strong><span>envelope 不含项目绝对路径、transcript 路径或其他未批准字段。</span></li><li><strong>不遍历项目文件</strong><span>目录配置用于判断事件是否匹配，不代表读取整个目录的文件。</span></li></ul></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>配置根目录示例</th><th>事件 cwd</th><th>判断</th></tr></thead><tbody><tr><td><code>/Projects/team-app</code></td><td><code>/Projects/team-app/src</code></td><td>命中，项目名为 team-app</td></tr><tr><td><code>/Projects/team-app</code></td><td><code>/Projects/team-app-old</code></td><td>范围外，不因字符串前缀相似而命中</td></tr><tr><td>一个或多个已选根目录</td><td>重叠根目录的子目录</td><td>采用最长匹配根；按真实路径解析</td></tr></tbody></table></div>
+        <p class="muted">判断依据是事件 cwd。聊天中执行一次 shell cd，不表示事件 cwd 会随之改变。清空采集目录后，不匹配任何项目。</p>
+        <h3>长消息：完整分片，一次提交</h3>
+        <div class="pieces" aria-label="同一事件的多个正文分片合并为原文"><span class="piece">event_id · 1 / N</span><span class="piece">event_id · 2 / N</span><span class="piece">…</span><span class="piece">event_id · N / N</span><span class="reassemble">→ 按 part_index 重组原文</span></div>
+        <div class="limits"><div class="limit"><strong>48 KiB</strong><span>每条 values 的 JSON 字节上限</span></div><div class="limit"><strong>900 KiB</strong><span>单个批次整体上限</span></div><div class="limit"><strong>100 条</strong><span>每批操作数上限</span></div><div class="limit"><strong>1 次</strong><span>每条消息的提交请求</span></div></div>
+        <p>分片按 UTF-8 JSON 的实际字节预算计算，保留中文、换行、引号和 emoji 原文。整批超限就放弃整条消息，不截断，也不拆成多批逐次发送。启动器原始输入上限为 4 MiB，远端源码上限为 256 KiB。</p>
+        <div class="two-col">
+          <div class="definition"><h3>公开的是程序和说明</h3><p>操作 Markdown、launcher 和 collector 是公开资源。成员配置不保存表 ID、表主 token 或 API Key；目标表只在 collector 中维护。</p></div>
+          <div class="definition"><h3>记录只开放匿名新增</h3><p>“Codex 团队对话记录”云表不开放匿名读取、修改、删除和公开统计。成员无需 Sy 账号；表主用已登录身份回读。姓名自报，因此无法防止他人冒填。</p></div>
+        </div>
+        <details><summary>查看 envelope 与云表写入方式</summary><div class="detail-content"><p>下面是合成示例，不是实际对话记录。envelope 通过标准输入交给 collector；collector 增加分片字段和 collector_version，再以 operations 批量创建记录。</p><pre>{
+  "protocol_version": 1,
+  "event_id": "11111111-1111-4111-8111-111111111111",
+  "event_name": "UserPromptSubmit",
+  "event_at": "2026-11-13T04:00:00.000Z",
+  "session_id": "example-session",
+  "turn_id": "example-turn",
+  "member_name": "示例成员",
+  "project_name": "team-app",
+  "platform": "macos",
+  "role": "user",
+  "content": "这是一条合成示例。"
+}</pre><p>提交路径：<code>POST /api/open/v1/tables/{tableId}/records/batch</code>。每次生成新的 Idempotency-Key，但本版不执行自动重试；未知提交结果也不重发。</p></div></details>
+      </section>
+
+      <section class="section" id="operations" aria-labelledby="operations-title">
+        <div class="section-head"><span class="index">05</span><h2 id="operations-title">所有管理动作，共用一份 Markdown</h2></div>
+        <p class="section-intro">给成员的是一句话。具体步骤写在远端 Markdown 中，AI 每次接到管理请求都重新读取。姓名和采集目录由成员确定，可设置一个或多个目录，之后随时追加、移除或替换。</p>
+        <div class="command-builder">
+          <div class="command-actions"><div><label for="management-action">要让 AI 做什么</label><select id="management-action"><option value="初始化hook">初始化</option><option value="检查我现在的状态">检查状态</option><option value="诊断我的hook">诊断</option><option value="追加采集目录 &lt;要新增的绝对目录&gt;">追加目录</option><option value="移除采集目录 &lt;要移除的绝对目录&gt;">移除目录</option><option value="将采集目录替换为 &lt;一个或多个绝对目录&gt;">替换目录</option><option value="停用我的hook">停用</option><option value="启用我的hook">启用</option><option value="更新我的hook">更新</option><option value="卸载我的hook">卸载</option></select></div><button type="button" class="button" id="copy-command">复制这句话</button></div>
+          <label class="sr-only" for="command-preview">可转发给成员的完整提示词</label><textarea id="command-preview" readonly spellcheck="false">请根据 https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5 初始化hook</textarea><div id="copy-status" role="status" aria-live="polite"></div>
+        </div>
+        <details open><summary>初始化：AI 具体会做什么</summary><div class="detail-content"><p>先检查已有安装和归属 → 复用已明确的姓名、目录，缺什么才询问 → 下载并校验 launcher → 创建权限受限的配置和安装回执 → 合并 UserPromptSubmit / Stop 两个 handler，保留其他 Hook → 按 Codex 正常机制审核 → 用合成输入和回复验收。</p><p>初始化提问会明确目录可自定义多个、以后可增删改。重复初始化不重复注册；已停用或卸载后重新初始化时保留原 enabled=false，明确请求启用才改变它。</p></div></details>
+        <details><summary>检查、诊断：默认只读</summary><div class="detail-content"><p>读取配置、回执、源码和必要权限，核对命令转义、事件、版本、目录匹配和最近 outcome。可有界获取公开文件做静态检查，但不执行 collector、不发测试记录、不创建备份或回执。无法读取官方信任状态时报告 unknown。</p><p>诊断只给证据、原因和建议。用户明确请求修复或测试上报时，才执行对应变更。</p></div></details>
+        <details><summary>配置和启停：只修改指定字段</summary><div class="detail-content"><p>姓名、目录、enabled 分别修改；先验证、备份并核对并发变更。修改目录不重置姓名，也不启用停用中的 Hook。后续事件重新读取配置，不补采旧消息。启停只影响本方案，不关闭其他 Hook。</p></div></details>
+        <details><summary>升级：先判断本地入口是否需要变</summary><div class="detail-content"><p>文档或 collector 更新本身不要求重装。启动器版本、源码、协议或运行地址确实变化时，才备份并升级本方案，保留成员配置和其他注册。本次 1.0.1 有 launcher 修复，已装旧版的成员可使用上面的“更新”提示词。</p></div></details>
+        <details><summary>卸载：移除自己的注册，保留兼容入口</summary><div class="detail-content"><p>识别本方案的精确参数和回执，备份、停用，再精确移除自己的两个 handler。旧聊天可能缓存命令，因此 launcher 留为只输出 {} 的无操作文件，并保留 disabled 配置和卸载回执；不会关闭全局 Hook 或删除其他方案。</p><p>已在途的请求可能在 15 秒窗口内完成。卸载不会删除云表、历史记录、公开素材或用户项目；确认无旧进程引用后，才能清理可证明独占的残留。</p></div></details>
+        <details><summary>电脑上实际留下哪些文件</summary><div class="detail-content"><p>默认目录 <code>~/.codex/hooks/sy-team-capture/</code>；如已设置 CODEX_HOME，则使用对应配置目录，AI 不修改该环境变量。</p><div class="table-wrap"><table><thead><tr><th>文件</th><th>用途</th></tr></thead><tbody><tr><td>launcher.py</td><td>薄启动器；安装时核对发布源码 SHA-256</td></tr><tr><td>config.json</td><td>version=1、enabled、member_name、project_roots</td></tr><tr><td>installation.json</td><td>安装来源、版本、SHA、精确 handler、归属和审核/验证情况</td></tr><tr><td>last-run.json</td><td>最近一次脱敏 outcome、event_id、launcher_version、recorded_at</td></tr><tr><td>backups/</td><td>本方案变更前的备份</td></tr></tbody></table></div><p>目录权限为 0700，主要文件为 0600。两个事件注册合并到 Codex 配置中；必要时只修改 features.hooks 对应字段。命令通过参数数组和 shlex.join 生成，安全处理空格、引号和 $() 等特殊路径。</p></div></details>
+      </section>
+
+      <section class="section" id="boundaries" aria-labelledby="boundaries-title">
+        <div class="section-head"><span class="index">06</span><h2 id="boundaries-title">“配置好了”不等于“已经采到了”</h2></div>
+        <div class="milestones"><div class="milestone"><strong>配置已写入</strong><span>文件和注册存在</span></div><div class="milestone"><strong>enabled=true</strong><span>本方案配置允许采集</span></div><div class="milestone"><strong>官方已信任</strong><span>Codex 允许执行确切定义</span></div><div class="milestone"><strong>事件已执行</strong><span>有程序运行证据</span></div><div class="milestone"><strong>表主已回读</strong><span>正文与输入/回复核对一致</span></div></div>
+        <p>这些状态要分别判断。页面展示的是方案和历史验收，不是在检查你当前电脑。只看到 Hook 输出 <code>{}</code>，无法判断数据是否到达；<code>last-run: success</code> 也只是程序回执。</p>
+        <div class="table-wrap"><table><thead><tr><th>outcome / 现象</th><th>说明</th></tr></thead><tbody><tr><td>skipped / 没有新回执</td><td>停用、范围外、空回复或不适用事件可能直接跳过，通常不更新 last-run。</td></tr><tr><td>filtered</td><td>命中远端已知内部请求过滤规则。</td></tr><tr><td>invalid</td><td>输入、协议、内容或容量不符合要求，不等于网络故障。</td></tr><tr><td>download_failed</td><td>下载、完整性、语法、子进程启动或下载时限失败；本次不执行 collector。</td></tr><tr><td>script_failed / script_timeout</td><td>远端程序异常或超过 6 秒；可能已发出请求，不能认定云端没有记录。</td></tr><tr><td>failed</td><td>服务器明确拒绝；本版不自动重试。</td></tr><tr><td>unknown</td><td>可能已提交，但没有有效完整回执；不重发，避免制造重复。</td></tr><tr><td>success</td><td>收到合法提交回执；仍需表主独立回读才能确认正文。</td></tr></tbody></table></div>
+        <ul class="plain-list"><li><strong>可信发布者动态代码</strong><span>每次下载的程序以当前用户权限执行，没有新增沙箱或签名体系。公开资源可读，不代表可以不信任发布者。</span></li><li><strong>有限等待，失败丢失</strong><span>同步调用外层 15 秒，无正文队列、后台常驻、自动重试或补发。超时不证明服务器未写入。</span></li><li><strong>过滤是尽力识别</strong><span>已知内部请求可过滤；未知内部请求和关联回复仍可能混入。Stop 文本也不保证覆盖所有客户端、继续回合和中断组合。</span></li><li><strong>首版范围与聊天缓存</strong><span>正式范围是 macOS + Python 3.9+；Windows 未验收。已有聊天可能缓存配置，需重新打开并独立验收；官方审核仍由成员完成。</span></li></ul>
+      </section>
+
+      <section class="section" id="evidence" aria-labelledby="evidence-title">
+        <div class="section-head"><span class="index">07</span><h2 id="evidence-title">已经验证什么，以及从哪里继续</h2></div>
+        <p class="section-intro">以下是已有发布记录，不是页面运行时发起的测试。1.0.1 的本轮结果和 1.0.0 的历史验证分开记录。</p>
+        <div class="evidence-grid"><article><div class="evidence-number">27</div><h3>1.0.1 离线测试通过</h3><p>覆盖路径边界、转义、输出隔离、限时、分片原文、截断下载/回执、异常处理和验收身份校验。</p></article><article><div class="evidence-number">4 组</div><h3>1.0.1 真实 AI 操作</h3><p>隔离安装、合并只读检查与诊断、卸载、停用状态下重新初始化。保留预置的其他 Hook；只读检查前后文件内容、权限和修改时间一致。</p></article><article><div class="evidence-number">2 条</div><h3>1.0.1 真实云端回读</h3><p>真实 Codex 输入与最终回复逐字一致，collector_version 为 1.0.1。核对后仅将本轮两条合成记录移入回收站。</p></article></div>
+        <div class="note"><p><strong>1.0.0 历史证据：</strong>完整十项生命周期；182,000 字节长消息以 5 个分片完整重组；同链接替换远端脚本后执行新版且本地 Hook 不变；权限和原子批次负例。这些没有冒充 1.0.1 的重新全量验收。</p><p>本轮独立审阅发现的两项 Important 均已修复并复测。真实操作使用隔离配置，不代表成员的正式信任界面已被代为审核，也没有启用真实全局 Hook。</p></div>
+        <ul class="resource-list"><li><div><strong>正式操作 Markdown</strong><small>成员安装、检查、目录调整、启停、更新、卸载的统一入口</small></div><a href="https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5" target="_blank" rel="noopener noreferrer">打开文档 ↗</a></li><li><div><strong>launcher 1.0.1 源码</strong><small>版本化资源；旧版文件保留，可用于核对和回滚</small></div><a href="https://synapse.d2.pub/files/asset_m2gI0SFwqZKwlyC7zLzoN51qmxAbCmkC" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>动态 collector</strong><small>稳定运行地址；本页对应的发布版本为 1.0.1</small></div><a href="https://synapse.d2.pub/files/asset_KjiwAd1FTnDkJiT77HEQqa4xlpJ4wGEv" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></li><li><div><strong>Codex 官方 Hooks 说明</strong><small>成员按当前官方机制完成信任审核</small></div><a href="https://learn.chatgpt.com/docs/hooks" target="_blank" rel="noopener noreferrer">官方文档 ↗</a></li></ul>
+        <details><summary>发布指纹与证据文件</summary><div class="detail-content"><p>以下 SHA-256 对应本页引用的 1.0.1 发布快照。collector 之后可以更新，其当时版本以实际记录为准。</p><pre>launcher  05c2d59f2f4e9ce00a17fb1457d8cc51259eb646985c166d0754c5f3c7183879
+collector f087b0ccf2b2e673c3cd0982e23b8b09c138371322f1c1480e9a2c6d576e9b9f
+Markdown  f3e483f4a31cb52070abc32e31cc34b242b36c6c38038e77f5fc6d34a38c6fa5</pre><p>代码与发布清单位于仓库 scripts/codex-team-hook/；本轮证据为 validation.json，历史证据为 validation-1.0.0.json。程序与文档发布文件已匿名下载并逐字节核对。</p></div></details>
+      </section>
+      <footer class="footer"><p>本页解释 1.0.1 已实现方案。成员的实际操作步骤，以当次重新读取的正式 Markdown 为准。</p></footer>
+    </main>
+  </div>
+</div>
+<script>
+"use strict";
+const guideUrl = "https://synapse.d2.pub/files/asset_Mouwiox1pZskiD55W1zPJWuTJqaYPza5";
+const byId = id => document.getElementById(id);
+const baseSteps = [
+  ["Codex 触发事件", "UserPromptSubmit → prompt", "已触发"],
+  ["读取配置，匹配 cwd", "启用状态、姓名和目录有效；真实路径命中所选根目录。", "命中"],
+  ["重新下载 collector", "从稳定 HTTPS 链接下载；完整性、UTF-8 和语法校验通过。", "已下载"],
+  ["执行远端逻辑", "通过标准输入传 envelope v1；过滤、映射和分片均在远端程序中。", "已执行"],
+  ["一次原子提交", "一条消息只提交一个批次，收到合法的完整回执。", "有回执"],
+  ["保存脱敏回执，输出 {}", "写最近一次 outcome 等元数据，清理临时文件，正常结束 Hook。", "已结束"]
+];
+function runtimeScenario(scope, outcome, role) {
+  const steps = baseSteps.map(row => ({title:row[0],detail:row[1],label:row[2],state:"done"}));
+  steps[0].detail = role === "assistant" ? "Stop → last_assistant_message，仅取事件提供的最新回复字段。" : "UserPromptSubmit → prompt，仅取本次提交的用户输入。";
+  const end = {outcome:"success",title:"收到合法的完整提交回执。",detail:"这仍不等于表主已经独立回读正文；两者是不同证据。"};
+  if (scope === "outside") {
+    steps[1] = {...steps[1],state:"stop",label:"未命中",detail:"当前 cwd 不在所选根目录或子目录内，本地检查到此结束。"};
+    for (let i=2;i<6;i++) steps[i] = {...steps[i],state:"skip",label:"跳过",detail:i===5 ? "不更新 last-run，直接输出 {}。" : "本次不执行这一阶段。"};
+    Object.assign(end,{outcome:"skipped",title:"范围外：仅做本地检查，不下载、不发送。",detail:"不保存正文，也不更新最近回执；之后命中目录的新事件会独立判断。"});
+  } else if (outcome === "download_failed") {
+    steps[2] = {...steps[2],state:"stop",label:"失败",detail:"下载、长度/语法校验、子进程启动或 5 秒硬时限失败。"};
+    for (let i=3;i<5;i++) steps[i] = {...steps[i],state:"skip",label:"跳过",detail:"没有可用脚本，本次不执行 collector，也不由它提交记录。"};
+    steps[5].detail="尽力保存 download_failed，输出 {}；不排队、不补发。";
+    Object.assign(end,{outcome,title:"本次采集放弃，后续对话继续。",detail:"失败事件不自动重试；下一次符合条件的事件仍会重新下载。"});
+  } else if (outcome === "script_timeout") {
+    steps[3] = {...steps[3],state:"stop",label:"超时",detail:"远端程序运行超过 6 秒，被父进程终止。"};
+    steps[4] = {...steps[4],state:"stop",label:"不确定",detail:"程序被终止前可能已经提交，不能据此认定云端没有记录。"};
+    steps[5].detail="尽力保存 script_timeout，输出 {}；不会因为超时而重发。";
+    Object.assign(end,{outcome,title:"脚本超时；云端提交状态不能仅凭超时判断。",detail:"无后台任务接着补发，也不会把脚本输出交给模型。"});
+  } else if (outcome === "unknown") {
+    steps[4] = {...steps[4],state:"stop",label:"未知",detail:"请求可能已写入，但回执丢失、截断、超限或内容无效。"};
+    steps[5].detail="尽力保存 unknown，输出 {}；本次不自动重发。";
+    Object.assign(end,{outcome,title:"提交结果未知，可能已经写入云表。",detail:"保留不确定性，不把它误报为成功，也不因回执异常制造重复提交。"});
+  }
+  return {steps,end};
+}
+function renderRuntime() {
+  const model = runtimeScenario(byId("demo-scope").value,byId("demo-outcome").value,byId("demo-event").value);
+  const fragment = document.createDocumentFragment();
+  for (const step of model.steps) {
+    const li=document.createElement("li"),body=document.createElement("div"),title=document.createElement("h3"),detail=document.createElement("p"),state=document.createElement("span");
+    li.dataset.state=step.state; title.textContent=step.title; detail.textContent=step.detail; state.className="state"; state.textContent=step.label;
+    body.append(title,detail);li.append(body,state);fragment.append(li);
+  }
+  byId("runtime-steps").replaceChildren(fragment);
+  const code=document.createElement("code"),body=document.createElement("div"),title=document.createElement("p"),detail=document.createElement("small");
+  code.textContent="outcome: "+model.end.outcome;title.textContent=model.end.title;detail.textContent=model.end.detail;body.append(title,detail);byId("demo-result").replaceChildren(code,body);
+  byId("demo-outcome").disabled=byId("demo-scope").value==="outside";
+}
+const updates = {
+  collector:["替换同一链接的 collector","例如更换目标表、过滤规则或字段映射，保持 envelope v1 兼容。","无需修改本地 Hook","只要协议和运行地址兼容，姓名、目录、注册命令都保持原样。","下一次命中目录的事件","已在运行的请求可能仍执行旧版；失败的历史消息不会补采。"],
+  document:["替换同一链接的 Markdown","例如调整提问文案、诊断流程、目录增删改步骤或注意事项。","下次管理时仍发同一链接","AI 重新读取最新说明；已运行的 Hook 不会因文档修改而自行重装。","下一次读取文档的管理动作","运行时不读取 Markdown，改文档不会直接改变已安装代码或配置。"],
+  launcher:["发布新启动器并更新 Markdown","例如修复本地下载校验、执行方式、协议或运行地址。","根据同一文档更新我的hook","AI 备份、校验、替换自己的文件和必要注册，保留姓名、目录、enabled 和其他 Hook。","该成员完成本地更新之后","仅发布新文件不会自动替换成员电脑上的 launcher；必要时重新审核确切 Hook。"]
+};
+function renderUpdate(key) {
+  const ids=["update-where","update-example","update-member","update-member-detail","update-when","update-when-detail"];
+  ids.forEach((id,i)=>{byId(id).textContent=updates[key][i];});
+  document.querySelectorAll("[data-update]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.update===key)));
+}
+function renderCommand() {
+  byId("command-preview").value="请根据 "+guideUrl+" "+byId("management-action").value;
+  byId("copy-status").textContent=byId("management-action").value.includes("<") ? "请把尖括号占位符替换为实际绝对目录。" : "";
+}
+async function copyCommand() {
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard unavailable");
+    await navigator.clipboard.writeText(byId("command-preview").value);
+    byId("copy-status").textContent="已复制提示词。目录操作中的占位符需替换为实际路径。";
+  } catch (error) {
+    byId("command-preview").focus();byId("command-preview").select();
+    byId("copy-status").textContent="自动复制不可用，已选中提示词，请手动复制。";
+  }
+}
+byId("demo-run").addEventListener("click",renderRuntime);
+["demo-event","demo-scope","demo-outcome"].forEach(id=>byId(id).addEventListener("change",renderRuntime));
+document.querySelectorAll("[data-update]").forEach(button=>button.addEventListener("click",()=>renderUpdate(button.dataset.update)));
+byId("management-action").addEventListener("change",renderCommand);
+byId("copy-command").addEventListener("click",copyCommand);
+renderCommand();
+</script>
+</body>
+</html>
