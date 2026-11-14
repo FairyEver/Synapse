@@ -13,6 +13,7 @@ Use this guide for 云端数据表 / 云表, including using one as the data sou
 - Use the current signed-in Synapse desktop account. Discover with `search({ domain: "cloud_tables" })`, then search for the exact tool to get its complete input schema before calling `invoke`.
 - If no tool is found, the connected desktop runtime may need an update. If the tool reports `CLOUD_TABLE_ACCOUNT_REQUIRED`, ask the user to sign into the desktop client and check its connection. If the account changes, stop and rediscover the target under the new identity. The desktop client manages authentication internally.
 - `app_cloud_tables_table_list` returns your owned and accessible collaborator tables. Read the actual table ID and schema before record operations. Table ownership, collaborator permissions and row ownership are enforced by the server.
+- Table list and table trash summaries include `recordCount`, the transactionally maintained live record total without scanning records. It is a number only with effective `permissions.read: "all"`; otherwise it is `null`, including own-only readers and keys without read scope. Do not treat `null` as zero or infer whole-table counts from restricted access. Filtered/own-only counts still use `app_cloud_tables_record_count`.
 
 ## 结构与记录
 

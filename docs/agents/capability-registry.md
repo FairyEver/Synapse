@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-14 云表目录摘要增加受有效读取权限约束的 `recordCount`，同步既有系统 Skill 的返回说明。`cloud_tables` 仍为21项 capability / MCP 索引，全局仍为372 / 368；输入 schema、System App、Dock、IPC、Workflow、Automation 与 Deep Link 注册和下列表格数量不变。
+
 2026-11-11 内网穿透核心接入：新增 `tunnel` domain 六项 capability / MCP 索引和六项 typed IPC，全局 372 / 368。运行摘要事件仅 UI，后台恢复在窗口创建后执行。System App 从22增至23，可独立开窗，默认不固定 Dock；默认 Dock仍9项，Workflow、Automation、Deep Link无增量。
 
 穿透中文检索通过既有查询词表展开“内网穿透 / 穿透”“映射”“启停”，不改变检索权重或目录侧别名。权威 Skill 的 `tunnel/index.md` 与 `api-reference.md` 均声明只通过 `search` / `invoke` 调用；启动依赖、领域路由和打包门禁的测试夹具同步覆盖新增服务及六项能力，注册数量不变。

@@ -203,7 +203,9 @@ curl --fail-with-body "$SY_API_BASE_URL/api/open/v1/tables/$SY_TABLE_ID/schema" 
   --header "Authorization: Bearer $SY_API_KEY"
 ```
 
-列表返回 `{ "data": [表摘要], "nextCursor": null }`。摘要包含 `id`、`ownerId`、`viewerId`、`name`、`schemaVersion`、`createdAt`、`deletedAt`、`permissions`，不包含字段、匿名配置或协作者。
+列表返回 `{ "data": [表摘要], "nextCursor": null }`。摘要包含 `id`、`ownerId`、`viewerId`、`name`、`schemaVersion`、`createdAt`、`deletedAt`、`permissions`、`recordCount`，不包含字段、匿名配置或协作者。
+
+`recordCount` 是事务维护的未删除记录数，列表读取不扫描记录表。只有有效 `permissions.read` 为 `all` 时返回数字；仅本人可读、无读取权限或密钥缺少读取 scope 时返回 `null`，不泄露整表总数。空表返回 `0`，超出安全整数范围时返回 `COUNT_TOO_LARGE`。表回收站沿用同一计数规则，不包含记录回收站中的记录。
 
 `GET /tables/{id}` 和 `GET /tables/{id}/schema` 对获授权的密钥返回相同的表详情：
 

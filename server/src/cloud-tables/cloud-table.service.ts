@@ -125,7 +125,7 @@ export class CloudTableService {
         const namespace = `${actor.apiKeyId ?? actor.userId}:table.create`, fingerprint = createHash("sha256").update(stableJson(input)).digest("hex")
         const replay = await this.receipt(tx, namespace, ctx.idempotencyKey, fingerprint)
         if (replay !== undefined) return replay
-        const table = await tx.cloudTable.create({ data: { ownerId: actor.userId, name: data.name, fields: { create: data.fields.map((f, i) => ({ key: f.key, definition: json(f), position: i })) } }, include: { fields: true } })
+        const table = await tx.cloudTable.create({ data: { ownerId: actor.userId, name: data.name, stats: { create: {} }, fields: { create: data.fields.map((f, i) => ({ key: f.key, definition: json(f), position: i })) } }, include: { fields: true } })
         const result = { id: table.id, schemaVersion: table.schemaVersion }
         if (ctx.idempotencyKey) await tx.cloudTableReceipt.create({ data: { tableId: table.id, namespace, key: ctx.idempotencyKey, fingerprint, result: json(result) } })
         return result
@@ -144,8 +144,11 @@ export class CloudTableService {
         deletedAt: op === "table.trash" ? { gte: new Date(Date.now() - retentionMs) } : null,
         OR: op === "table.trash" ? [{ ownerId: actor.userId }] : [{ ownerId: actor.userId }, ...memberAccess],
         ...(key ? key.tableAccessMode === "all_owned" ? { ownerId: actor.userId } : { id: { ...(cursor ? { gt: cursor } : {}), in: key.tableIds } } : {}),
-      }, orderBy: { id: "asc" }, take: 51 })
-      return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, dailySummary: _dailySummary, publicCount: _publicCount, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
+      }, orderBy: { id: "asc" }, take: 51, include: { stats: { select: { recordCount: true } } } })
+      return { data: tables.slice(0, 50).map(t => {
+        const { fields: _fields, members: _members, anonymous: _anonymous, dailySummary: _dailySummary, publicCount: _publicCount, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes)
+        return { ...summary, recordCount: summary.permissions.read === "all" ? safeCount(t.stats?.recordCount ?? 0n) : null }
+      }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
     }
     const exclusive = ["table.update", "permissions", "table.delete", "table.restore"].includes(op)
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "CloudTable" WHERE "id" = ${tableId} ${Prisma.raw(exclusive ? "FOR UPDATE" : "FOR SHARE")}`)
@@ -309,6 +312,7 @@ export class CloudTableService {
       const body = input as { id: string }, row = await tx.cloudTableRecord.findFirst({ where: { tableId, id: body.id, deletedAt: { gte: new Date(Date.now() - retentionMs) } }, select: selectRow })
       if (!row) fail("NOT_FOUND", "回收记录不存在或已过期。", 404)
       try { normalizeValues(fields, {}, row.values as Record<string, unknown>) } catch { fail("INCOMPATIBLE_SCHEMA", "记录与当前结构不兼容，请先恢复字段定义。", 409) }
+      await tx.$queryRaw`SELECT "tableId" FROM "CloudTableStats" WHERE "tableId" = ${tableId} FOR UPDATE`
       const changed = await tx.cloudTableRecord.updateMany({ where: { id: row.id, tableId, version: row.version, deletedAt: { gte: new Date(Date.now() - retentionMs) } }, data: { deletedAt: null, version: { increment: 1 } } })
       if (!changed.count) fail("VERSION_CONFLICT", "记录已变化，请重新读取。", 409)
       return { id: row.id, version: row.version + 1 }
@@ -318,6 +322,8 @@ export class CloudTableService {
     const namespace = `${tableId}:${actor.apiKeyId ?? actor.userId ?? "anonymous"}:${op}`, fingerprint = createHash("sha256").update(stableJson(input)).digest("hex")
     const replay = await this.receipt(tx, namespace, ctx.idempotencyKey, fingerprint)
     if (replay !== undefined) return replay
+    // 先锁计数再修改记录，避免批次持有计数行等待单条写入、单条写入反过来等待计数。
+    if (operations.some(operation => operation.action !== "update")) await tx.$queryRaw`SELECT "tableId" FROM "CloudTableStats" WHERE "tableId" = ${tableId} FOR UPDATE`
     const results: { id: string; version: number }[] = []
     if (operations.every(operation => operation.action === "create")) {
       const data = operations.map(operation => ({ id: `ctr_${randomUUID().replaceAll("-", "")}`, tableId, values: json(normalizeValues(fields, operation.values)), creatorUserId: actor.userId ?? null, version: 1 }))

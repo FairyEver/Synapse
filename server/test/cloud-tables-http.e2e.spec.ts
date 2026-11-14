@@ -39,7 +39,7 @@ describe("cloud table complete real HTTP contract", () => {
   let httpRequests = 0
 
   async function call(method: string, path: string, auth: Headers = {}, body?: unknown, status = method === "POST" ? 201 : 200, extra: Headers = {}) {
-    const response = await fetch(`${base}${path}`, { method, headers: { ...auth, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) })
+    const response = await fetch(`${base}${path}`, { method, headers: { Origin: new URL(process.env.APP_PUBLIC_URL!).origin, ...auth, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) })
     httpRequests++
     const result = await response.json()
     expect(response.status, `${method} ${path}: ${JSON.stringify(result)}`).toBe(status)
@@ -83,7 +83,7 @@ describe("cloud table complete real HTTP contract", () => {
     for (const id of userIds) await prisma.user.create({ data: { id, email: `${id}@example.test`, handle: id, nickname: "HTTP测试", passwordHash } })
     app = await createTestApp(); await app.listen(0, "127.0.0.1"); base = await app.getUrl()
     const login = async (id: string) => {
-      const response = await fetch(`${base}/api/console/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${id}@example.test`, password }) })
+      const response = await fetch(`${base}/api/console/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(process.env.APP_PUBLIC_URL!).origin }, body: JSON.stringify({ email: `${id}@example.test`, password }) })
       expect(response.status).toBe(201)
       return { Cookie: response.headers.getSetCookie().map(v => v.split(";")[0]).join("; ") }
     }

@@ -40,7 +40,7 @@ export function cloudTableOpenApiPaths() {
     ["/{id}/records/{recordId}/restore", "post", "restoreCloudTableRecord", null, false],
   ]
   const usage: Record<string, [string, string]> = {
-    listCloudTables: ["列出已授权的数据表", "需任一云表scope，按密钥资源范围列出自己的表或有可用权限的协作表；协作权限与密钥scope没有交集时不列出。匿名不能列目录。列表不含字段，操作前读取表结构；使用nextCursor继续分页。"],
+    listCloudTables: ["列出已授权的数据表", "需任一云表scope，按密钥资源范围列出自己的表或有可用权限的协作表；协作权限与密钥scope没有交集时不列出。匿名不能列目录。列表不含字段，操作前读取表结构；使用nextCursor继续分页。recordCount读取事务维护的未删除记录数，不扫描记录；仅有效read权限为all时返回数字，否则为null。"],
     createCloudTable: ["在密钥所属用户账号下建表", "需tables.manage及all_owned（自己的全部表）资源范围，不必先在Console手工建表；selected密钥不能建表。新表归密钥所属用户且默认私有，返回id与schemaVersion。"],
     getCloudTable: ["读取表配置与当前权限", "需至少一项可用的表权限及相应scope。表主可见协作者与归档字段；其他用户仅见活动字段。匿名须有至少一项开放操作，仅返回id、schemaVersion、fields。"],
     getCloudTableSchema: ["发现字段与结构版本", "认证与返回规则同读取表配置。先读取实际字段key、类型、选项key与schemaVersion，不凭显示名构造调用。"],
@@ -49,7 +49,7 @@ export function cloudTableOpenApiPaths() {
     getCloudTablePublicCount: ["读取已公开的记录总数", "仅在表主启用publicCount后可用。只返回未删除记录总数，不接受查询参数，不需要开放匿名记录读取。携带API密钥时需tables.records.read及表资源授权。"],
     getCloudTableDailySummary: ["读取已公开的今日分类汇总", "仅在表主发布后可用。以配置时区的今日和同表主的公开目录为准，按公开标题返回最多100组选择数与布尔真值数。未匹配到目录的回答合并到other。不接受日期或其他筛选条件，不返回原始记录。若携带API密钥，需tables.records.read及表资源授权。"],
     deleteCloudTable: ["删除表并移入30天回收站", "仅表主，需tables.manage及当前schemaVersion作为version；删除后普通读取不可见，30天内可恢复。"],
-    listDeletedCloudTables: ["列出自己的表回收站", "需任一云表scope，按密钥资源范围仅列本人30天内删除的表；不包含协作表。使用nextCursor继续分页。"],
+    listDeletedCloudTables: ["列出自己的表回收站", "需任一云表scope，按密钥资源范围仅列本人30天内删除的表；不包含协作表。使用nextCursor继续分页。recordCount为未删除记录数，仅有效read权限为all时返回数字，否则为null。"],
     restoreCloudTable: ["恢复已删除的数据表", "仅表主，需tables.manage；30天内可恢复，恢复后关闭全部匿名操作；活动表返回409 NOT_DELETED，不改变权限。此操作不支持幂等键保证。"],
     resolveCloudTableCollaborator: ["通过SY用户名解析协作者", "仅表主，需tables.manage。传准确handle，不传邮箱、不猜userId；取得用户id后再写入members授权。"],
     listCloudTableLogs: ["读取数据表操作记录", "仅表主，需tables.manage。仅含固定诊断元数据，不含记录正文、密钥或Cookie；使用nextCursor继续分页。"],
@@ -71,7 +71,7 @@ export function cloudTableOpenApiPaths() {
   const table = { type: "object", additionalProperties: false, required: ["id", "ownerId", "viewerId", "name", "schemaVersion", "fields", "anonymous", "permissions", "deletedAt", "createdAt"], properties: { id: { type: "string" }, ownerId: { type: "string" }, viewerId: { type: "string" }, name: { type: "string" }, schemaVersion: { type: "integer" }, fields: { type: "array", items: outputField }, anonymous: (schema(permissionsSchema).properties as Record<string, unknown>).anonymous, dailySummary: schema(dailySummarySchema), publicCount: { const: true }, permissions: { type: "object", additionalProperties: { type: "string", enum: ["none", "own", "all"] } }, members: outputMembers, deletedAt: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } }
   const confirmation = { type: "object", additionalProperties: false, required: ["id", "version"], properties: { id: { type: "string" }, version: { type: "integer" } } }
   const page = (item: unknown) => ({ type: "object", additionalProperties: false, required: ["data", "nextCursor"], properties: { data: { type: "array", items: item }, nextCursor: { type: ["string", "null"] } } })
-  const summary = { ...table, required: table.required.filter(key => !["fields", "anonymous"].includes(key)), properties: Object.fromEntries(Object.entries(table.properties).filter(([key]) => !["fields", "anonymous", "dailySummary", "publicCount", "members"].includes(key))) }
+  const summary = { ...table, required: [...table.required.filter(key => !["fields", "anonymous"].includes(key)), "recordCount"], properties: { ...Object.fromEntries(Object.entries(table.properties).filter(([key]) => !["fields", "anonymous", "dailySummary", "publicCount", "members"].includes(key))), recordCount: { type: ["integer", "null"], minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: "事务维护的未删除记录数；仅有效read权限为all时返回数字，否则为null。" } } }
   const details = { anyOf: [table, { type: "object", additionalProperties: false, required: ["id", "schemaVersion", "fields"], properties: { id: table.properties.id, schemaVersion: table.properties.schemaVersion, fields: table.properties.fields } }] }
   const tableConfirmation = { type: "object", additionalProperties: false, required: ["id", "schemaVersion"], properties: { id: { type: "string" }, schemaVersion: { type: "integer", minimum: 1 } } }
   const log = { type: "object", additionalProperties: false, required: ["id", "ownerId", "tableId", "actorId", "apiKeyId", "requestId", "operation", "status", "durationMs", "createdAt"], properties: {

@@ -8,5 +8,5 @@ export type CloudMember = { userId: string; handle?: string; nickname?: string; 
 export type CloudTableDto = { id: string; ownerId: string; viewerId?: string; name: string; schemaVersion: number; fields: CloudField[]; anonymous: Partial<Record<CloudAction, boolean>>; dailySummary?: CloudDailySummary; publicCount?: true; members?: CloudMember[]; deletedAt: string | null; createdAt: string; permissions: Record<CloudAction | 'manage', CloudRange> }
 export type CloudRecordDto = { id: string; values: Record<string, unknown>; creatorUserId: string | null; version: number; createdAt: string; updatedAt: string; deletedAt: string | null }
 export type CloudPage<T> = { data: T[]; nextCursor: string | null }
-export type CloudTableSummary = Pick<CloudTableDto, 'id' | 'ownerId' | 'name' | 'schemaVersion' | 'deletedAt' | 'createdAt' | 'permissions' | 'viewerId'>
+export type CloudTableSummary = Pick<CloudTableDto, 'id' | 'ownerId' | 'name' | 'schemaVersion' | 'deletedAt' | 'createdAt' | 'permissions' | 'viewerId'> & { recordCount: number | null }
 export type CloudKeyResources = { mode: 'selected' | 'all_owned'; tableIds: string[] }

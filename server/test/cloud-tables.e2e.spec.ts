@@ -365,17 +365,18 @@ describe("cloud tables real PostgreSQL", () => {
     const app = await createTestApp(); await app.listen(0, "127.0.0.1")
     try {
       const base = await app.getUrl()
-      const login = await fetch(`${base}/api/console/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${owner}@example.test`, password }) })
+      const origin = new URL(process.env.APP_PUBLIC_URL!).origin
+      const login = await fetch(`${base}/api/console/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: JSON.stringify({ email: `${owner}@example.test`, password }) })
       expect(login.status).toBe(201)
       const cookie = login.headers.getSetCookie().map(v => v.split(";")[0]).join("; ")
       const tables = await fetch(`${base}/api/console/tables`, { headers: { Cookie: cookie } })
       expect(tables.status).toBe(200); expect((await tables.json() as { data: { id: string }[] }).data.some(t => t.id === tableId)).toBe(true)
-      const created = await fetch(`${base}/api/console/api-keys`, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "cloud-e2e", scopes: ["tables.records.read"], tableResources: { mode: "selected", tableIds: [tableId] } }) })
+      const created = await fetch(`${base}/api/console/api-keys`, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json", Origin: origin }, body: JSON.stringify({ name: "cloud-e2e", scopes: ["tables.records.read"], tableResources: { mode: "selected", tableIds: [tableId] } }) })
       expect(created.status).toBe(201)
       const key = await created.json() as { secret: string; apiKey: { id: string } }
       const query = await fetch(`${base}/api/open/v1/tables/${tableId}/records/query`, { method: "POST", headers: { Authorization: `Bearer ${key.secret}`, "Content-Type": "application/json" }, body: "{}" })
       expect(query.status).toBe(201)
-      const revoke = await fetch(`${base}/api/console/api-keys/${key.apiKey.id}`, { method: "DELETE", headers: { Cookie: cookie } })
+      const revoke = await fetch(`${base}/api/console/api-keys/${key.apiKey.id}`, { method: "DELETE", headers: { Cookie: cookie, Origin: origin } })
       expect(revoke.status).toBe(200)
       const denied = await fetch(`${base}/api/open/v1/tables/${tableId}/records/query`, { method: "POST", headers: { Authorization: `Bearer ${key.secret}`, "Content-Type": "application/json" }, body: "{}" })
       expect(denied.status).toBe(401)

@@ -25,11 +25,11 @@ try {
     database = `postgresql://postgres:${password}@127.0.0.1:${port}/cloud_tables_e2e`
   }
   database = requireLoopbackE2eDatabase(database, "CLOUD_TABLE_E2E_DATABASE_URL")
-  const env = { ...process.env, NODE_ENV: "test", DATABASE_URL: database, CLOUD_TABLE_E2E_DATABASE_URL: database, ADMIN_ACCESS_SECRET: randomBytes(32).toString("base64url"), USER_ACCESS_JWT_SECRET: randomBytes(32).toString("base64url"), DESKTOP_UPDATE_INTENT_SECRET: randomBytes(32).toString("base64url"), MOBILE_LIVE_ENABLED: "false", PDF_RENDERER_URL: "", PDF_RENDERER_INTERNAL_SECRET: "" }
+  const env = { ...process.env, NODE_ENV: "test", APP_PUBLIC_URL: "http://127.0.0.1", DATABASE_URL: database, CLOUD_TABLE_E2E_DATABASE_URL: database, ADMIN_ACCESS_SECRET: randomBytes(32).toString("base64url"), USER_ACCESS_JWT_SECRET: randomBytes(32).toString("base64url"), DESKTOP_UPDATE_INTENT_SECRET: randomBytes(32).toString("base64url"), MOBILE_LIVE_ENABLED: "false", PDF_RENDERER_URL: "", PDF_RENDERER_INTERNAL_SECRET: "" }
   // 专用数据库测试不得继承真实外部存储/推送凭据。
   for (const prefix of ["DRIVE_COS", "SKILL_REPOSITORY_COS", "PLATFORM_MEDIA_COS", "MAIL_COS", "BACKUP_COS"]) for (const suffix of ["SECRET_ID", "SECRET_KEY", "BUCKET", "REGION"]) env[`${prefix}_${suffix}`] = ""
   for (const name of ["APNS_KEY_ID", "APNS_TEAM_ID", "APNS_KEY_PATH"]) env[name] = ""
-  const suites = ["test/cloud-tables.e2e.spec.ts", "test/cloud-tables-http.e2e.spec.ts", ...(process.argv.includes("--agent") ? ["test/cloud-tables-agent.e2e.spec.ts"] : [])]
+  const suites = ["test/cloud-tables.e2e.spec.ts", "test/cloud-table-counts.e2e.spec.ts", "test/cloud-tables-http.e2e.spec.ts", ...(process.argv.includes("--agent") ? ["test/cloud-tables-agent.e2e.spec.ts"] : [])]
   const commands = [
     ["--filter", "@synapse/shared", "run", "build"],
     ["exec", "prisma", "migrate", "deploy"],

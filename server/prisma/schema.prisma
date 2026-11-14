@@ -360,10 +360,18 @@ model CloudTable {
   fields        CloudTableField[]
   records       CloudTableRecord[]
   receipts      CloudTableReceipt[]
+  stats         CloudTableStats?
 
   @@index([ownerId, deletedAt, id])
   @@index([members], type: Gin)
   @@index([deletedAt])
+}
+
+// 触发器与记录写入同事务维护；目录只读取统计，不扫描记录。
+model CloudTableStats {
+  tableId     String @id
+  table       CloudTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  recordCount BigInt @default(0)
 }
 
 model CloudTableField {

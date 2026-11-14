@@ -110,6 +110,7 @@ function TableList({ model: m }: { model: CloudTablesModel }) {
         ? <span className='block max-w-xs truncate font-medium' title={row.original.name}>{row.original.name}</span>
         : <Button variant='ghost' className='max-w-xs justify-start' onPress={() => m.select(row.original.id)}><span className='truncate'>{row.original.name}</span></Button>,
     },
+    { id: 'recordCount', header: '记录数', meta: { label: '记录数', className: 'text-right tabular-nums' }, enableSorting: false, cell: ({ row }) => row.original.recordCount == null ? '—' : row.original.recordCount.toLocaleString('zh-CN') },
     { id: 'role', header: '我的角色', meta: { label: '我的角色' }, enableSorting: false, cell: ({ row }) => <Chip variant='soft'>{row.original.permissions.manage === 'none' ? '协作者' : '表主'}</Chip> },
     { id: 'createdAt', header: '创建时间', meta: { label: '创建时间' }, enableSorting: false, cell: ({ row }) => <RelativeTime value={row.original.createdAt} /> },
     ...(m.listTrash ? [{ id: 'actions', header: '操作', enableSorting: false, enableHiding: false, cell: ({ row }: { row: { original: CloudTableSummary } }) => <Button size='sm' variant='secondary' isPending={m.mutation.isPending} onPress={() => m.mutation.mutate({ path: `/${row.original.id}/restore`, method: 'POST' })}>恢复</Button> }] : []),
