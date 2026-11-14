@@ -32,20 +32,25 @@ export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql
       if (c.field.type === "datetime" && typeof value === "string") return Prisma.sql`${new Date(value).toISOString()}`
       return Prisma.sql`${value}`
     }
+    const equal = (candidate: unknown) => {
+      const value = scalar(candidate)
+      if (candidate !== null && !filter.field.startsWith("$")) {
+        const normalized = c.field.type === "datetime" && typeof candidate === "string" ? new Date(candidate).toISOString() : candidate
+        return Prisma.sql`r."values" @> ${JSON.stringify({ [filter.field]: normalized })}::jsonb`
+      }
+      return Prisma.sql`${x} IS NOT DISTINCT FROM ${value}`
+    }
     if (filter.op === "in") {
       if (!Array.isArray(filter.value) || !filter.value.length || filter.value.length > 100) fail("INVALID_QUERY", "集合筛选需要1至100个值。")
-      return Prisma.sql`(${Prisma.join(filter.value.map(v => Prisma.sql`${x} IS NOT DISTINCT FROM ${scalar(v)}`), " OR ")})`
+      return Prisma.sql`(${Prisma.join(filter.value.map(equal), " OR ")})`
     }
     if (filter.op === "contains") {
       if (c.timestamp || !["text", "url"].includes(c.field.type) || typeof filter.value !== "string") fail("INVALID_QUERY", "仅文本字段支持包含筛选。")
       return Prisma.sql`position(${filter.value} in (${x})) > 0`
     }
+    if (filter.op === "eq") return equal(filter.value)
     const value = scalar(filter.value)
-    if (filter.op === "eq" && filter.value !== null && !filter.field.startsWith("$")) {
-      const normalized = c.field.type === "datetime" && typeof filter.value === "string" ? new Date(filter.value).toISOString() : filter.value
-      return Prisma.sql`r."values" @> ${JSON.stringify({ [filter.field]: normalized })}::jsonb`
-    }
-    if (filter.op === "eq" || filter.op === "ne") return Prisma.sql`${x} IS ${Prisma.raw(filter.op === "ne" ? "DISTINCT" : "NOT DISTINCT")} FROM ${value}`
+    if (filter.op === "ne") return Prisma.sql`${x} IS DISTINCT FROM ${value}`
     if (filter.value === null) fail("INVALID_QUERY", "范围或文本筛选不能使用空值。")
     if (c.field.type === "boolean" || c.field.type === "singleSelect") fail("INVALID_QUERY", "该字段不支持范围筛选。")
     const operator = { gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op]

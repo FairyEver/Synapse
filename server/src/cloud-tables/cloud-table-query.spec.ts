@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import type { CloudField } from "@synapse/shared"
 import { querySchema } from "./cloud-table-contract"
-import { queryPlan, stableJson } from "./cloud-table-query"
+import { filterPlan, queryPlan, stableJson } from "./cloud-table-query"
 
 const fields: CloudField[] = [
   { key: "title", name: "标题", type: "text" },
@@ -12,6 +12,32 @@ const fields: CloudField[] = [
 const plan = (input: unknown) => queryPlan("table", fields, querySchema.parse(input), "actor", 1, "secret")
 
 describe("cloud table read query", () => {
+  it("keeps business IN candidates indexable using the same containment predicates as equality", () => {
+    const result = plan({ filters: [{ field: "title", op: "in", value: ["first", "second"] }] })
+    expect(result.filter.sql.match(/@>/g)).toHaveLength(2)
+    expect(result.filter.values).toEqual(['{"title":"first"}', '{"title":"second"}'])
+  })
+  it.each([
+    [{ key: "value", name: "值", type: "text" }, "", '{"value":""}'],
+    [{ key: "value", name: "值", type: "number" }, 0, '{"value":0}'],
+    [{ key: "value", name: "值", type: "boolean" }, false, '{"value":false}'],
+  ] as const)("preserves falsy business IN candidates for %j", (field, value, expected) => {
+    const result = filterPlan([field], querySchema.parse({ filters: [{ field: "value", op: "in", value: [value, null] }] }))
+    expect(result.sql).toContain('@>')
+    expect(result.sql).toContain('IS NOT DISTINCT FROM')
+    expect(result.values).toEqual([expected, "value", null])
+  })
+  it("normalizes business datetime IN candidates without changing system timestamp comparisons", () => {
+    const field: CloudField = { key: "date", name: "日期", type: "datetime" }
+    const result = filterPlan([field], querySchema.parse({ filters: [{ field: "date", op: "in", value: ["2026-11-01T00:00:00Z"] }] }))
+    expect(result.values).toEqual(['{"date":"2026-11-01T00:00:00.000Z"}'])
+    const system = plan({ filters: [{ field: "$createdAt", op: "in", value: ["2026-11-01T08:00:00+08:00"] }] })
+    expect(system.filter.sql).not.toContain('@>')
+    expect(system.filter.values).toEqual(["2026-11-01T00:00:00.000Z"])
+  })
+  it("still validates every IN candidate before generating a containment predicate", () => {
+    expect(() => plan({ filters: [{ field: "score", op: "in", value: [1, "invalid"] }] })).toThrow()
+  })
   it("accepts optional projections and same-level OR while preserving default requests", () => {
     expect(querySchema.parse({})).toMatchObject({ filters: [], filterMode: "all", sort: [], limit: 50 })
     expect(querySchema.parse({ fields: [], filterMode: "any" })).toMatchObject({ fields: [], filterMode: "any" })

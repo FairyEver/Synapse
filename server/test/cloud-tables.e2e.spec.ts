@@ -65,6 +65,33 @@ describe("cloud tables real PostgreSQL", () => {
     expect(first.id).toBe(replay.id)
     await expect(request(actor, null, "table.create", { name: "different" }, key)).rejects.toMatchObject({ statusCode: 409 })
   })
+  it("preserves typed IN matches, explicit null, missing values and pagination", async () => {
+    const t = await request(actor, null, "table.create", { name: "in-candidates", fields: [
+      { key: "text", name: "文本", type: "text" }, { key: "n", name: "数值", type: "number" },
+      { key: "flag", name: "标记", type: "boolean" }, { key: "at", name: "时间", type: "datetime" },
+    ] })
+    const values = [
+      { text: "", n: 0, flag: false, at: "2026-11-01T00:00:00Z" },
+      { text: "second", n: 2, flag: true },
+      { text: null, n: null, flag: null }, {},
+    ]
+    const ids: string[] = []
+    for (const value of values) ids.push((await request(actor, t.id, "records.create", { values: value })).id)
+    for (const [field, candidates, expected] of [
+      ["text", ["", null], [ids[0], ids[2], ids[3]]],
+      ["n", [0, null], [ids[0], ids[2], ids[3]]],
+      ["flag", [false, null], [ids[0], ids[2], ids[3]]],
+      ["at", ["2026-11-01T00:00:00Z"], [ids[0]]],
+    ] as const) {
+      const page = await request(actor, t.id, "records.query", { filters: [{ field, op: "in", value: candidates }] })
+      expect(page.data.map((row: any) => row.id).sort()).toEqual([...expected].sort())
+    }
+    const query = { filters: [{ field: "text", op: "in", value: ["", "second"] }], limit: 1 }
+    const first = await request(actor, t.id, "records.query", query)
+    const second = await request(actor, t.id, "records.query", { ...query, cursor: first.nextCursor })
+    expect([first.data[0].id, second.data[0].id].sort()).toEqual([ids[0], ids[1]].sort())
+    expect(second.nextCursor).toBeNull()
+  })
   it("restores records and tables without re-enabling anonymous operations", async () => {
     const row = await request(actor, tableId, "records.create", { values: { name: "restore" } })
     await request(actor, tableId, "records.delete", { id: row.id, version: 1 })
