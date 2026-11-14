@@ -111,26 +111,10 @@ const SYNTHETIC_TODO_FILES = {
     name: "@synapse/shared",
     exports: {
       "./todo-contracts": { require: "./dist/todo-contracts.cjs" },
-      "./tunnel-contracts": { require: "./dist/tunnel-contracts.cjs" },
-      "./tunnel-stream-node": { require: "./dist/tunnel-stream-node.cjs" },
     },
   }),
   todos: "export {}\n",
   contracts: "exports.countTodoCodePoints = value => Array.from(value).length; exports.parseTodoReference = value => new URL(value).pathname.slice(1)\n",
-}
-
-const SYNTHETIC_TUNNEL_FILES: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(["service", "ipc", "dispatcher", "binding-store", "cloud-client"].map(name => [
-    `dist-electron/app-capabilities/tunnel/main/${name}.js`, "module.exports = {}\n",
-  ])),
-  "dist-electron/app-capabilities/tunnel/main/transport.js": "exports.TunnelTransport = class TunnelTransport {}\n",
-  "dist-electron/app-capabilities/tunnel/shared/schema.js": "exports.tunnelPageSchema = { parse: value => { if (!Array.isArray(value.items) || value.nextOffset !== null || value.total !== 0) throw new Error('Invalid tunnel page'); return value } }\n",
-  "dist-electron/app-capabilities/tunnel/shared/capability.js": "exports.TUNNEL_CAPABILITY_IDS = ['list', 'get', 'create', 'update', 'set_enabled', 'delete'].map(action => 'app.tunnel.mapping.' + action)\n",
-  "dist-electron/app-capabilities/tunnel/shared/manifest.js": "exports.tunnelManifest = { id: 'tunnel' }\n",
-  "node_modules/@synapse/shared/dist/tunnel-contracts.cjs": "exports.TUNNEL_PROTOCOL_VERSION = 1\n",
-  "node_modules/@synapse/shared/dist/tunnel-contracts.js": "export const TUNNEL_PROTOCOL_VERSION = 1\n",
-  "node_modules/@synapse/shared/dist/tunnel-stream-node.cjs": "exports.TunnelByteBudget = class TunnelByteBudget { used = 0 }\n",
-  "node_modules/@synapse/shared/dist/tunnel-stream-node.js": "export class TunnelByteBudget { used = 0 }\n",
 }
 
 type DocumentExtractionContentOverrides = Readonly<Record<string, string>>
@@ -275,12 +259,12 @@ interface CreateAsarBufferOptions {
   readonly includeScriptRuntime?: boolean
   readonly includeSharedPackage?: boolean
   readonly includeTodos?: boolean
-  readonly includeTunnel?: boolean
   readonly includeWorkspaceFiles?: boolean
   readonly includeWorkspaceFilesGitConfig?: boolean
   readonly includeMobileFileConstants?: boolean
   readonly includeUnpackedSourceMaps?: boolean
   readonly omitTextExtractionIntegrity?: string
+  readonly retiredPackedPath?: string
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -444,7 +428,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeScriptRuntime = true,
     includeSharedPackage = true,
     includeTodos = true,
-    includeTunnel = true,
     includeWorkspaceFiles = true,
     includeWorkspaceFilesGitConfig = true,
     includeMobileFileConstants = true,
@@ -543,12 +526,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
       return [name, node]
     }),
   ) as Record<keyof typeof SYNTHETIC_TODO_FILES, ReturnType<typeof createPackedFileNode>>
-  const tunnelBuffers = Object.entries(SYNTHETIC_TUNNEL_FILES).map(([name, content]) => [name, Buffer.from(content, "utf8")] as const)
-  const tunnelNodes = tunnelBuffers.map(([name, content]) => {
-    const node = createPackedFileNode(offset, content)
-    if (includeTunnel) offset += content.length
-    return [name, node] as const
-  })
   const jsonRepairPackageJson = JSON.parse(
     SYNTHETIC_JSON_REPAIR_FILES["node_modules/repair-json-stream/package.json"],
   )
@@ -846,16 +823,14 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
       },
     },
   }
-  if (includeTunnel) {
-    for (const [relativePath, node] of tunnelNodes) {
-      const parts = relativePath.split("/")
-      let directory: { files: Record<string, unknown> } = headerTree
-      for (const segment of parts.slice(0, -1)) {
-        directory.files[segment] ??= { files: {} }
-        directory = directory.files[segment] as { files: Record<string, unknown> }
-      }
-      directory.files[parts.at(-1)!] = node
+  if (options.retiredPackedPath) {
+    const parts = options.retiredPackedPath.split("/")
+    let directory: { files: Record<string, unknown> } = headerTree
+    for (const segment of parts.slice(0, -1)) {
+      directory.files[segment] ??= { files: {} }
+      directory = directory.files[segment] as { files: Record<string, unknown> }
     }
+    directory.files[parts.at(-1)!] = mainNode
   }
   const header = Buffer.from(JSON.stringify(headerTree), "utf8")
   const headerPadding = Buffer.alloc((4 - (header.length % 4)) % 4)
@@ -884,7 +859,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
       : []),
     ...(includeSkillHub ? [skillHubLauncher, ...Object.values(skillHubSharedBuffers)] : []),
     ...(includeTodos ? Object.values(todoBuffers) : []),
-    ...(includeTunnel ? tunnelBuffers.map(([, content]) => content) : []),
     ...(includeJsonRepair ? Object.values(jsonRepairBuffers) : []),
   ])
 }
@@ -1079,7 +1053,6 @@ describe("packaged asar verification", () => {
     { options: { includeWorkspaceFilesGitConfig: false }, missing: "mobile-workspace-files-git-config.js" },
     { options: { includeMobileFileConstants: false }, missing: "mobile-live-constants.cjs" },
     { options: { includeTodos: false }, missing: "Todo capability is missing from packed app.asar" },
-    { options: { includeTunnel: false }, missing: "Tunnel capability is missing from packed app.asar" },
   ])("rejects a package missing a required runtime: $missing", async ({ options, missing }) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -1091,6 +1064,28 @@ describe("packaged asar verification", () => {
       await writeExtraResourceFixtures(resourcesPath)
       await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root])).rejects.toMatchObject({ stderr: expect.stringContaining(missing) })
     } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it.each([
+    "dist-electron/app-capabilities/tunnel/main/service.js",
+    "dist-electron/synapse-capabilities/shared/tunnel-domain.js",
+    "dist-electron/electron/runtime/data-repo/schemas/tunnel.js",
+    "node_modules/@synapse/shared/dist/tunnel-contracts.cjs",
+  ])("rejects stale retired runtime code at %s", async (retiredPackedPath) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ retiredPackedPath }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root, "--resources-only"])).rejects.toMatchObject({
+        stderr: expect.stringContaining(`retired runtime must not be packaged: ${retiredPackedPath}`),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it("rejects packages missing the JSON Repair runtime", async () => {

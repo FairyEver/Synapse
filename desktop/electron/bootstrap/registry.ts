@@ -63,8 +63,6 @@ import {
   coreConnectorsDescriptor,
   coreSecretsDescriptor,
   coreTodosDescriptor,
-  coreTunnelDescriptor,
-  coreTunnelBackgroundDescriptor,
   coreCustomAppsDescriptor,
   coreCustomAppFaviconDescriptor,
   coreCustomWebAppRuntimeDescriptor,
@@ -182,8 +180,6 @@ export function buildServiceRegistry(
   registry.register(coreSkillHubInstallProviderDescriptor)
   registry.register(coreSkillHubBackgroundDescriptor)
   registry.register(coreTodosDescriptor)
-  registry.register(coreTunnelDescriptor)
-  registry.register(coreTunnelBackgroundDescriptor)
   registry.register(coreCustomAppsDescriptor)
   registry.register(coreCustomAppFaviconDescriptor)
   registry.register(coreCustomWebSessionDescriptor)

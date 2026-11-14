@@ -5,7 +5,6 @@ import { databaseAppManifest } from "@/modules/database/app-manifest"
 import { driveAppManifest } from "@/modules/drive/app-manifest"
 import { mailAppManifest } from "../mail/app-manifest"
 import { mailInternalAppManifest } from "@/modules/mail-internal/app-manifest"
-import { tunnelAppManifest } from "../../../app-capabilities/tunnel/renderer/app-manifest"
 import { todosAppManifest } from "@/modules/todos/app-manifest"
 import { synapseSkillAppManifest } from "../../../app-capabilities/synapse-skill/renderer/app-manifest"
 import { secretsAppManifest } from "../../../app-capabilities/secrets/renderer/app-manifest"
@@ -33,7 +32,6 @@ const systemApps = [
   mailInternalAppManifest,
   mailAppManifest,
   todosAppManifest,
-  tunnelAppManifest,
   automationAppManifest,
   launcherAppManifest,
   settingsAppManifest,

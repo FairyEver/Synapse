@@ -227,6 +227,7 @@ function snapshotFromResult(result: DataMaintenanceResult): DataMaintenanceSnaps
 
 function emptyCounts(): DataMaintenanceCounts {
   return {
+    retiredNamespaceRecords: 0,
     localOutbox: 0,
     retainedOutbox: 0,
     telemetryEnvironmentOrphans: 0,

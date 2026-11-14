@@ -1,10 +1,8 @@
 # 能力注册清单
 
-2026-11-14 云表目录摘要增加受有效读取权限约束的 `recordCount`，同步既有系统 Skill 的返回说明。`cloud_tables` 仍为21项 capability / MCP 索引，全局仍为372 / 368；输入 schema、System App、Dock、IPC、Workflow、Automation 与 Deep Link 注册和下列表格数量不变。
+2026-11-14 内网穿透退役：移除 `tunnel` System App、六项 capability / MCP 索引、六项 typed IPC、运行摘要事件、后台恢复和系统 Skill 领域指南。全局 capability / MCP 索引由 372 / 368 降至 366 / 362，System App 由 23 降至 22；默认 Dock 仍为 9 项，Workflow、Automation、Deep Link 和公开 `search` / `invoke` 两项路由工具不变。旧 Dock 固定项按现有有效 App ID 校验移除，不保留协议或调用别名。退役范围与云端清理证据见[退役记录](../agent-guides/tunnel-retirement.md)。
 
-2026-11-11 内网穿透核心接入：新增 `tunnel` domain 六项 capability / MCP 索引和六项 typed IPC，全局 372 / 368。运行摘要事件仅 UI，后台恢复在窗口创建后执行。System App 从22增至23，可独立开窗，默认不固定 Dock；默认 Dock仍9项，Workflow、Automation、Deep Link无增量。
-
-穿透中文检索通过既有查询词表展开“内网穿透 / 穿透”“映射”“启停”，不改变检索权重或目录侧别名。权威 Skill 的 `tunnel/index.md` 与 `api-reference.md` 均声明只通过 `search` / `invoke` 调用；启动依赖、领域路由和打包门禁的测试夹具同步覆盖新增服务及六项能力，注册数量不变。
+2026-11-14 云表目录摘要增加受有效读取权限约束的 `recordCount`，同步既有系统 Skill 的返回说明。`cloud_tables` 仍为21项 capability / MCP 索引，全局仍为366 / 362；输入 schema、System App、Dock、IPC、Workflow、Automation 与 Deep Link 注册和下列表格数量不变。
 
 2026-11-10 新增只读的 `app.mail_internal.recipient.resolve`（MCP `app_mail_internal_recipient_resolve`），在当前登录用户的共同团队内批量解析活跃成员的精确昵称。站内信 capability / MCP 索引各 18 项，全局 366 / 362。使用既有网络权限与审计，由 MCP `search` / `invoke` 调用，无新增 IPC、System App、Dock、Workflow、Automation Action 或 Deep Link。调用契约见[批量昵称解析接入指南](../agent-guides/mail-recipient-nickname-resolution.md)。
 
@@ -130,7 +128,6 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 18 | `synapse://mail-internal/<id>` |
-| Tunnel | 是（内网穿透） | 否（可手动固定） | — | — | 6 | — |
 | Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | — | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -151,6 +148,8 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | WeCom | 否 | 否 | — | — | 2 | — |
 
 固定例外：
+
+- 已退役的 `tunnel` 不属于任何注册表面，不保留 System App、IPC、MCP、Workflow、Automation 或 Deep Link 兼容入口；历史安装与部署材料仅从退役记录中的 Git 历史链接查阅。
 
 - 2026-10-24 按用户决定移除 Synapse 私有存储沙箱及专用路径拦截。Terminal capabilities 移除 `privateStorageProtection` 字段，继续报告 `executionIsolation=none`、当前 OS 用户身份和原有终端持久化保护。Mail 44、Terminal 49、HTML Generator 2 及全局 340 capability / 336 MCP 索引、22 个 System App 和其他注册数量不变；不新增动作、输入字段或权限开关。MCP 描述、系统 Skill 与安全规范同步。
 
@@ -254,7 +253,6 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
-| Tunnel | 是（内网穿透） | 否（可手动固定） | — | — | 6 | — |
 | Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
@@ -296,8 +294,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `wecom` | 2 | 2 |
 | `skill_hub` | 10 | 10 |
 | `cloud_tables` | 21 | 21 |
-| `tunnel` | 6 | 6 |
-| 合计 | 372 | 368 |
+| 合计 | 366 | 362 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 

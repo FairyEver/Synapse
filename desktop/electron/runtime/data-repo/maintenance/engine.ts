@@ -1,4 +1,6 @@
 import { statSync } from "node:fs"
+import { rm } from "node:fs/promises"
+import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import type {
@@ -21,6 +23,8 @@ const TELEMETRY_OUTBOX_TABLE = "ns_telemetry_outbox"
 const TELEMETRY_ENVIRONMENT_TABLE = "ns_telemetry_event_environments"
 const AGENT_EVENTS_TABLE = "ns_agent_events"
 const CONVERSATIONS_TABLE = "ns_conversations"
+// These exact local namespaces belonged to a removed app; no other data is retired.
+const RETIRED_BINDINGS_TABLE = "ns_app_tunnel_bindings"
 
 export async function runDataMaintenance(
   options: RunDataMaintenanceOptions,
@@ -38,6 +42,31 @@ export async function runDataMaintenance(
     database.exec("PRAGMA busy_timeout = 250")
     const freePagesBefore = pragmaNumber(database, "freelist_count")
     let remaining = options.policy.maxDeletions
+
+    for (const filename of ["app.tunnel.credentials.bin", "app.tunnel.credentials.json"]) {
+      await rm(path.join(path.dirname(options.databasePath), filename), { force: true })
+    }
+    if (tableExists(database, RETIRED_BINDINGS_TABLE)) {
+      remaining = await deleteInBatches({
+        database,
+        tableName: RETIRED_BINDINGS_TABLE,
+        selectSql: `SELECT id FROM ${RETIRED_BINDINGS_TABLE} ORDER BY id LIMIT ?`,
+        selectParams: [],
+        limit: remaining,
+        batchSize: options.policy.batchSize,
+        onBatch: (count) => {
+          deleted.retiredNamespaceRecords += count
+          options.onProgress?.({ phase: "retired-namespaces", deleted: { ...deleted } })
+        },
+        yieldBetweenBatches,
+      })
+      if (!database.prepare(`SELECT 1 FROM ${RETIRED_BINDINGS_TABLE} LIMIT 1`).get()) {
+        database.exec(`DROP TABLE ${RETIRED_BINDINGS_TABLE}`)
+      }
+    }
+    if (!tableExists(database, RETIRED_BINDINGS_TABLE) && tableExists(database, "__synapse_meta")) {
+      database.prepare("DELETE FROM __synapse_meta WHERE namespace = ?").run("app.tunnel.bindings")
+    }
 
     if (remaining > 0 && tableExists(database, OUTBOX_TABLE)) {
       remaining = await deleteInBatches({
@@ -226,7 +255,7 @@ export async function runDataMaintenance(
 
 interface DeleteInBatchesOptions {
   readonly database: DatabaseSync
-  readonly tableName: typeof OUTBOX_TABLE | typeof TELEMETRY_ENVIRONMENT_TABLE | typeof AGENT_EVENTS_TABLE
+  readonly tableName: typeof OUTBOX_TABLE | typeof TELEMETRY_ENVIRONMENT_TABLE | typeof AGENT_EVENTS_TABLE | typeof RETIRED_BINDINGS_TABLE
   readonly selectSql: string
   readonly selectParams: readonly (string | number)[]
   readonly limit: number
@@ -301,6 +330,7 @@ function validatePolicy(policy: DataMaintenancePolicy): void {
 
 function emptyCounts(): MutableDataMaintenanceCounts {
   return {
+    retiredNamespaceRecords: 0,
     localOutbox: 0,
     retainedOutbox: 0,
     telemetryEnvironmentOrphans: 0,

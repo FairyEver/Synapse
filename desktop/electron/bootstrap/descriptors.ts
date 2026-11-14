@@ -49,11 +49,6 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createMailInternalCapabilityDispatcher } from "../capabilities/mail-internal-dispatcher"
-import { TunnelAppService } from "../../app-capabilities/tunnel/main/service"
-import { TunnelBindingStore } from "../../app-capabilities/tunnel/main/binding-store"
-import { createTunnelCapabilityDispatcher } from "../../app-capabilities/tunnel/main/dispatcher"
-import { TUNNEL_SERVICE_ID } from "../../app-capabilities/tunnel/shared/capability"
-import type { TunnelBindingRecord, TunnelCredentialRecord } from "../runtime/data-repo/schemas/tunnel"
 import { getLiveClientIdStore } from "../services/live-client-id-store"
 import { TodoCloudService } from "../../app-capabilities/todos/main/service"
 import { createTodoCapabilityDispatcher } from "../../app-capabilities/todos/main/dispatcher"
@@ -877,25 +872,6 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
   async start(instance) {
     await instance.initialize()
   },
-}
-
-export const coreTunnelDescriptor: ServiceDescriptor<TunnelAppService> = {
-  id: TUNNEL_SERVICE_ID, criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.event-bus", "core.permission-guard", "core.audit-sink"],
-  create(ctx) {
-    const repository = ctx.registry.get<DataRepository>("core.data-repository")
-    return new TunnelAppService({ account: accountService, deviceId: () => getLiveClientIdStore().getOrCreate(),
-      store: new TunnelBindingStore({ bindings: repository.namespace<TunnelBindingRecord>("app.tunnel.bindings"), credentials: repository.namespace<TunnelCredentialRecord>("app.tunnel.credentials"), onInvalidBinding: () => ctx.logger.warn("穿透本机授权记录无效") }),
-      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"), auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
-      eventBus: ctx.registry.get<EventBus>("core.event-bus"), logger: ctx.logger.child("tunnel"),
-    })
-  },
-  stop: instance => instance.dispose(),
-}
-export const coreTunnelBackgroundDescriptor: ServiceDescriptor<TunnelAppService> = {
-  id: "app.tunnel.background", criticality: "degraded", startupPhase: "background", dependsOn: [TUNNEL_SERVICE_ID],
-  create: ctx => ctx.registry.get<TunnelAppService>(TUNNEL_SERVICE_ID),
-  start: instance => instance.start(),
 }
 
 export const coreTodosDescriptor: ServiceDescriptor<TodoCloudService> = {
@@ -1783,7 +1759,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   dependsOn: [
     MAIL_SERVICE_ID,
     TODOS_SERVICE_ID,
-    TUNNEL_SERVICE_ID,
     SKILL_HUB_SERVICE_ID,
     WECOM_CONNECTION_SERVICE_ID,
     "core.config",
@@ -1954,7 +1929,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const cloudTablesDispatcher = createCloudTableCapabilityDispatcher({ account: accountService, permissionGuard, auditSink })
     const skillHubDispatcher = createSkillHubCapabilityDispatcher({ service: ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) })
-    const tunnelDispatcher = createTunnelCapabilityDispatcher({ service: ctx.registry.get<TunnelAppService>(TUNNEL_SERVICE_ID), permissionGuard, auditSink })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
@@ -2053,7 +2027,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
       mailInternalDispatch: (action, params, context) => mailInternalDispatcher.dispatch(action, params, context),
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
-      tunnelDispatch: (action, params, context) => tunnelDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       skillHubDispatch: skillHubDispatcher.dispatch,
       cloudTablesDispatch: cloudTablesDispatcher.dispatch,

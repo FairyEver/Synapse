@@ -505,14 +505,6 @@ export const IPC_CHANNELS = {
     "pickAttachments": "synapse:app:mail:attachment:pick",
     "saveAttachment": "synapse:app:mail:attachment:save",
   },
-  "tunnel": {
-    "list": "synapse:app:tunnel:mapping:list",
-    "get": "synapse:app:tunnel:mapping:get",
-    "create": "synapse:app:tunnel:mapping:create",
-    "update": "synapse:app:tunnel:mapping:update",
-    "setEnabled": "synapse:app:tunnel:mapping:set_enabled",
-    "delete": "synapse:app:tunnel:mapping:delete",
-  },
   "todos": {
     "list": "synapse:app:todos:item:list",
     "get": "synapse:app:todos:item:get",

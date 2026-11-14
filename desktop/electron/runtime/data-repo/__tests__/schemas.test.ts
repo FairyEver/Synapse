@@ -133,8 +133,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(names).toEqual(
       [
         "audit",
-        "app.tunnel.bindings",
-        "app.tunnel.credentials",
       "app.agent.share-images",
       "app.automation-mail.deliveries",
       "app.automation-mail.sources",
@@ -409,7 +407,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         || schema.name === "app.terminal.toolbar-actions"
         || schema.name === "app.connectors.credentials"
         || schema.name === "app.mail.credentials"
-        || schema.name === "app.tunnel.credentials"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }

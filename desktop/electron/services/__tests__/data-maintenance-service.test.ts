@@ -36,6 +36,7 @@ describe("DataMaintenanceService", () => {
     progressListener?.({
       phase: "outbox-local",
       deleted: {
+        retiredNamespaceRecords: 0,
         localOutbox: 500,
         retainedOutbox: 0,
         telemetryEnvironmentOrphans: 0,
@@ -118,6 +119,7 @@ function maintenanceResult(): DataMaintenanceResult {
     freePagesBefore: 0,
     freePagesAfter: 10,
     deleted: {
+      retiredNamespaceRecords: 0,
       localOutbox: 1_500,
       retainedOutbox: 0,
       telemetryEnvironmentOrphans: 3,

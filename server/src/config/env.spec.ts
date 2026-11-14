@@ -26,16 +26,6 @@ const platformMediaCosEnv = {
 }
 
 describe("loadEnv", () => {
-  it("keeps tunnel ingress private and requires a valid suffix when enabled", () => {
-    const base = { DATABASE_URL: "postgresql://fixture/fixture", ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A", USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars" }
-    expect(loadEnv(base).tunnelEnabled).toBe(false)
-    expect(() => loadEnv({ ...base, TUNNEL_ENABLED: "true" })).toThrow("TUNNEL_PUBLIC_DOMAIN")
-    expect(() => loadEnv({ ...base, TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "*.tunnel.test" })).toThrow()
-    expect(() => loadEnv({ ...base, TUNNEL_INGRESS_HOST: "0.0.0.0" })).toThrow()
-    expect(() => loadEnv({ ...base, APP_PUBLIC_URL: "https://synapse.test", TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "test" })).toThrow()
-    expect(() => loadEnv({ ...base, APP_PUBLIC_URL: "https://synapse.d2.pub", TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "d2.pub" })).toThrow()
-    expect(loadEnv({ ...base, TUNNEL_ENABLED: "true", TUNNEL_PUBLIC_DOMAIN: "tunnel.test" })).toMatchObject({ tunnelIngressHost: "127.0.0.1", tunnelIngressPort: 3002 })
-  })
   it("parses required production settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",

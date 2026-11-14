@@ -5,7 +5,6 @@ cd /app/server
 npx prisma migrate deploy
 
 cd /app
-node server/scripts/tunnel-edge-config.mjs --render-nginx --apply --output /etc/nginx/http.d/tunnel.conf
 nginx -t
 nginx -g 'daemon off;' &
 nginx_pid=$!

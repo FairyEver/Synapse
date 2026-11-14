@@ -10,7 +10,6 @@ import { AgentModule } from "@/modules/agent"
 import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
 import { DriveModule } from "@/modules/drive"
-import { TunnelModule } from "../../../../app-capabilities/tunnel/renderer"
 import { TodosModule } from "@/modules/todos"
 import { ExternalMailModule } from "@/modules/mail"
 import { MailModule } from "@/modules/mail-internal"
@@ -115,7 +114,6 @@ function SystemAppContent({
   if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
-  if (appId === "tunnel") return <TunnelModule />
   if (appId === "todos") return <TodosModule openRequest={todoOpenRequest} onOpenRequestConsumed={onTodoOpenRequestConsumed} />
   if (appId === "mail") return <ExternalMailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
   if (appId === "mail-internal") return <MailModule openRequest={mailInternalOpenRequest} onOpenRequestConsumed={onMailInternalOpenRequestConsumed} />

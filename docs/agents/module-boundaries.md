@@ -470,13 +470,13 @@ Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；�
 - 总预算30秒，包括最多两次发送前连接失败重试（1秒、3秒）。连接/TLS建立前不提交 HTTP 请求；证书错误、HTTP错误、发送状态不确定、发送后断线与响应超时均不重发。响应必须完整结束且2xx才成功，正文/响应头不保存。
 - 外部调用方获得 SY 接收202，本机响应不回传；接口转发成功不代表下游审核或合并完成。旧 HTTP action 保持退役。
 
-## 内网穿透
+## 已退役的内网穿透
 
-- `tunnel` 独立 System App；云端保存账号映射与永久不复用的随机子域名，本机端口授权与设备密钥分别位于 DataRepository 的 `app.tunnel.bindings`（SQLite）和 `app.tunnel.credentials`（加密），两者 local-only。不得导入、同步或克隆授权接管另一电脑映射。
-- 原设备、账号、端口、revision 与本机授权全部一致才能运行；启用意图长期保存，后台恢复不得阻塞主窗口。身份切换、撤销权限和连接换代立即终止旧流。
-- 独立控制与逐请求数据 WSS，不走 Live；只连回环 HTTP 端口，不提供任意主机、TCP 或 CONNECT。拿到公网 HTTPS 链接即可访问，不启动本机服务、不重放请求、不记录正文/Cookie/query。
-- 六项管理 capability / MCP 与 IPC 共用 dispatcher；无 Workflow、Automation、Deep Link、移动端或 Dashboard 入口。配置、流量预算与公网入口规则见[设计](../superpowers/specs/2026-11-11-tunnel-app-design.md)。生产自动续期需长期 DNSPod 验证授权；基础设施试验不等于产品上线。
+- `tunnel` 的桌面应用、共享协议、服务端映射管理与传输、后台恢复、IPC、MCP 和系统 Skill 均退役；不保留兼容调用、部署开关或专用监听端口。既有 Dock 配置按有效 App ID 移除旧固定项。
+- 已执行的 `20261111100000_user_tunnels` 迁移保留原样以维持迁移历史校验；删除业务表使用新的退役迁移，不能修改旧迁移伪装成从未创建。服务器与腾讯云清理须按实际结果核对，不以删除源码宣称完成。范围、历史材料和清理状态见[退役记录](../agent-guides/tunnel-retirement.md)。
 
-内网穿透命名空间关闭后仍由Nginx明确拒绝，不可回落平台站点。平台Cookie会话写操作、网页登录及退出始终精确校验APP_PUBLIC_URL的Origin，Bearer不受此限制。原始多Cookie字段先用分号合并再移除平台会话Cookie。证书安装/恢复必须强制Caddy reload，并在真实验收核对TLS指纹。
+## 平台网页会话安全
 
-生产网页用户/管理员会话使用 `__Host-synapse_user_session` / `__Host-synapse_admin_session`，固定Secure、HttpOnly、Path=/，不设置Domain，不接受旧未加前缀Cookie作为兼容认证；首次升级需网页登录一次。开发HTTP环境保留普通名称。桌面/iOS Bearer协议不变。DNS01续期使用专用TencentCloud CAM子账号，仅d2.pub域的TXT创建/删除和记录读取，密钥保存在服务器root专属配置，BT ACME不落凭据到订单。
+- 平台 Cookie 会话写操作、网页登录及退出始终精确校验 `APP_PUBLIC_URL` 的 Origin；不接受父域、其他同站点子域、缺失或 `null` Origin。桌面与 iOS 的 Bearer 认证语义不变，不依赖 CORS 或 SameSite 代替服务端校验。
+- 生产网页用户/管理员会话使用 `__Host-synapse_user_session` / `__Host-synapse_admin_session`，固定 Secure、HttpOnly、Path=/，不设置 Domain，不接受旧未加前缀 Cookie 作为兼容认证。开发 HTTP 环境保留普通名称。
+- 多个原始 Cookie 字段按分号合并，避免错误解析或重复值绕过。上述是通用认证安全边界，不随某个应用退役而撤销。

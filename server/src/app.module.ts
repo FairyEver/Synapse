@@ -1,5 +1,4 @@
 import { CloudTableModule } from "./cloud-tables/cloud-table.module"
-import { TunnelModule } from "./tunnels/tunnel.module"
 import { CustomAppsModule } from "./custom-apps/custom-apps.module"
 import { cloudTableLogRequest } from "./cloud-tables/cloud-table-log"
 import { TodosModule } from "./todos/todos.module"
@@ -80,7 +79,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
             return Boolean(hubLogPath(url)) || hasSensitiveRequestUrl(url)
           },
         },
-        redact: ["req.headers.cookie", "req.headers.authorization", "req.headers.x-synapse-tunnel-key", "req.body.accessSecret"],
+        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
             return skillHubLogRequest(request) ?? cloudTableLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
@@ -115,7 +114,6 @@ function hasSensitiveRequestUrl(url: string): boolean {
     MobileLiveModule,
     NotificationModule,
     TodosModule,
-    TunnelModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

@@ -9,10 +9,10 @@ function context(request: Record<string, unknown>): ExecutionContext {
 
 describe("UserAuthGuard", () => {
   afterEach(() => vi.unstubAllEnvs())
-  it("still rejects cross-origin cookie writes after the tunnel runtime is disabled", async () => {
-    vi.stubEnv("TUNNEL_ENABLED", "false"); vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+  it("rejects cookie writes from another subdomain of the same site", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
     const guard = new UserAuthGuard({ verifyWebSession: async () => ({ userId: "u", sessionId: "s" }) } as never)
-    await expect(guard.canActivate(context({ method: "POST", headers: { origin: "https://evil.tunnel.test" }, cookies: { synapse_user_session: "token" } }))).rejects.toMatchObject({ status: 403 })
+    await expect(guard.canActivate(context({ method: "POST", headers: { origin: "https://other.synapse.test" }, cookies: { synapse_user_session: "token" } }))).rejects.toMatchObject({ status: 403 })
   })
   it("keeps cloud Console path parameters out of failed-auth audit warnings", async () => {
     const auth = { verifyWebSession: vi.fn().mockResolvedValue(null) }
@@ -24,10 +24,10 @@ describe("UserAuthGuard", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("PRIVATE_")
     expect(audit.recordWithClient).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ detail: expect.objectContaining({ path: "/api/console/tables" }) }))
   })
-  it("keeps desktop bearer access-token authentication unchanged", async () => {
+  it("authenticates desktop bearer writes without a browser Origin", async () => {
     const auth = { verifyAccessToken: vi.fn().mockResolvedValue({ userId: "user-1" }) }
     const guard = new UserAuthGuard(auth as never)
-    const request = { method: "GET", headers: { authorization: "bearer access-token" } }
+    const request = { method: "POST", headers: { authorization: "bearer access-token" } }
 
     await expect(guard.canActivate(context(request))).resolves.toBe(true)
     expect(auth.verifyAccessToken).toHaveBeenCalledWith("access-token")

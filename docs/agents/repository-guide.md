@@ -160,4 +160,4 @@ Skill Hub 的隔离集成验收使用 `pnpm --filter @synapse/server run test:sk
 
 邮箱后台每分钟推进有界过期预览和资产维护批次，并保留分页游标；不能只在启动时释放过期预览占用。休眠、身份切换及退出停止维护计时器并等待当前批次，不在清理中重发邮件。
 
-内网穿透默认关闭；独立WSS `/api/tunnels/control` / `/api/tunnels/data` 与业务入口分离。生产容器仅回环3002、开发19703，不开放新公开端口；正式DNS、证书续期授权和逐区块配置流程见[穿透部署指南](../agent-guides/tunnel-deployment.md)。脚本检查不代表已经部署或续期。
+内网穿透已退役：不提供专用 API、WSS、HTTP ingress、配置项、部署脚本或开发端口。旧数据库迁移保留历史校验，资源清理与验证状态见[退役记录](../agent-guides/tunnel-retirement.md)。平台 Cookie 与精确 Origin 的通用安全基线继续保留。

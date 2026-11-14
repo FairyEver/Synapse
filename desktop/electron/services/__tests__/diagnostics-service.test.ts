@@ -266,6 +266,7 @@ describe("DiagnosticsService.collect", () => {
         startedAt: "2026-04-29T03:30:00.000Z",
         finishedAt: "2026-04-29T03:30:01.000Z",
         deleted: {
+          retiredNamespaceRecords: 0,
           localOutbox: 1_500_000,
           retainedOutbox: 0,
           telemetryEnvironmentOrphans: 50,
@@ -300,6 +301,7 @@ describe("DiagnosticsService.collect", () => {
         finishedAt: "2026-04-29T03:30:01.000Z",
         nextRunAt: "2026-04-29T03:35:01.000Z",
         deleted: {
+          retiredNamespaceRecords: 0,
           localOutbox: 0,
           retainedOutbox: 0,
           telemetryEnvironmentOrphans: 0,

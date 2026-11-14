@@ -148,6 +148,7 @@ export type DataMaintenanceStatus =
   | "failed"
 
 export interface DataMaintenanceCounts {
+  readonly retiredNamespaceRecords: number
   readonly localOutbox: number
   readonly retainedOutbox: number
   readonly telemetryEnvironmentOrphans: number
@@ -168,7 +169,7 @@ export interface DataMaintenanceResult {
 }
 
 export interface DataMaintenanceProgress {
-  readonly phase: "outbox-local" | "outbox-retention" | "telemetry-environment-orphans" | "agent-diagnostics" | "agent-orphans"
+  readonly phase: "retired-namespaces" | "outbox-local" | "outbox-retention" | "telemetry-environment-orphans" | "agent-diagnostics" | "agent-orphans"
   readonly deleted: DataMaintenanceCounts
 }
 

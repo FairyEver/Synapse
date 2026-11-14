@@ -31,7 +31,7 @@ function customAppDtoFixture() {
 
 describe("custom app contracts", () => {
   it("keeps the canonical system app and default Dock catalogs stable", () => {
-    expect(SYSTEM_APP_IDS).toHaveLength(23)
+    expect(SYSTEM_APP_IDS).toHaveLength(22)
     expect(DEFAULT_DOCK_APP_IDS).toEqual([
       "agent",
       "drive",
@@ -43,6 +43,16 @@ describe("custom app contracts", () => {
       "mail",
       "launcher",
     ])
+  })
+
+  it("drops retired tunnel pins and cannot pin the retired app again", () => {
+    expect(normalizeCustomAppDockIds(["agent", "tunnel", appId, "launcher"], new Set([appId])))
+      .toEqual(["agent", appId, "launcher"])
+    expect(applyCustomAppDockAction(
+      ["agent", "launcher"],
+      { type: "pin", appId: "tunnel" },
+      new Set([appId]),
+    )).toEqual(["agent", "launcher"])
   })
 
   it("accepts stable custom app ids and rejects foreign ids", () => {

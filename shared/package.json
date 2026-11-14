@@ -126,28 +126,6 @@
         "default": "./dist/archive-package-node.cjs"
       },
       "default": "./dist/archive-package-node.js"
-    },
-    "./tunnel-contracts": {
-      "import": {
-        "types": "./dist/tunnel-contracts.d.ts",
-        "default": "./dist/tunnel-contracts.js"
-      },
-      "require": {
-        "types": "./dist/tunnel-contracts.d.cts",
-        "default": "./dist/tunnel-contracts.cjs"
-      },
-      "default": "./dist/tunnel-contracts.js"
-    },
-    "./tunnel-stream-node": {
-      "import": {
-        "types": "./dist/tunnel-stream-node.d.ts",
-        "default": "./dist/tunnel-stream-node.js"
-      },
-      "require": {
-        "types": "./dist/tunnel-stream-node.d.cts",
-        "default": "./dist/tunnel-stream-node.cjs"
-      },
-      "default": "./dist/tunnel-stream-node.js"
     }
   },
   "scripts": {

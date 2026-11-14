@@ -20,7 +20,6 @@ describe("system app registry", () => {
       "mail-internal",
       "mail",
       "todos",
-      "tunnel",
       "automation",
       "launcher",
       "settings",

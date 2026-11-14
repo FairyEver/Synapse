@@ -164,16 +164,6 @@ async function topToolNames(intent: string): Promise<readonly string[]> {
 }
 
 describe("synapse tool router search", () => {
-  it("discovers permanent tunnel operations from Chinese requests", async () => {
-    for (const [query, expected] of [
-      ["创建内网穿透映射", "app_tunnel_mapping_create"],
-      ["修改内网穿透映射", "app_tunnel_mapping_update"],
-      ["启停内网穿透映射", "app_tunnel_mapping_set_enabled"],
-    ]) {
-      const result = await searchSynapseTools({ query, limit: 5 })
-      expect(result.tools.map(tool => tool.name), query).toContain(expected)
-    }
-  })
   it("prioritizes filename search for Chinese and English file-finding requests", async () => {
     const cases = [
       "帮我在云盘里找一下云盘搜索设计文件", "搜索云盘里的合同", "帮我找云盘里的文件", "查找云空间里的 PDF",

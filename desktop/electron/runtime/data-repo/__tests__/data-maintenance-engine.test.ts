@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -14,6 +14,60 @@ const RECENT = "2026-09-01T00:00:00.000Z"
 const TELEMETRY_RECENT = "2026-09-05T11:30:00.000Z"
 
 describe("runtime data maintenance engine", () => {
+  it("retires only the removed namespace credentials and deletes bindings in bounded batches", async () => {
+    const fixture = await createFixture()
+    try {
+      fixture.database.exec(`
+        CREATE TABLE ns_app_tunnel_bindings (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE __synapse_meta (namespace TEXT PRIMARY KEY, schema_version INTEGER NOT NULL);
+        INSERT INTO __synapse_meta VALUES ('app.tunnel.bindings', 1), ('app.mail.messages', 1);
+        INSERT INTO ns_app_tunnel_bindings VALUES ('binding-1', '{}'), ('binding-2', '{}'), ('binding-3', '{}');
+      `)
+      fixture.database.close()
+      const credential = path.join(fixture.directory, "app.tunnel.credentials.bin")
+      const legacy = path.join(fixture.directory, "app.tunnel.credentials.json")
+      const unrelated = path.join(fixture.directory, "app.mail.credentials.bin")
+      await writeFile(credential, "encrypted retired credential")
+      await writeFile(legacy, "legacy retired credential")
+      await writeFile(unrelated, "keep")
+
+      const first = await runDataMaintenance({ databasePath: fixture.databasePath, policy: policy({ maxDeletions: 2, batchSize: 1 }) })
+      expect(first.status).toBe("partial")
+      await expect(readFile(credential)).rejects.toMatchObject({ code: "ENOENT" })
+      await expect(readFile(legacy)).rejects.toMatchObject({ code: "ENOENT" })
+      expect(await readFile(unrelated, "utf8")).toBe("keep")
+      const partial = new DatabaseSync(fixture.databasePath)
+      expect(ids(partial, "ns_app_tunnel_bindings")).toEqual(["binding-3"])
+      partial.close()
+
+      const second = await runDataMaintenance({ databasePath: fixture.databasePath, policy: policy() })
+      expect(second.status).toBe("completed")
+      const database = new DatabaseSync(fixture.databasePath)
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE name = 'ns_app_tunnel_bindings'").get()).toBeUndefined()
+      expect(database.prepare("SELECT namespace FROM __synapse_meta ORDER BY namespace").all()).toEqual([{ namespace: "app.mail.messages" }])
+      database.close()
+      await expect(runDataMaintenance({ databasePath: fixture.databasePath, policy: policy() })).resolves.toMatchObject({ status: "completed" })
+    } finally {
+      await rm(fixture.directory, { recursive: true, force: true })
+    }
+  })
+
+  it("reports failed credential retirement and retries without touching unrelated files", async () => {
+    const fixture = await createFixture()
+    fixture.database.close()
+    try {
+      const credential = path.join(fixture.directory, "app.tunnel.credentials.bin")
+      await mkdir(credential)
+      await writeFile(path.join(credential, "keep"), "not a credential file")
+      await expect(runDataMaintenance({ databasePath: fixture.databasePath, policy: policy() })).rejects.toThrow()
+      expect(await readFile(path.join(credential, "keep"), "utf8")).toBe("not a credential file")
+      await rm(credential, { recursive: true })
+      await expect(runDataMaintenance({ databasePath: fixture.databasePath, policy: policy() })).resolves.toMatchObject({ status: "completed" })
+    } finally {
+      await rm(fixture.directory, { recursive: true, force: true })
+    }
+  })
+
   it("removes only redundant rows and preserves delivery failures and conversation history", async () => {
     const fixture = await createFixture()
     try {
@@ -46,6 +100,7 @@ describe("runtime data maintenance engine", () => {
 
       expect(result.status).toBe("completed")
       expect(result.deleted).toEqual({
+        retiredNamespaceRecords: 0,
         localOutbox: 1,
         retainedOutbox: 20,
         telemetryEnvironmentOrphans: 1,

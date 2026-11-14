@@ -8,7 +8,7 @@ import { recordAuthGuardFailure } from "../common/auth-guard-audit"
 import { UserAuthService } from "./user-auth.service"
 import { hubLogPath } from "../skill-hub/skill-hub-log"
 import { userSessionCookieName } from "./user-web-session"
-import { assertTunnelCookieOrigin } from "./tunnel-origin"
+import { assertCookieOrigin } from "./cookie-origin"
 
 export interface AuthenticatedUserRequest extends Request {
   user?: { id: string }
@@ -59,7 +59,7 @@ export class UserAuthGuard implements CanActivate {
     }
     request.user = { id: session.userId }
     request.userAuthMethod = "cookie"
-    assertTunnelCookieOrigin(request, process.env.APP_PUBLIC_URL)
+    assertCookieOrigin(request, process.env.APP_PUBLIC_URL)
     return true
   }
 

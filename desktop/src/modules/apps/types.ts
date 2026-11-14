@@ -14,7 +14,6 @@ export type SynapseSystemAppNamespace =
   | "mail_internal"
   | "mail"
   | "todos"
-  | "tunnel"
   | "automation"
   | "launcher"
   | "settings"

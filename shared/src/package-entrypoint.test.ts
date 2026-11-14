@@ -7,14 +7,30 @@ import { describe, expect, it } from "vitest"
 describe("package entrypoint", () => {
   const packageDirectory = fileURLToPath(new URL("..", import.meta.url))
 
-  it("loads the same tunnel protocol through ESM and CommonJS", () => {
+  it("rejects retired tunnel subpaths for ESM and CommonJS consumers", () => {
     const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
       import { createRequire } from "node:module"
-      import * as esm from "@synapse/shared/tunnel-contracts"
-      const cjs = createRequire(import.meta.url)("@synapse/shared/tunnel-contracts")
-      process.stdout.write(JSON.stringify({ equal: JSON.stringify(esm.TUNNEL_LIMITS) === JSON.stringify(cjs.TUNNEL_LIMITS), label: cjs.createTunnelLabel(() => new Uint8Array(16)) }))
+      import * as root from "@synapse/shared"
+      const require = createRequire(import.meta.url)
+      const results = []
+      for (const subpath of ["tunnel-contracts", "tunnel-stream-node"]) {
+        const specifier = "@synapse/shared/" + subpath
+        let esm = null
+        let cjs = null
+        try { await import(specifier) } catch (error) { esm = error.code }
+        try { require(specifier) } catch (error) { cjs = error.code }
+        results.push({ subpath, esm, cjs })
+      }
+      process.stdout.write(JSON.stringify({ results, rootExports: Object.keys(root).filter((name) => /tunnel/i.test(name)) }))
     `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
-    expect(JSON.parse(result)).toEqual({ equal: true, label: "0".repeat(32) })
+    expect(JSON.parse(result)).toEqual({
+      results: ["tunnel-contracts", "tunnel-stream-node"].map((subpath) => ({
+        subpath,
+        esm: "ERR_PACKAGE_PATH_NOT_EXPORTED",
+        cjs: "ERR_PACKAGE_PATH_NOT_EXPORTED",
+      })),
+      rootExports: [],
+    })
   })
 
   it("does not load CommonJS-only modules from the ESM root entrypoint", async () => {

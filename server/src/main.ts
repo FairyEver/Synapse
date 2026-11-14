@@ -11,8 +11,6 @@ import { registerHttpShutdownDeadline } from "./common/http-shutdown-deadline"
 import { createHttpSecurityMiddleware } from "./common/http-security"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
-import { TunnelGateway } from "./tunnels/tunnel-gateway"
-import { TunnelIngress } from "./tunnels/tunnel-ingress"
 import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
 import { MobileLiveGateway } from "./mobile-live/mobile-live.gateway"
 import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
@@ -41,7 +39,6 @@ async function bootstrap(): Promise<void> {
   const liveDesktopGateway = app.get(LiveDesktopGateway)
   registerLiveShutdownSignalHandlers(liveDesktopGateway)
   liveDesktopGateway.attach(app.getHttpServer())
-  if (env.tunnelEnabled) app.get(TunnelGateway).attach(app.getHttpServer())
   app.get(DriveCollaborationGateway).attach(app.getHttpServer())
   // Phones connect over their own path; the three gateways share one upgrade
   // event and each claims its own pathname.
@@ -49,7 +46,6 @@ async function bootstrap(): Promise<void> {
     app.get(MobileLiveGateway).attach(app.getHttpServer())
   }
   await app.listen(env.port)
-  if (env.tunnelEnabled) await app.get(TunnelIngress).start({ host: env.tunnelIngressHost, port: env.tunnelIngressPort, publicDomain: env.tunnelPublicDomain!, requestBodyBytes: env.tunnelMaxRequestBodyBytes })
   registerHttpShutdownDeadline(app.getHttpServer())
 }
 
