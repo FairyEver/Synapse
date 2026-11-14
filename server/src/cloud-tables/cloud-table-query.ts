@@ -42,6 +42,15 @@ export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql
     }
     if (filter.op === "in") {
       if (!Array.isArray(filter.value) || !filter.value.length || filter.value.length > 100) fail("INVALID_QUERY", "集合筛选需要1至100个值。")
+      if (!filter.field.startsWith("$") && !filter.value.includes(null)) {
+        const candidates = filter.value.map(candidate => {
+          scalar(candidate)
+          const normalized = c.field.type === "datetime" && typeof candidate === "string" ? new Date(candidate).toISOString() : candidate
+          return `@ == ${JSON.stringify(normalized)}`
+        })
+        // One GIN search avoids the accumulated cost of independent OR scans.
+        return Prisma.sql`r."values" @? ${`strict $.${JSON.stringify(filter.field)} ? (${candidates.join(" || ")})`}::jsonpath`
+      }
       return Prisma.sql`(${Prisma.join(filter.value.map(equal), " OR ")})`
     }
     if (filter.op === "contains") {

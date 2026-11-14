@@ -12,10 +12,10 @@ const fields: CloudField[] = [
 const plan = (input: unknown) => queryPlan("table", fields, querySchema.parse(input), "actor", 1, "secret")
 
 describe("cloud table read query", () => {
-  it("keeps business IN candidates indexable using the same containment predicates as equality", () => {
+  it("combines non-null business IN candidates into one strict indexed search", () => {
     const result = plan({ filters: [{ field: "title", op: "in", value: ["first", "second"] }] })
-    expect(result.filter.sql.match(/@>/g)).toHaveLength(2)
-    expect(result.filter.values).toEqual(['{"title":"first"}', '{"title":"second"}'])
+    expect(result.filter.sql.match(/@\?/g)).toHaveLength(1)
+    expect(result.filter.values).toEqual(['strict $."title" ? (@ == "first" || @ == "second")'])
   })
   it.each([
     [{ key: "value", name: "值", type: "text" }, "", '{"value":""}'],
@@ -30,13 +30,24 @@ describe("cloud table read query", () => {
   it("normalizes business datetime IN candidates without changing system timestamp comparisons", () => {
     const field: CloudField = { key: "date", name: "日期", type: "datetime" }
     const result = filterPlan([field], querySchema.parse({ filters: [{ field: "date", op: "in", value: ["2026-11-01T00:00:00Z"] }] }))
-    expect(result.values).toEqual(['{"date":"2026-11-01T00:00:00.000Z"}'])
+    expect(result.values).toEqual(['strict $."date" ? (@ == "2026-11-01T00:00:00.000Z")'])
     const system = plan({ filters: [{ field: "$createdAt", op: "in", value: ["2026-11-01T08:00:00+08:00"] }] })
     expect(system.filter.sql).not.toContain('@>')
     expect(system.filter.values).toEqual(["2026-11-01T00:00:00.000Z"])
   })
   it("still validates every IN candidate before generating a containment predicate", () => {
     expect(() => plan({ filters: [{ field: "score", op: "in", value: [1, "invalid"] }] })).toThrow()
+  })
+  it("escapes IN candidate text inside the bound search expression", () => {
+    const candidate = 'quote" || @ == "injected\\value'
+    const result = plan({ filters: [{ field: "title", op: "in", value: [candidate] }] })
+    expect(result.filter.values).toEqual(['strict $."title" ? (@ == "quote\\\" || @ == \\\"injected\\\\value")'])
+  })
+  it("keeps the 1-to-100 IN candidate bound", () => {
+    expect(() => plan({ filters: [{ field: "title", op: "in", value: Array.from({ length: 100 }, (_, i) => String(i)) }] })).not.toThrow()
+    for (const value of [[], Array.from({ length: 101 }, (_, i) => String(i))]) {
+      expect(() => plan({ filters: [{ field: "title", op: "in", value }] })).toThrow()
+    }
   })
   it("accepts optional projections and same-level OR while preserving default requests", () => {
     expect(querySchema.parse({})).toMatchObject({ filters: [], filterMode: "all", sort: [], limit: 50 })

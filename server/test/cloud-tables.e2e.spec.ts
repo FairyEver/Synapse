@@ -77,7 +77,12 @@ describe("cloud tables real PostgreSQL", () => {
     ]
     const ids: string[] = []
     for (const value of values) ids.push((await request(actor, t.id, "records.create", { values: value })).id)
+    // Model an older row written before the optional fields existed.
+    await db.cloudTableRecord.update({ where: { id: ids[3] }, data: { values: {} } })
     for (const [field, candidates, expected] of [
+      ["text", [""], [ids[0]]],
+      ["n", [0], [ids[0]]],
+      ["flag", [false], [ids[0]]],
       ["text", ["", null], [ids[0], ids[2], ids[3]]],
       ["n", [0, null], [ids[0], ids[2], ids[3]]],
       ["flag", [false, null], [ids[0], ids[2], ids[3]]],
@@ -91,6 +96,16 @@ describe("cloud tables real PostgreSQL", () => {
     const second = await request(actor, t.id, "records.query", { ...query, cursor: first.nextCursor })
     expect([first.data[0].id, second.data[0].id].sort()).toEqual([ids[0], ids[1]].sort())
     expect(second.nextCursor).toBeNull()
+  })
+  it("treats JSONPath-looking IN text literally and does not unwrap arrays", async () => {
+    const t = await request(actor, null, "table.create", { name: "in-literal", fields: [{ key: "text", name: "文本", type: "text" }] })
+    const literal = 'quote" || @ == "injected\\value'
+    const expected = await request(actor, t.id, "records.create", { values: { text: literal } })
+    await request(actor, t.id, "records.create", { values: { text: "injected" } })
+    const array = await request(actor, t.id, "records.create", { values: { text: "placeholder" } })
+    await db.cloudTableRecord.update({ where: { id: array.id }, data: { values: { text: [literal] } } })
+    const result = await request(actor, t.id, "records.query", { filters: [{ field: "text", op: "in", value: [literal, "absent"] }] })
+    expect(result.data.map((row: any) => row.id)).toEqual([expected.id])
   })
   it("restores records and tables without re-enabling anonymous operations", async () => {
     const row = await request(actor, tableId, "records.create", { values: { name: "restore" } })
