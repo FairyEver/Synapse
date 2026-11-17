@@ -100,13 +100,13 @@ describe("TodoDuePicker", () => {
       .find((tab) => tab.textContent === "自定义")
     act(() => customTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })))
     await flush()
-    expect(document.querySelector<HTMLInputElement>('input[type="time"]')!.value).toBe("10:00")
+    expect(document.querySelector<HTMLInputElement>('input[type="time"]')!.value).toBe("17:00")
     expect(onChange).not.toHaveBeenCalled()
 
     click(buttonByText("完成")!)
     await flush()
 
-    expect(onChange).toHaveBeenLastCalledWith("2026-11-17T10:00")
+    expect(onChange).toHaveBeenLastCalledWith("2026-11-17T17:00")
     expect(onOpenChange).toHaveBeenLastCalledWith(false)
   })
 

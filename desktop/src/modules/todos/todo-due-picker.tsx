@@ -185,7 +185,7 @@ export function TodoDuePicker({
                   selected={customDate}
                   onSelect={setCustomDate}
                   aria-labelledby={customDateLabelId}
-                  className="p-0"
+                  className="w-full p-0"
                 />
               </div>
               <div className="flex items-center gap-2">

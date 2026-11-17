@@ -52,6 +52,10 @@ export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
 }
 
 export function getTodoCustomDueDefault(now: Date): { date: Date; time: string } {
-  const nextHour = set(addHours(startOfMinute(now), 1), { minutes: 0, seconds: 0, milliseconds: 0 })
-  return { date: nextHour, time: format(nextHour, "HH:mm") }
+  const base = startOfMinute(now)
+  const todayAtFive = atTime(base, 17)
+  const target = todayAtFive.getTime() > now.getTime()
+    ? todayAtFive
+    : atTime(addDays(base, 1), 17)
+  return { date: target, time: format(target, "HH:mm") }
 }

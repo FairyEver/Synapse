@@ -42,8 +42,8 @@ describe("todo deadline presets", () => {
         { localValue: "2026-12-31T17:00", disabled: true },
       ])
     expect(getTodoCustomDueDefault(new Date(2026, 11, 31, 23, 20))).toMatchObject({
-      date: new Date(2027, 0, 1, 0, 0),
-      time: "00:00",
+      date: new Date(2027, 0, 1, 17, 0),
+      time: "17:00",
     })
   })
 
@@ -67,5 +67,16 @@ describe("todo deadline presets", () => {
     const nextMonday = buildTodoDeadlinePresets(new Date(2026, 10, 2, 9, 0))
       .find(({ key }) => key === "next-monday")
     expect(nextMonday).toMatchObject({ localValue: "2026-11-09T17:00", disabled: false })
+  })
+
+  it("uses the next 17:00 as the custom default", () => {
+    expect(getTodoCustomDueDefault(new Date(2026, 10, 17, 9, 12))).toMatchObject({
+      date: new Date(2026, 10, 17, 17, 0),
+      time: "17:00",
+    })
+    expect(getTodoCustomDueDefault(new Date(2026, 10, 17, 17, 0))).toMatchObject({
+      date: new Date(2026, 10, 18, 17, 0),
+      time: "17:00",
+    })
   })
 })

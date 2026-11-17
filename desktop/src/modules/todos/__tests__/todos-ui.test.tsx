@@ -158,10 +158,13 @@ describe("Todo visible actions", () => {
       act(() => customTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))); await flush()
 
       const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]')!
-      expect(popover.querySelector('[data-slot="calendar"]')).not.toBeNull()
+      const calendar = popover.querySelector<HTMLElement>('[data-slot="calendar"]')!
+      expect(calendar).not.toBeNull()
+      expect(calendar.classList.contains("w-full")).toBe(true)
+      expect(calendar.classList.contains("w-fit")).toBe(false)
       expect([...popover.querySelectorAll<HTMLButtonElement>("button")].every((button) => button.type === "button")).toBe(true)
       const time = popover.querySelector<HTMLInputElement>('input[type="time"]')!
-      expect(time.value).toBe("10:00")
+      expect(time.value).toBe("17:00")
       const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
       act(() => time.dispatchEvent(enter))
       expect(enter.defaultPrevented).toBe(true)
@@ -170,7 +173,7 @@ describe("Todo visible actions", () => {
         .find((button) => button.textContent?.trim() === "完成")!
       act(() => complete.click()); await flush()
 
-      expect(dueTrigger.textContent).toContain("截止 11-17 10:00")
+      expect(dueTrigger.textContent).toContain("截止 11-17 17:00")
       expect(dueTrigger.getAttribute("aria-expanded")).toBe("false")
       expect(document.activeElement).toBe(dueTrigger)
       expect(mocks.create).not.toHaveBeenCalled()
