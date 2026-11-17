@@ -20,6 +20,18 @@ const toLocalValue = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm")
 const toDisplay = (date: Date) => format(date, "M月d日 HH:mm")
 const atTime = (date: Date, hours: number, minutes = 0) =>
   set(date, { hours, minutes, seconds: 0, milliseconds: 0 })
+const preset = (
+  key: TodoDeadlinePresetKey,
+  label: string,
+  date: Date,
+  disabled = false
+): TodoDeadlinePreset => ({
+  key,
+  label,
+  display: toDisplay(date),
+  localValue: toLocalValue(date),
+  disabled,
+})
 
 export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
   const base = startOfMinute(now)
@@ -30,17 +42,13 @@ export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
   const inTwoDays = addDays(base, 2)
 
   return [
-    { key: "in-1-hour", label: "1 小时后", date: addHours(base, 1), disabled: false },
-    { key: "today-noon", label: "今天中午", date: todayNoon, disabled: todayNoon.getTime() <= now.getTime() },
-    { key: "today-17", label: "今天 17:00", date: today17, disabled: today17.getTime() <= now.getTime() },
-    { key: "tomorrow-noon", label: "明天中午", date: tomorrowNoon, disabled: false },
-    { key: "in-1-day", label: "1 天后", date: inOneDay, disabled: false },
-    { key: "in-2-days", label: "2 天后", date: inTwoDays, disabled: false },
-  ].map(({ date, ...preset }) => ({
-    ...preset,
-    display: toDisplay(date),
-    localValue: toLocalValue(date),
-  }))
+    preset("in-1-hour", "1 小时后", addHours(base, 1)),
+    preset("today-noon", "今天中午", todayNoon, todayNoon.getTime() <= now.getTime()),
+    preset("today-17", "今天 17:00", today17, today17.getTime() <= now.getTime()),
+    preset("tomorrow-noon", "明天中午", tomorrowNoon),
+    preset("in-1-day", "1 天后", inOneDay),
+    preset("in-2-days", "2 天后", inTwoDays),
+  ]
 }
 
 export function getTodoCustomDueDefault(now: Date): { date: Date; time: string } {
