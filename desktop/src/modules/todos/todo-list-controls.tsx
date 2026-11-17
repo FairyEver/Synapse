@@ -13,7 +13,7 @@ export function TodoListControls({ priority, sort, onPriorityChange, onSortChang
   return <div className="flex flex-wrap items-center gap-2">
     <ToggleGroup type="single" variant="outline" role="radiogroup" aria-label="筛选优先级" data-track="todos.priority-filter"
       value={priority} onValueChange={(value) => { if (value) onPriorityChange(value as TodoListView["priority"]) }}>
-      <ToggleGroupItem value="all" aria-label="全部优先级" className={prioritySelectedClass}>全部优先级</ToggleGroupItem>
+      <ToggleGroupItem value="all" aria-label="全部优先级" className={prioritySelectedClass}>全部</ToggleGroupItem>
       {TODO_PRIORITY_FILTERS.map((value) => <ToggleGroupItem key={value} value={value} className={prioritySelectedClass}
         aria-label={value === "none" ? "筛选未设置优先级" : `筛选 ${priorityLabels[value]}`}>
         {priorityLabels[value]}

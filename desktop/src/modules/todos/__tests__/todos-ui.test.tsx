@@ -37,7 +37,7 @@ describe("Todo visible actions", () => {
       mocks.readImage.mockResolvedValue({ bytes: new Uint8Array([1]), mimeType: "image/webp" })
       mount(<TodosModule />); await flush()
       const filter = document.querySelector('[role="radio"][aria-checked="true"]')!
-      expect(filter.textContent).toBe("全部优先级")
+      expect(filter.textContent).toBe("全部")
       expect(filter.classList.contains("data-[state=on]:bg-primary")).toBe(true)
       const form = document.querySelector<HTMLFormElement>('[aria-label="快速新建待办"]')!
       const input = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
