@@ -5,7 +5,6 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { TodoPrioritySelect } from "./todo-priority"
 import { TodoReminderSelect } from "./todo-reminder-select"
@@ -71,11 +70,8 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
         </Button>
         <TodoImagePicker label="图片" disabled={saving} onSelect={editor.addImages} />
       </div>
-      {showNote && <div className="space-y-2">
-        <Label htmlFor={noteId}>备注</Label>
-        <Textarea id={noteId} rows={2} data-track="todos.note" disabled={saving} value={draft.note}
-          onChange={(event) => change("note", event.target.value)} onPaste={event => handleTodoImagePaste(event, editor.addImages)} />
-      </div>}
+      {showNote && <Textarea id={noteId} aria-label="备注" placeholder="备注" rows={2} data-track="todos.note" disabled={saving} value={draft.note}
+        onChange={(event) => change("note", event.target.value)} onPaste={event => handleTodoImagePaste(event, editor.addImages)} />}
       <TodoImageStrip images={draft.images} disabled={saving} onRemove={editor.removeImage} />
       {editor.error && <p role="alert" className="text-sm text-destructive">{editor.error}</p>}
     </form>

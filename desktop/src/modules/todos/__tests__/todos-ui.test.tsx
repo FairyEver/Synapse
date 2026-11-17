@@ -111,6 +111,18 @@ describe("Todo visible actions", () => {
     expect(document.querySelector('[aria-label="筛选无优先级"]')?.textContent).toBe("无")
   })
 
+  it("uses the note placeholder instead of a visible label", async () => {
+    mount(<TodosModule />); await flush()
+    const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+    const noteButton = [...form.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "备注")!
+    act(() => noteButton.click()); await flush()
+
+    const note = form.querySelector<HTMLTextAreaElement>('textarea[aria-label="备注"]')!
+    expect(note.placeholder).toBe("备注")
+    expect(form.querySelector("label")).toBeNull()
+  })
+
   it("sets a quick deadline and submits it without leaving the quick-add form", async () => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date(2026, 10, 17, 9, 12))
