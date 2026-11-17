@@ -33,7 +33,7 @@ export function buildTodoTools(): McpToolDefinition[] {
       case "list": properties = {
         filter: { type: "string", enum: ["pending", "all"], default: "pending" },
         priority: { type: "string", enum: [...TODO_PRIORITY_FILTERS], description: "Omit for all priorities. Use none for unassigned todos." },
-        sort: { type: "string", enum: [...TODO_SORTS], default: "due", description: "Priority sorts pending todos high, medium, low, then unassigned. Due date breaks ties." },
+        sort: { type: "string", enum: [...TODO_SORTS], default: "due", description: "Priority sorts pending todos P0, P1, P2, P3, then unassigned. Due date breaks ties." },
         query: { type: "string", maxLength: 200, description: "Literal contains match; % and _ are ordinary characters." },
         offset: { type: "integer", minimum: 0, maximum: 2147483647, default: 0 }, limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
       }; required = []; break

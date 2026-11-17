@@ -10,6 +10,7 @@ import { TodosService } from "./todos.service"
 import { TodosModule } from "./todos.module"
 import { TodoImagesController } from "./todo-images.controller"
 import { TodoImageService } from "./todo-image.service"
+import { TODO_PRIORITY_V2_HEADER } from "@synapse/shared/todo-contracts"
 
 // Run the production route middleware with isolated service/guard fixtures.
 @Module({ imports: [], controllers: [TodosController], providers: [{ provide: TodosService, useValue: {
@@ -85,7 +86,7 @@ describe("authenticated todo HTTP boundary", () => {
 
   it("negotiates the optional priority field for old strict clients and validates list options", async () => {
     const imageIds = ["00000000-0000-4000-8000-000000000011"]
-    const item = { id: "todo", version: 1, priority: "medium", imageIds }
+    const item = { id: "todo", version: 1, priority: "p1" as "p1" | "p3", imageIds }
     const list = async (_user: string, input: unknown) => ({ items: [item], nextOffset: null, input })
     const module = await Test.createTestingModule({ controllers: [TodosController], providers: [{
       provide: TodosService, useValue: { list, get: async () => item, create: async () => item, update: async () => item, setCompleted: async () => item },
@@ -106,15 +107,33 @@ describe("authenticated todo HTTP boundary", () => {
         const legacy = api[method](path)
         if (body) legacy.send(body)
         expect((await legacy).body).toEqual({ id: "todo", version: 1 })
-        const current = api[method](path).set("x-synapse-todo-priority", "1").set("x-synapse-todo-images", "1")
+
+        const oldPriority = api[method](path).set("x-synapse-todo-priority", "1").set("x-synapse-todo-images", "1")
+        if (body) oldPriority.send(body)
+        expect((await oldPriority).body).toEqual({ id: "todo", version: 1, priority: "medium", imageIds })
+
+        const current = api[method](path).set("x-synapse-todo-priority", "1").set(TODO_PRIORITY_V2_HEADER, "1").set("x-synapse-todo-images", "1")
         if (body) current.send(body)
         expect((await current).body).toEqual(item)
       }
       const legacyPage = await api.get("/api/todos").expect(200)
       expect(legacyPage.body.items).toEqual([{ id: "todo", version: 1 }])
-      const filtered = await api.get("/api/todos?priority=medium&sort=priority&offset=2").set("x-synapse-todo-priority", "1").expect(200)
-      expect(filtered.body.items).toEqual([{ id: "todo", version: 1, priority: "medium" }])
-      expect(filtered.body.input).toMatchObject({ priority: "medium", sort: "priority", offset: 2 })
+      const legacyFiltered = await api.get("/api/todos?priority=medium&sort=priority&offset=2")
+        .set("x-synapse-todo-priority", "1").set("x-synapse-todo-images", "1").expect(200)
+      expect(legacyFiltered.body.items).toEqual([{ id: "todo", version: 1, priority: "medium", imageIds }])
+      expect(legacyFiltered.body.input).toMatchObject({ priority: "p1", sort: "priority", offset: 2 })
+
+      const filtered = await api.get("/api/todos?priority=p1&sort=priority&offset=2")
+        .set("x-synapse-todo-priority", "1").set(TODO_PRIORITY_V2_HEADER, "1").set("x-synapse-todo-images", "1").expect(200)
+      expect(filtered.body.items).toEqual([item])
+      expect(filtered.body.input).toMatchObject({ priority: "p1", sort: "priority", offset: 2 })
+
+      item.priority = "p3"
+      const legacyP3 = await api.get("/api/todos/todo").set("x-synapse-todo-priority", "1").set("x-synapse-todo-images", "1").expect(200)
+      expect(legacyP3.body.priority).toBe("low")
+      const currentP3 = await api.get("/api/todos/todo").set(TODO_PRIORITY_V2_HEADER, "1").set("x-synapse-todo-images", "1").expect(200)
+      expect(currentP3.body.priority).toBe("p3")
+
       await api.get("/api/todos?priority=unknown").expect(400)
       await api.get("/api/todos?sort=unknown").expect(400)
     } finally { await app.close() }

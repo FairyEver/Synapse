@@ -30,8 +30,16 @@ describe("todo strict input and candidate validation", () => {
       title: "测试事项", note: null, dueAt: "2026-10-12T01:00:00.000Z",
     })
   })
-  it.each([{ userId: "other" }, { completedAt: now.toISOString() }, { offsetMinutes: 15 }, { dueAt: "2026-02-30T09:00:00Z" }, { remindAt: "2026-10-12T01:00:01Z" }])("rejects undeclared or invalid fields: %j", (extra) => {
+  it.each([{ userId: "other" }, { completedAt: now.toISOString() }, { priority: "unknown" }, { offsetMinutes: 15 }, { dueAt: "2026-02-30T09:00:00Z" }, { remindAt: "2026-10-12T01:00:01Z" }])("rejects undeclared or invalid fields: %j", (extra) => {
     expect(todoCreateSchema.safeParse(create(extra)).success).toBe(false)
+  })
+  it("maps legacy priority aliases while preserving P0-P3", () => {
+    expect(todoCreateSchema.parse(create({ priority: "high" })).priority).toBe("p0")
+    expect(todoCreateSchema.parse(create({ priority: "medium" })).priority).toBe("p1")
+    expect(todoCreateSchema.parse(create({ priority: "low" })).priority).toBe("p2")
+    expect(todoCreateSchema.parse(create({ priority: "p3" })).priority).toBe("p3")
+    expect(todoListSchema.parse({ priority: "medium" }).priority).toBe("p1")
+    expect(todoListSchema.parse({ priority: "none" }).priority).toBe("none")
   })
   it("distinguishes retaining a patch field from clearing it", () => {
     const input = todoUpdateSchema.parse({ note: null, expectedVersion: 1, clientRequestId: key })

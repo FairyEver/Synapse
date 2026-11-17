@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { parseTodoReference, TODO_PRIORITY_HEADER, type TodoCompletionInput, type TodoCreateInput, type TodoDeleteInput, type TodoDeleteResult, type TodoItemDto, type TodoListInput, type TodoLocator, type TodoPageDto, type TodoUpdateInput } from "@synapse/shared/todo-contracts"
+import { parseTodoReference, TODO_PRIORITY_HEADER, TODO_PRIORITY_V2_HEADER, type TodoCompletionInput, type TodoCreateInput, type TodoDeleteInput, type TodoDeleteResult, type TodoItemDto, type TodoListInput, type TodoLocator, type TodoPageDto, type TodoUpdateInput } from "@synapse/shared/todo-contracts"
 import { TODO_IMAGES_HEADER, TODO_MAX_IMAGE_BYTES, TODO_MAX_THUMBNAIL_BYTES, TODO_THUMBNAIL_SIZE_HEADER, type TodoImageReadInput, type TodoImageStageInput } from "@synapse/shared/todo-contracts"
 import type { AccountService } from "../../../electron/services/account-service"
 import type { EventBus } from "../../../electron/runtime/event-bus/types"
@@ -53,7 +53,7 @@ export class TodoCloudService {
     )
   }
   private request<T>(path: string, method: string, input: unknown, schema: z.ZodType<T>, list = false): Promise<T> {
-    const headers: Record<string, string> = { [TODO_PRIORITY_HEADER]: "1", [TODO_IMAGES_HEADER]: "1" }
+    const headers: Record<string, string> = { [TODO_PRIORITY_HEADER]: "1", [TODO_PRIORITY_V2_HEADER]: "1", [TODO_IMAGES_HEADER]: "1" }
     if (input !== undefined) headers["Content-Type"] = "application/json"
     return this.exchange(path, { method, headers, ...(input === undefined ? {} : { body: JSON.stringify(input) }) },
       async response => this.decode(schema, await response.json()), list)

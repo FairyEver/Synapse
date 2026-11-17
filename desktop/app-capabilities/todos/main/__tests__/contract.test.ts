@@ -14,6 +14,10 @@ describe("Todo cross-layer contract", () => {
     expect(todoPageSchema.parse(page)).toEqual(page)
     expect(todosIpcModule.methods.list!.response.parse({ ok: true, data: page })).toEqual({ ok: true, data: page })
   })
+  it("normalizes legacy priority values from an older server", () => {
+    const legacy = { items: [{ ...page.items[0], priority: "medium" }], nextOffset: null }
+    expect(todoPageSchema.parse(legacy)).toMatchObject({ items: [{ priority: "p1" }] })
+  })
   it("maps the same six capabilities to the UI bridge and the MCP index", () => {
     expect(capabilityActions).toHaveLength(6)
     const ipcActions = Object.values(todosIpcModule.methods).map((method) => method.operationId)

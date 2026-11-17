@@ -77,11 +77,11 @@ describe("Todo visible actions", () => {
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "测试快建")
       title.dispatchEvent(new Event("input", { bubbles: true }))
-      document.querySelector<HTMLButtonElement>('[aria-label="筛选高优先级"]')!.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="筛选 P0"]')!.click()
     })
     await flush()
     expect(title.value).toBe("测试快建")
-    expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ priority: "high", offset: 0 }))
+    expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ priority: "p0", offset: 0 }))
     act(() => form.requestSubmit()); await flush()
     expect(mocks.create).toHaveBeenCalledOnce()
     expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ title: "测试快建" })
@@ -89,6 +89,21 @@ describe("Todo visible actions", () => {
     expect(title.value).toBe("")
     expect(document.activeElement).toBe(title)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it("uses the P0-P3 priority labels in the quick form and filters", async () => {
+    mount(<TodosModule />); await flush()
+    const select = document.querySelector<HTMLSelectElement>('select[aria-label="优先级"]')!
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "优先级未设置",
+      "P0",
+      "P1",
+      "P2",
+      "P3",
+    ])
+    for (const label of ["筛选 P0", "筛选 P1", "筛选 P2", "筛选 P3", "筛选未设置优先级"]) {
+      expect(document.querySelector<HTMLElement>(`[aria-label="${label}"]`)).not.toBeNull()
+    }
   })
 
   it("sets a quick deadline and submits it without leaving the quick-add form", async () => {
@@ -230,12 +245,12 @@ describe("Todo visible actions", () => {
   })
 
   it("sets and clears a row priority through the versioned update", async () => {
-    mocks.list.mockResolvedValue({ items: [{ ...item, priority: "medium" }], nextOffset: null })
+    mocks.list.mockResolvedValue({ items: [{ ...item, priority: "p1" }], nextOffset: null })
     const cleared = { ...item, priority: null, version: 2 }
     mocks.update.mockResolvedValue(cleared)
     mount(<TodosModule />); await flush()
-    const trigger = document.querySelector<HTMLButtonElement>('[aria-label="报销的优先级：中"]')!
-    expect(trigger.textContent).toBe("中")
+    const trigger = document.querySelector<HTMLButtonElement>('[aria-label="报销的优先级：P1"]')!
+    expect(trigger.textContent).toBe("P1")
     expect(trigger.querySelector("svg")).toBeNull()
     act(() => trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush()
     const choice = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((entry) => entry.textContent === "未设置")!

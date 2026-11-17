@@ -1,10 +1,12 @@
 export const TODO_REMINDER_KINDS = ["none", "at_due", "before_due", "custom"] as const
 export const TODO_REMINDER_STATUSES = ["none", "pending", "sent", "cancelled", "expired"] as const
 export const TODO_REMINDER_OFFSETS = [10, 30, 60, 1440] as const
-export const TODO_PRIORITIES = ["high", "medium", "low"] as const
+export const TODO_PRIORITIES = ["p0", "p1", "p2", "p3"] as const
+export const TODO_LEGACY_PRIORITIES = ["high", "medium", "low"] as const
 export const TODO_PRIORITY_FILTERS = [...TODO_PRIORITIES, "none"] as const
 export const TODO_SORTS = ["due", "priority"] as const
 export const TODO_PRIORITY_HEADER = "x-synapse-todo-priority"
+export const TODO_PRIORITY_V2_HEADER = "x-synapse-todo-priority-v2"
 export const TODO_IMAGES_HEADER = "x-synapse-todo-images"
 export const TODO_THUMBNAIL_SIZE_HEADER = "x-synapse-todo-thumbnail-size"
 export const TODO_MAX_IMAGES = 10
@@ -18,11 +20,32 @@ export interface TodoImageStageInput { imageId: string; original: Uint8Array; th
 export interface TodoImageContent { bytes: Uint8Array; mimeType: typeof TODO_IMAGE_MIME_TYPES[number] }
 export type TodoFilter = "pending" | "all"
 export type TodoPriority = typeof TODO_PRIORITIES[number]
+export type TodoLegacyPriority = typeof TODO_LEGACY_PRIORITIES[number]
 export type TodoPriorityFilter = typeof TODO_PRIORITY_FILTERS[number]
 export type TodoSort = typeof TODO_SORTS[number]
 export type TodoReminderKind = typeof TODO_REMINDER_KINDS[number]
 export type TodoReminderStatus = typeof TODO_REMINDER_STATUSES[number]
 export type TodoReminderOffset = typeof TODO_REMINDER_OFFSETS[number]
+
+const LEGACY_PRIORITY_MAP: Record<TodoLegacyPriority, TodoPriority> = {
+  high: "p0",
+  medium: "p1",
+  low: "p2",
+}
+
+export function normalizeTodoPriority(value: TodoPriority | TodoLegacyPriority): TodoPriority {
+  return value in LEGACY_PRIORITY_MAP ? LEGACY_PRIORITY_MAP[value as TodoLegacyPriority] : value as TodoPriority
+}
+
+export function normalizeTodoPriorityFilter(value: TodoPriorityFilter | TodoLegacyPriority): TodoPriorityFilter {
+  return value === "none" ? "none" : normalizeTodoPriority(value)
+}
+
+export function toLegacyTodoPriority(value: TodoPriority): TodoLegacyPriority {
+  if (value === "p0") return "high"
+  if (value === "p1") return "medium"
+  return "low"
+}
 export interface TodoFieldsInput {
   title: string
   note?: string | null

@@ -1,11 +1,35 @@
 import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
 import type { TodoPageDto } from "./todos.js"
-import { TODO_REMINDER_OFFSETS, countTodoCodePoints, isValidTodoText, parseTodoInstant, parseTodoReference } from "./todos.js"
+import {
+  TODO_PRIORITIES,
+  TODO_PRIORITY_FILTERS,
+  TODO_PRIORITY_V2_HEADER,
+  TODO_REMINDER_OFFSETS,
+  countTodoCodePoints,
+  isValidTodoText,
+  normalizeTodoPriority,
+  parseTodoInstant,
+  parseTodoReference,
+  toLegacyTodoPriority,
+} from "./todos.js"
 
 describe("todo wire primitives", () => {
   it("keeps all supported relative reminder offsets in ascending order", () => {
     expect(TODO_REMINDER_OFFSETS).toEqual([10, 30, 60, 1440])
+  })
+  it("uses P0-P3 priorities while mapping the old three levels", () => {
+    expect(TODO_PRIORITIES).toEqual(["p0", "p1", "p2", "p3"])
+    expect(TODO_PRIORITY_FILTERS).toEqual(["p0", "p1", "p2", "p3", "none"])
+    expect(TODO_PRIORITY_V2_HEADER).toBe("x-synapse-todo-priority-v2")
+    expect(normalizeTodoPriority("high")).toBe("p0")
+    expect(normalizeTodoPriority("medium")).toBe("p1")
+    expect(normalizeTodoPriority("low")).toBe("p2")
+    expect(normalizeTodoPriority("p3")).toBe("p3")
+    expect(toLegacyTodoPriority("p0")).toBe("high")
+    expect(toLegacyTodoPriority("p1")).toBe("medium")
+    expect(toLegacyTodoPriority("p2")).toBe("low")
+    expect(toLegacyTodoPriority("p3")).toBe("low")
   })
   it("counts non-BMP text by Unicode code points", () => {
     expect(countTodoCodePoints("😀".repeat(200))).toBe(200)

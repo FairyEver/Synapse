@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common"
 import type { z } from "zod"
 import type { Request } from "express"
-import { TODO_IMAGES_HEADER, TODO_PRIORITY_HEADER, type TodoItemDto } from "@synapse/shared/todo-contracts"
+import { normalizeTodoPriority, TODO_IMAGES_HEADER, TODO_PRIORITY_HEADER, TODO_PRIORITY_V2_HEADER, toLegacyTodoPriority, type TodoItemDto, type TodoLegacyPriority, type TodoPriority } from "@synapse/shared/todo-contracts"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { TodosService } from "./todos.service"
@@ -12,11 +12,22 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   if (!result.success) throw badRequestFromZodError(result.error, "待办参数无效")
   return result.data
 }
-function todoResponse(req: AuthedRequest, item: TodoItemDto): TodoItemDto {
+type TodoWirePriority = TodoPriority | TodoLegacyPriority
+type TodoWireResponse = Omit<TodoItemDto, "priority"> & { priority?: TodoWirePriority | null }
+function priorityResponse(req: AuthedRequest, value: TodoWirePriority | null | undefined): TodoWirePriority | null | undefined {
+  const supportsV2 = req.headers[TODO_PRIORITY_V2_HEADER] === "1"
+  const supportsLegacy = req.headers[TODO_PRIORITY_HEADER] === "1"
+  if (!supportsV2 && !supportsLegacy) return undefined
+  if (value == null) return null
+  const priority = normalizeTodoPriority(value)
+  return supportsV2 ? priority : toLegacyTodoPriority(priority)
+}
+function todoResponse(req: AuthedRequest, item: TodoItemDto): TodoWireResponse {
   // Older desktop versions reject unknown fields in the response.
   const { priority, imageIds, ...legacy } = item
+  const wirePriority = priorityResponse(req, priority)
   return { ...legacy,
-    ...(req.headers[TODO_PRIORITY_HEADER] === "1" ? { priority: priority ?? null } : {}),
+    ...(wirePriority === undefined ? {} : { priority: wirePriority }),
     ...(req.headers[TODO_IMAGES_HEADER] === "1" ? { imageIds: imageIds ?? [] } : {}),
   }
 }

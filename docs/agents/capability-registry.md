@@ -350,6 +350,8 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-11-17 待办提醒选项：桌面提醒选择器固定为不提醒、提前 10 分钟、提前 30 分钟、截止时提醒；相对提醒契约新增 30 分钟，旧自定义提醒和 60/1440 分钟选项继续兼容已有数据。仍为 6 个 todos capability / MCP 索引，不新增 System App、IPC action 或 MCP 工具。
 
+2026-11-17 待办优先级：数据库枚举迁移为 P0–P3，旧 high/medium/low 映射为 P0/P1/P2。新客户端用 v2 响应头读取新值，旧客户端继续收到旧别名；MCP schema 使用 p0–p3。todos 仍为 6 个 capability / MCP 索引，不新增 System App、IPC action、Workflow 或 Deep Link。
+
 2026-11-03 待办优先级扩展既有 list、create、update 的参数及条目响应。桌面新建入口移入内容区的两行快建，继续使用既有窗口壳层。Todos 仍为 6 个 capability / MCP 索引，System App、Dock、Workflow、Automation 和 Deep Link 注册数量一致。
 
 2026-11-03 待办图片增加两个仅桌面 IPC 使用的操作 `app.todos.image.stage`、`app.todos.image.read`，复用 `network.connect` 审计。既有 create、update 可携带有序图片 ID，读取返回已绑定 ID。图片字节不通过 MCP 暴露，Todos 仍为 6 个 capability / MCP 索引。

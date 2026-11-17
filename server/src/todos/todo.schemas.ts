@@ -1,14 +1,15 @@
 import { BadRequestException } from "@nestjs/common"
 import { z } from "zod"
-import { countTodoCodePoints, isValidTodoText, parseTodoInstant, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_REMINDER_KINDS, TODO_SORTS, type TodoFieldsInput, type TodoPriority, type TodoReminderKind } from "@synapse/shared/todo-contracts"
+import { countTodoCodePoints, isValidTodoText, normalizeTodoPriority, normalizeTodoPriorityFilter, parseTodoInstant, TODO_LEGACY_PRIORITIES, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_REMINDER_KINDS, TODO_SORTS, type TodoFieldsInput, type TodoPriority, type TodoReminderKind } from "@synapse/shared/todo-contracts"
 import { TODO_MAX_IMAGES } from "@synapse/shared/todo-contracts"
 
 const text = (limit: number) => z.string().refine(isValidTodoText, "包含无效字符").refine((value) => countTodoCodePoints(value) <= limit, `最多 ${limit} 个字符`)
 const instant = z.string().refine((value) => parseTodoInstant(value) !== null, "使用带时区的分钟精度时间").transform((value) => parseTodoInstant(value)!.toISOString())
+const priorityValue = z.union([z.enum(TODO_PRIORITIES), z.enum(TODO_LEGACY_PRIORITIES)]).transform(normalizeTodoPriority)
 const fields = {
   title: z.string().trim().pipe(text(200)).refine((value) => value.length > 0, "标题必填"),
   note: text(10000).transform((value) => value.trim() ? value : null).nullable().optional(),
-  priority: z.enum(TODO_PRIORITIES).nullable().optional(),
+  priority: priorityValue.nullable().optional(),
   imageIds: z.array(z.uuid().transform(id => id.toLowerCase())).max(TODO_MAX_IMAGES).refine(ids => new Set(ids).size === ids.length, "图片不能重复").optional(),
   dueAt: instant.nullable().optional(),
   reminder: z.enum(TODO_REMINDER_KINDS).optional(),
@@ -22,7 +23,7 @@ export const todoCompletionSchema = z.object({ completed: z.boolean(), ...precon
 export const todoDeleteSchema = z.object(preconditions).strict()
 export const todoListSchema = z.object({
   filter: z.enum(["pending", "all"]).default("pending"),
-  priority: z.enum(TODO_PRIORITY_FILTERS).optional(),
+  priority: z.union([z.enum(TODO_PRIORITY_FILTERS), z.enum(TODO_LEGACY_PRIORITIES)]).transform(normalizeTodoPriorityFilter).optional(),
   sort: z.enum(TODO_SORTS).optional(),
   query: text(200).optional(),
   offset: z.coerce.number().int().min(0).max(2147483647).default(0),

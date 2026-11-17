@@ -1,18 +1,20 @@
 import { z } from "zod"
-import { countTodoCodePoints, isValidTodoText, parseTodoInstant, parseTodoReference, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_REMINDER_KINDS, TODO_REMINDER_STATUSES, TODO_SORTS } from "@synapse/shared/todo-contracts"
+import { countTodoCodePoints, isValidTodoText, normalizeTodoPriority, normalizeTodoPriorityFilter, parseTodoInstant, parseTodoReference, TODO_LEGACY_PRIORITIES, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_REMINDER_KINDS, TODO_REMINDER_STATUSES, TODO_SORTS } from "@synapse/shared/todo-contracts"
 import { TODO_IMAGE_MIME_TYPES, TODO_IMAGE_VARIANTS, TODO_MAX_IMAGES, TODO_MAX_IMAGE_BYTES, TODO_MAX_THUMBNAIL_BYTES } from "@synapse/shared/todo-contracts"
 
 const text = (limit: number) => z.string().refine(isValidTodoText).refine((value) => countTodoCodePoints(value) <= limit)
 const instant = z.string().refine((value) => parseTodoInstant(value) !== null)
 const todoId = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u)
-const priority = z.enum(TODO_PRIORITIES).nullable().optional()
+const priority = z.union([z.enum(TODO_PRIORITIES), z.enum(TODO_LEGACY_PRIORITIES)]).transform(normalizeTodoPriority).nullable().optional()
 const imageId = z.uuid().transform(id => id.toLowerCase())
 const imageIds = z.array(imageId).max(TODO_MAX_IMAGES).refine(ids => new Set(ids).size === ids.length).optional()
 const fields = { title: z.string().trim().pipe(text(200)).refine((value) => value.length > 0), note: text(10000).nullable().optional(), priority, imageIds, dueAt: instant.nullable().optional(),
   reminder: z.enum(TODO_REMINDER_KINDS).optional(), offsetMinutes: z.union([z.literal(10), z.literal(30), z.literal(60), z.literal(1440)]).nullable().optional(), remindAt: instant.nullable().optional() }
 const preconditions = { expectedVersion: z.number().int().positive().max(2147483647), clientRequestId: z.uuid() }
 export const todoListInputSchema = z.object({
-  filter: z.enum(["pending", "all"]).optional(), priority: z.enum(TODO_PRIORITY_FILTERS).optional(), sort: z.enum(TODO_SORTS).optional(),
+  filter: z.enum(["pending", "all"]).optional(),
+  priority: z.union([z.enum(TODO_PRIORITY_FILTERS), z.enum(TODO_LEGACY_PRIORITIES)]).transform(normalizeTodoPriorityFilter).optional(),
+  sort: z.enum(TODO_SORTS).optional(),
   query: text(200).optional(), offset: z.number().int().min(0).max(2147483647).optional(), limit: z.number().int().min(1).max(100).optional(),
 }).strict().default({})
 export const todoLocatorSchema = z.object({ id: todoId.optional(), reference: z.string().refine((value) => parseTodoReference(value) !== null).optional() }).strict().refine((value) => (value.id === undefined) !== (value.reference === undefined), "请选择一个事项")

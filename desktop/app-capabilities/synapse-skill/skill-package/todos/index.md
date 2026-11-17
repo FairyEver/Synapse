@@ -15,7 +15,7 @@ Use this domain for “记录到待办事项”, querying, editing, completing, 
 
 Clear target and user authorization: execute CRUD directly, without extra formal confirmation. “删除续费域名” matching two items: ask which before deleting; do not choose by position. A reference identifies an item but does not alone authorize a write.
 
-Set priority to `high`, `medium`, or `low` when requested. Use `priority: null` in an update to clear it. Omit `priority` when editing another field. For list filters only, `priority: "none"` selects unassigned items.
+Set priority to `p0`, `p1`, `p2`, or `p3` when requested, displayed as P0–P3. The legacy aliases `high`, `medium`, and `low` map to P0, P1, and P2 only for old clients. Use `priority: null` in an update to clear it. Omit `priority` when editing another field. For list filters only, `priority: "none"` selects unassigned items.
 
 Omit `imageIds` when editing another field. Change attachment IDs only when the user asks to modify attachments. Use the desktop editor to stage new images and preview existing ones.
 

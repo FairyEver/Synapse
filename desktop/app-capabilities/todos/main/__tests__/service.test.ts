@@ -42,16 +42,30 @@ describe("TodoCloudService", () => {
     const [url, init] = account.fetchAuthenticated.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe("/todos")
     expect(JSON.parse(String(init.body))).toEqual(input)
-    expect(init.headers).toEqual({ "Content-Type": "application/json", "x-synapse-todo-priority": "1", "x-synapse-todo-images": "1" })
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      "x-synapse-todo-priority": "1",
+      "x-synapse-todo-priority-v2": "1",
+      "x-synapse-todo-images": "1",
+    })
   })
   it("forwards priority pagination and accepts a negotiated response", async () => {
     const { account, service } = harness()
-    const page = { items: [{ ...todoFixture, priority: "high" }], nextOffset: 3 }
+    const page = { items: [{ ...todoFixture, priority: "p0" }], nextOffset: 3 }
     account.fetchAuthenticated.mockResolvedValueOnce(Response.json(page))
-    expect(await service.list({ priority: "high", sort: "priority", offset: 2, limit: 1 })).toEqual(page)
+    expect(await service.list({ priority: "p0", sort: "priority", offset: 2, limit: 1 })).toEqual(page)
     const [url, init] = account.fetchAuthenticated.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toContain("priority=high&sort=priority&offset=2&limit=1")
-    expect(init.headers).toEqual({ "x-synapse-todo-priority": "1", "x-synapse-todo-images": "1" })
+    expect(url).toContain("priority=p0&sort=priority&offset=2&limit=1")
+    expect(init.headers).toEqual({
+      "x-synapse-todo-priority": "1",
+      "x-synapse-todo-priority-v2": "1",
+      "x-synapse-todo-images": "1",
+    })
+  })
+  it("normalizes legacy priority values returned by an older server", async () => {
+    const { account, service } = harness()
+    account.fetchAuthenticated.mockResolvedValueOnce(Response.json({ ...todoFixture, priority: "high" }))
+    await expect(service.get({ id: "todo-1" })).resolves.toMatchObject({ priority: "p0" })
   })
   it("sends image bytes without JSON and reads only the authenticated todo image route", async () => {
     const { account, service } = harness()
