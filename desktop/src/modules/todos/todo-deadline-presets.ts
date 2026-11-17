@@ -1,12 +1,11 @@
-import { addDays, addHours, format, set, startOfMinute } from "date-fns"
+import { addDays, addHours, endOfMonth, format, set, startOfMinute } from "date-fns"
 
 export type TodoDeadlinePresetKey =
   | "in-1-hour"
-  | "today-noon"
-  | "today-17"
-  | "tomorrow-noon"
-  | "in-1-day"
-  | "in-2-days"
+  | "today-afternoon"
+  | "tomorrow-afternoon"
+  | "month-midpoint"
+  | "month-end"
 
 export type TodoDeadlinePreset = {
   key: TodoDeadlinePresetKey
@@ -35,19 +34,17 @@ const preset = (
 
 export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
   const base = startOfMinute(now)
-  const todayNoon = atTime(base, 12)
-  const today17 = atTime(base, 17)
-  const tomorrowNoon = atTime(addDays(base, 1), 12)
-  const inOneDay = addDays(base, 1)
-  const inTwoDays = addDays(base, 2)
+  const todayAfternoon = atTime(base, 17)
+  const tomorrowAfternoon = atTime(addDays(base, 1), 17)
+  const monthMidpoint = atTime(set(base, { date: 15 }), 17)
+  const monthEnd = atTime(endOfMonth(base), 17)
 
   return [
     preset("in-1-hour", "1 小时后", addHours(base, 1)),
-    preset("today-noon", "今天中午", todayNoon, todayNoon.getTime() <= now.getTime()),
-    preset("today-17", "今天 17:00", today17, today17.getTime() <= now.getTime()),
-    preset("tomorrow-noon", "明天中午", tomorrowNoon),
-    preset("in-1-day", "1 天后", inOneDay),
-    preset("in-2-days", "2 天后", inTwoDays),
+    preset("today-afternoon", "今天下午", todayAfternoon, todayAfternoon.getTime() <= now.getTime()),
+    preset("tomorrow-afternoon", "明天下午", tomorrowAfternoon),
+    preset("month-midpoint", "本月 15 号", monthMidpoint, monthMidpoint.getTime() <= now.getTime()),
+    preset("month-end", "本月末", monthEnd, monthEnd.getTime() <= now.getTime()),
   ]
 }
 

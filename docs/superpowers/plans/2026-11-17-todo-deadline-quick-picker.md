@@ -338,3 +338,7 @@ Expected: full suite passes and ESLint exits 0. If unrelated failures exist, rep
 git add RELEASE_NOTES_PENDING.md docs/superpowers/specs/2026-11-17-todo-deadline-quick-picker-design.md docs/superpowers/plans/2026-11-17-todo-deadline-quick-picker.md
 git commit -m "docs: 记录待办快捷截止时间设计与发布说明"
 ```
+
+## 2026-11-17 后续调整
+
+用户将快捷项改为五项：1 小时后、今天下午（17:00）、明天下午（17:00）、本月 15 号（17:00）、本月末（17:00）。以设计文档当前版本和对应测试为准。

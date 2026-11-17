@@ -106,11 +106,11 @@ describe("Todo visible actions", () => {
 
       const dueTrigger = form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
       act(() => dueTrigger.click()); await flush()
-      const noon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-noon"]')!
-      expect(noon.textContent).toContain("11月17日 12:00")
-      act(() => noon.click()); await flush()
+      const afternoon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!
+      expect(afternoon.textContent).toContain("11月17日 17:00")
+      act(() => afternoon.click()); await flush()
 
-      expect(dueTrigger.textContent).toContain("截止 11-17 12:00")
+      expect(dueTrigger.textContent).toContain("截止 11-17 17:00")
       expect(dueTrigger.getAttribute("aria-expanded")).toBe("false")
       expect(document.activeElement).toBe(dueTrigger)
       expect(mocks.create).not.toHaveBeenCalled()
@@ -119,7 +119,7 @@ describe("Todo visible actions", () => {
       expect(mocks.create).toHaveBeenCalledOnce()
       expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({
         title: "带截止时间",
-        dueAt: todoLocalToUtc("2026-11-17T12:00"),
+        dueAt: todoLocalToUtc("2026-11-17T17:00"),
         reminder: "none",
       })
     } finally {
@@ -136,9 +136,10 @@ describe("Todo visible actions", () => {
       expect(form.querySelector('input[type="datetime-local"]')).toBeNull()
       act(() => form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!.click()); await flush()
 
-      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-noon"]')!.disabled).toBe(true)
-      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-17"]')!.disabled).toBe(true)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!.disabled).toBe(true)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-midpoint"]')!.disabled).toBe(true)
       expect(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!.disabled).toBe(false)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-end"]')!.disabled).toBe(false)
     } finally {
       vi.useRealTimers()
     }

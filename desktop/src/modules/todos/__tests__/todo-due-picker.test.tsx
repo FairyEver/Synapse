@@ -64,13 +64,15 @@ describe("TodoDuePicker", () => {
     mount(<PickerHarness onOpenChange={onOpenChange} onChange={onChange} />)
     await flush()
 
-    const noon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-noon"]')!
-    const evening = document.querySelector<HTMLButtonElement>('[data-preset-key="today-17"]')!
-    expect(noon.disabled).toBe(true)
-    expect(evening.disabled).toBe(true)
-    expect(noon.textContent).toContain("已过")
-    expect(evening.textContent).toContain("已过")
+    const afternoon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!
+    const monthMidpoint = document.querySelector<HTMLButtonElement>('[data-preset-key="month-midpoint"]')!
+    expect(afternoon.disabled).toBe(true)
+    expect(monthMidpoint.disabled).toBe(true)
+    expect(afternoon.textContent).toContain("已过")
+    expect(monthMidpoint.textContent).toContain("已过")
     expect(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!.disabled).toBe(false)
+    expect(document.querySelector<HTMLButtonElement>('[data-preset-key="tomorrow-afternoon"]')!.disabled).toBe(false)
+    expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-end"]')!.disabled).toBe(false)
 
     click(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!)
     await flush()
