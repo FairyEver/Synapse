@@ -9,7 +9,7 @@ describe("todo deadline presets", () => {
       { key: "today-afternoon", label: "今天下午", localValue: "2026-11-02T17:00", disabled: false },
       { key: "tomorrow-afternoon", label: "明天下午", localValue: "2026-11-03T17:00", disabled: false },
       { key: "this-week", label: "本周日", localValue: "2026-11-08T17:00", disabled: false },
-      { key: "month-midpoint", label: "本月 15 号", localValue: "2026-11-15T17:00", disabled: false },
+      { key: "next-monday", label: "下周一", localValue: "2026-11-09T17:00", disabled: false },
       { key: "month-end", label: "本月末", localValue: "2026-11-30T17:00", disabled: false },
     ])
   })
@@ -21,7 +21,7 @@ describe("todo deadline presets", () => {
       ["today-afternoon", true],
       ["tomorrow-afternoon", false],
       ["this-week", false],
-      ["month-midpoint", true],
+      ["next-monday", false],
       ["month-end", false],
     ])
   })
@@ -32,12 +32,13 @@ describe("todo deadline presets", () => {
     expect(afternoon).toMatchObject({ localValue: "2026-11-17T17:00", disabled: false })
   })
 
-  it("crosses month boundaries for tomorrow and month-end presets", () => {
+  it("crosses month boundaries for tomorrow, next Monday and month-end presets", () => {
     const result = buildTodoDeadlinePresets(new Date(2026, 11, 31, 23, 20))
-    expect(result.filter(({ key }) => ["tomorrow-afternoon", "this-week", "month-end"].includes(key)))
+    expect(result.filter(({ key }) => ["tomorrow-afternoon", "this-week", "next-monday", "month-end"].includes(key)))
       .toMatchObject([
         { localValue: "2027-01-01T17:00", disabled: false },
         { localValue: "2027-01-03T17:00", disabled: false },
+        { localValue: "2027-01-04T17:00", disabled: false },
         { localValue: "2026-12-31T17:00", disabled: true },
       ])
     expect(getTodoCustomDueDefault(new Date(2026, 11, 31, 23, 20))).toMatchObject({
@@ -60,5 +61,11 @@ describe("todo deadline presets", () => {
     const atBoundary = buildTodoDeadlinePresets(new Date(2026, 10, 22, 17, 0))
       .find(({ key }) => key === "this-week")
     expect(atBoundary).toMatchObject({ localValue: "2026-11-22T17:00", disabled: true })
+  })
+
+  it("moves next Monday to the following week when today is Monday", () => {
+    const nextMonday = buildTodoDeadlinePresets(new Date(2026, 10, 2, 9, 0))
+      .find(({ key }) => key === "next-monday")
+    expect(nextMonday).toMatchObject({ localValue: "2026-11-09T17:00", disabled: false })
   })
 })

@@ -69,15 +69,14 @@ describe("TodoDuePicker", () => {
       "today-afternoon",
       "tomorrow-afternoon",
       "this-week",
-      "month-midpoint",
+      "next-monday",
       "month-end",
     ])
     const afternoon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!
-    const monthMidpoint = document.querySelector<HTMLButtonElement>('[data-preset-key="month-midpoint"]')!
+    const nextMonday = document.querySelector<HTMLButtonElement>('[data-preset-key="next-monday"]')!
     expect(afternoon.disabled).toBe(true)
-    expect(monthMidpoint.disabled).toBe(true)
     expect(afternoon.textContent).toContain("已过")
-    expect(monthMidpoint.textContent).toContain("已过")
+    expect(nextMonday.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('[data-preset-key="tomorrow-afternoon"]')!.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-end"]')!.disabled).toBe(false)

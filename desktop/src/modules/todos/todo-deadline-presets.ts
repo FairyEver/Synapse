@@ -1,11 +1,11 @@
-import { addDays, addHours, endOfMonth, endOfWeek, format, set, startOfMinute } from "date-fns"
+import { addDays, addHours, endOfMonth, endOfWeek, format, nextMonday, set, startOfMinute } from "date-fns"
 
 export type TodoDeadlinePresetKey =
   | "in-1-hour"
   | "today-afternoon"
   | "tomorrow-afternoon"
   | "this-week"
-  | "month-midpoint"
+  | "next-monday"
   | "month-end"
 
 export type TodoDeadlinePreset = {
@@ -38,7 +38,7 @@ export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
   const todayAfternoon = atTime(base, 17)
   const tomorrowAfternoon = atTime(addDays(base, 1), 17)
   const thisWeek = atTime(endOfWeek(base, { weekStartsOn: 1 }), 17)
-  const monthMidpoint = atTime(set(base, { date: 15 }), 17)
+  const nextMondayAt = atTime(nextMonday(base), 17)
   const monthEnd = atTime(endOfMonth(base), 17)
 
   return [
@@ -46,7 +46,7 @@ export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
     preset("today-afternoon", "今天下午", todayAfternoon, todayAfternoon.getTime() <= now.getTime()),
     preset("tomorrow-afternoon", "明天下午", tomorrowAfternoon),
     preset("this-week", "本周日", thisWeek, thisWeek.getTime() <= now.getTime()),
-    preset("month-midpoint", "本月 15 号", monthMidpoint, monthMidpoint.getTime() <= now.getTime()),
+    preset("next-monday", "下周一", nextMondayAt, nextMondayAt.getTime() <= now.getTime()),
     preset("month-end", "本月末", monthEnd, monthEnd.getTime() <= now.getTime()),
   ]
 }

@@ -137,7 +137,7 @@ describe("Todo visible actions", () => {
       act(() => form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!.click()); await flush()
 
       expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!.disabled).toBe(true)
-      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-midpoint"]')!.disabled).toBe(true)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="next-monday"]')!.disabled).toBe(false)
       expect(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!.disabled).toBe(false)
       expect(document.querySelector<HTMLButtonElement>('[data-preset-key="month-end"]')!.disabled).toBe(false)
     } finally {
