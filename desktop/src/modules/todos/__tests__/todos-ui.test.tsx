@@ -162,6 +162,11 @@ describe("Todo visible actions", () => {
       expect(calendar).not.toBeNull()
       expect(calendar.classList.contains("w-full")).toBe(true)
       expect(calendar.classList.contains("w-fit")).toBe(false)
+      const dayButton = popover.querySelector<HTMLButtonElement>("button[data-day]")!
+      expect(dayButton.classList.contains("h-8")).toBe(true)
+      expect(dayButton.classList.contains("aspect-square")).toBe(false)
+      const dayCell = popover.querySelector<HTMLElement>('[role="gridcell"]')!
+      expect(dayCell.classList.contains("aspect-square")).toBe(false)
       expect([...popover.querySelectorAll<HTMLButtonElement>("button")].every((button) => button.type === "button")).toBe(true)
       const time = popover.querySelector<HTMLInputElement>('input[type="time"]')!
       expect(time.value).toBe("17:00")
