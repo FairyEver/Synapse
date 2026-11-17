@@ -8,7 +8,7 @@ describe("todo deadline presets", () => {
       { key: "in-1-hour", label: "1 小时后", localValue: "2026-11-02T10:12", disabled: false },
       { key: "today-afternoon", label: "今天下午", localValue: "2026-11-02T17:00", disabled: false },
       { key: "tomorrow-afternoon", label: "明天下午", localValue: "2026-11-03T17:00", disabled: false },
-      { key: "this-week", label: "本周", localValue: "2026-11-08T17:00", disabled: false },
+      { key: "this-week", label: "本周日", localValue: "2026-11-08T17:00", disabled: false },
       { key: "month-midpoint", label: "本月 15 号", localValue: "2026-11-15T17:00", disabled: false },
       { key: "month-end", label: "本月末", localValue: "2026-11-30T17:00", disabled: false },
     ])

@@ -45,7 +45,7 @@ export function buildTodoDeadlinePresets(now: Date): TodoDeadlinePreset[] {
     preset("in-1-hour", "1 小时后", addHours(base, 1)),
     preset("today-afternoon", "今天下午", todayAfternoon, todayAfternoon.getTime() <= now.getTime()),
     preset("tomorrow-afternoon", "明天下午", tomorrowAfternoon),
-    preset("this-week", "本周", thisWeek, thisWeek.getTime() <= now.getTime()),
+    preset("this-week", "本周日", thisWeek, thisWeek.getTime() <= now.getTime()),
     preset("month-midpoint", "本月 15 号", monthMidpoint, monthMidpoint.getTime() <= now.getTime()),
     preset("month-end", "本月末", monthEnd, monthEnd.getTime() <= now.getTime()),
   ]
