@@ -64,6 +64,7 @@ describe("TodoDuePicker", () => {
     mount(<PickerHarness onOpenChange={onOpenChange} onChange={onChange} />)
     await flush()
 
+    expect(document.querySelector<HTMLElement>('[data-slot="popover-content"]')!.classList.contains("w-80")).toBe(true)
     expect([...document.querySelectorAll<HTMLElement>("[data-preset-key]")].map((element) => element.dataset.presetKey)).toEqual([
       "in-1-hour",
       "today-afternoon",

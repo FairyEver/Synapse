@@ -58,7 +58,7 @@
 
 ## 布局
 
-弹层宽度控制在约 `320–360px`，随窗口边界自动翻转，并复用现有 Popover、Button、Input、Field、Calendar 和主题 token。
+弹层宽度控制在 `320px`，随窗口边界自动翻转，并复用现有 Popover、Button、Input、Field、Calendar 和主题 token。
 
 ```text
 ┌──────────────────────────────┐

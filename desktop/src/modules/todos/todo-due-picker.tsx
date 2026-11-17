@@ -133,7 +133,7 @@ export function TodoDuePicker({
         align="start"
         sideOffset={6}
         aria-labelledby={titleId}
-        className="max-h-(--radix-popover-content-available-height) w-[352px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0"
+        className="max-h-(--radix-popover-content-available-height) w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0"
       >
         <PopoverHeader className="flex-row items-center justify-between gap-3 px-3 py-2.5">
           <PopoverTitle id={titleId}>设置截止时间</PopoverTitle>
