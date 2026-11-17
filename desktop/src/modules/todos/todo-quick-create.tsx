@@ -57,7 +57,7 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
           value={draft.title} disabled={saving} onChange={(event) => change("title", event.target.value)}
           onPaste={event => handleTodoImagePaste(event, editor.addImages)} />
         <Button type="submit" data-track="todos.quick-submit" disabled={!online || saving || !draft.title.trim()}>
-          <Plus data-icon="inline-start" />{saving ? "添加中" : "添加待办"}
+          <Plus data-icon="inline-start" />{saving ? "保存中" : "保存"}
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="待办选项">
@@ -69,7 +69,7 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
           aria-expanded={showNote} aria-controls={showNote ? noteId : undefined} disabled={saving} onClick={() => setShowNote((open) => !open)}>
           <StickyNote data-icon="inline-start" />备注
         </Button>
-        <TodoImagePicker disabled={saving} onSelect={editor.addImages} />
+        <TodoImagePicker label="图片" disabled={saving} onSelect={editor.addImages} />
       </div>
       {showNote && <div className="space-y-2">
         <Label htmlFor={noteId}>备注</Label>

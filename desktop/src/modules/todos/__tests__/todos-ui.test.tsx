@@ -74,6 +74,10 @@ describe("Todo visible actions", () => {
     const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
     expect(form).not.toBeNull()
     const title = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
+    expect(form.querySelector<HTMLButtonElement>('button[type="submit"]')!.textContent).toContain("保存")
+    expect([...form.querySelectorAll<HTMLButtonElement>("button")]
+      .map((button) => button.textContent?.trim())
+      .find((text) => text?.includes("图片"))).toBe("图片")
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "测试快建")
       title.dispatchEvent(new Event("input", { bubbles: true }))
