@@ -105,9 +105,10 @@ describe("Todo visible actions", () => {
       "P2",
       "P3",
     ])
-    for (const label of ["筛选 P0", "筛选 P1", "筛选 P2", "筛选 P3", "筛选未设置优先级"]) {
+    for (const label of ["筛选 P0", "筛选 P1", "筛选 P2", "筛选 P3", "筛选无优先级"]) {
       expect(document.querySelector<HTMLElement>(`[aria-label="${label}"]`)).not.toBeNull()
     }
+    expect(document.querySelector('[aria-label="筛选无优先级"]')?.textContent).toBe("无")
   })
 
   it("sets a quick deadline and submits it without leaving the quick-add form", async () => {

@@ -15,8 +15,8 @@ export function TodoListControls({ priority, sort, onPriorityChange, onSortChang
       value={priority} onValueChange={(value) => { if (value) onPriorityChange(value as TodoListView["priority"]) }}>
       <ToggleGroupItem value="all" aria-label="全部优先级" className={prioritySelectedClass}>全部</ToggleGroupItem>
       {TODO_PRIORITY_FILTERS.map((value) => <ToggleGroupItem key={value} value={value} className={prioritySelectedClass}
-        aria-label={value === "none" ? "筛选未设置优先级" : `筛选 ${priorityLabels[value]}`}>
-        {priorityLabels[value]}
+        aria-label={value === "none" ? "筛选无优先级" : `筛选 ${priorityLabels[value]}`}>
+        {value === "none" ? "无" : priorityLabels[value]}
       </ToggleGroupItem>)}
     </ToggleGroup>
     <NativeSelect aria-label="排序方式" data-track="todos.sort" value={sort} onChange={(event) => onSortChange(event.target.value as TodoSort)}>
