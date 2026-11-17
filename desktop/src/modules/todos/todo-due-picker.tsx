@@ -198,6 +198,13 @@ export function TodoDuePicker({
                   data-track="todos.quick-due.custom-time"
                   className="w-32"
                   onChange={(event) => setCustomTime(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return
+                    event.preventDefault()
+                    if (!customValid) return
+                    onChange(customValue)
+                    close()
+                  }}
                 />
               </div>
             </div>

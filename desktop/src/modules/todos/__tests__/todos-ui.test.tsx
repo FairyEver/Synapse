@@ -158,7 +158,13 @@ describe("Todo visible actions", () => {
 
       const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]')!
       expect(popover.querySelector('[data-slot="calendar"]')).not.toBeNull()
-      expect(popover.querySelector<HTMLInputElement>('input[type="time"]')!.value).toBe("10:00")
+      expect([...popover.querySelectorAll<HTMLButtonElement>("button")].every((button) => button.type === "button")).toBe(true)
+      const time = popover.querySelector<HTMLInputElement>('input[type="time"]')!
+      expect(time.value).toBe("10:00")
+      const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+      act(() => time.dispatchEvent(enter))
+      expect(enter.defaultPrevented).toBe(true)
+      expect(mocks.create).not.toHaveBeenCalled()
       const complete = [...popover.querySelectorAll<HTMLButtonElement>("button")]
         .find((button) => button.textContent?.trim() === "完成")!
       act(() => complete.click()); await flush()

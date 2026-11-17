@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
-import { useState } from "react"
-import { act } from "react"
+import { act, useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { flush, mount } from "./harness"
 import { TodoDuePicker } from "../todo-due-picker"
@@ -119,6 +118,32 @@ describe("TodoDuePicker", () => {
     await flush()
 
     expect(onChange).toHaveBeenLastCalledWith("")
+    expect(onOpenChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it("disables completion for an incomplete custom time and cancels without writing", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 10, 17, 9, 12))
+    const onChange = vi.fn()
+    const onOpenChange = vi.fn()
+    mount(<PickerHarness initialValue="2026-11-18T12:00" onOpenChange={onOpenChange} onChange={onChange} />)
+    await flush()
+
+    const customTab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')]
+      .find((tab) => tab.textContent === "自定义")
+    act(() => customTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })))
+    await flush()
+    const time = document.querySelector<HTMLInputElement>('input[type="time"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(time, "")
+      time.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await flush()
+    expect(buttonByText("完成")!.disabled).toBe(true)
+
+    click(buttonByText("取消")!)
+    await flush()
+    expect(onChange).not.toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenLastCalledWith(false)
   })
 })
