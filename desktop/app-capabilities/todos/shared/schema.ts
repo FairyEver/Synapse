@@ -9,7 +9,7 @@ const priority = z.enum(TODO_PRIORITIES).nullable().optional()
 const imageId = z.uuid().transform(id => id.toLowerCase())
 const imageIds = z.array(imageId).max(TODO_MAX_IMAGES).refine(ids => new Set(ids).size === ids.length).optional()
 const fields = { title: z.string().trim().pipe(text(200)).refine((value) => value.length > 0), note: text(10000).nullable().optional(), priority, imageIds, dueAt: instant.nullable().optional(),
-  reminder: z.enum(TODO_REMINDER_KINDS).optional(), offsetMinutes: z.union([z.literal(10), z.literal(60), z.literal(1440)]).nullable().optional(), remindAt: instant.nullable().optional() }
+  reminder: z.enum(TODO_REMINDER_KINDS).optional(), offsetMinutes: z.union([z.literal(10), z.literal(30), z.literal(60), z.literal(1440)]).nullable().optional(), remindAt: instant.nullable().optional() }
 const preconditions = { expectedVersion: z.number().int().positive().max(2147483647), clientRequestId: z.uuid() }
 export const todoListInputSchema = z.object({
   filter: z.enum(["pending", "all"]).optional(), priority: z.enum(TODO_PRIORITY_FILTERS).optional(), sort: z.enum(TODO_SORTS).optional(),
@@ -26,7 +26,7 @@ export const todoDeleteActionSchema = todoDeleteInputSchema.extend({ id: todoId 
 export const todoIdSchema = todoId
 const timestamp = z.iso.datetime()
 export const todoItemSchema = z.object({ id: todoId, title: text(200), note: text(10000).nullable(), priority, imageIds, dueAt: timestamp.nullable(),
-  reminder: z.enum(TODO_REMINDER_KINDS), offsetMinutes: z.union([z.literal(10), z.literal(60), z.literal(1440)]).nullable(), remindAt: timestamp.nullable(),
+  reminder: z.enum(TODO_REMINDER_KINDS), offsetMinutes: z.union([z.literal(10), z.literal(30), z.literal(60), z.literal(1440)]).nullable(), remindAt: timestamp.nullable(),
   reminderGeneration: z.number().int().positive(), reminderStatus: z.enum(TODO_REMINDER_STATUSES), completedAt: timestamp.nullable(),
   version: z.number().int().positive(), createdAt: timestamp, updatedAt: timestamp }).strict()
 export const todoPageSchema = z.object({ items: z.array(todoItemSchema).max(100), nextOffset: z.number().int().nonnegative().nullable() }).strict()

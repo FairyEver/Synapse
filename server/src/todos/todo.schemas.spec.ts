@@ -53,7 +53,16 @@ describe("todo strict input and candidate validation", () => {
   it("computes exact relative offsets and rejects clearing the required due time", () => {
     const fields = normalizeTodoFields({ title: "事项", dueAt: "2026-10-12T01:00:00Z", reminder: "before_due", offsetMinutes: 60 }, null, now)
     expect(fields.remindAt?.toISOString()).toBe("2026-10-12T00:00:00.000Z")
+    const fields30 = normalizeTodoFields({ title: "事项", dueAt: "2026-10-12T01:00:00Z", reminder: "before_due", offsetMinutes: 30 }, null, now)
+    expect(fields30.remindAt?.toISOString()).toBe("2026-10-12T00:30:00.000Z")
     expect(() => normalizeTodoFields({ dueAt: null }, fields, now)).toThrow()
+  })
+  it("accepts a 30-minute relative reminder", () => {
+    expect(todoCreateSchema.parse(create({
+      dueAt: "2026-10-12T09:00:00+08:00",
+      reminder: "before_due",
+      offsetMinutes: 30,
+    }))).toMatchObject({ reminder: "before_due", offsetMinutes: 30 })
   })
   it("allows past due time and keeps a previously sent reminder when only editing text", () => {
     const current = normalizeTodoFields({ title: "事项", dueAt: "2026-10-12T01:00:00Z", reminder: "at_due" }, null, now)

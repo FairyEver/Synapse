@@ -1,6 +1,6 @@
 export const TODO_REMINDER_KINDS = ["none", "at_due", "before_due", "custom"] as const
 export const TODO_REMINDER_STATUSES = ["none", "pending", "sent", "cancelled", "expired"] as const
-export const TODO_REMINDER_OFFSETS = [10, 60, 1440] as const
+export const TODO_REMINDER_OFFSETS = [10, 30, 60, 1440] as const
 export const TODO_PRIORITIES = ["high", "medium", "low"] as const
 export const TODO_PRIORITY_FILTERS = [...TODO_PRIORITIES, "none"] as const
 export const TODO_SORTS = ["due", "priority"] as const
@@ -22,6 +22,7 @@ export type TodoPriorityFilter = typeof TODO_PRIORITY_FILTERS[number]
 export type TodoSort = typeof TODO_SORTS[number]
 export type TodoReminderKind = typeof TODO_REMINDER_KINDS[number]
 export type TodoReminderStatus = typeof TODO_REMINDER_STATUSES[number]
+export type TodoReminderOffset = typeof TODO_REMINDER_OFFSETS[number]
 export interface TodoFieldsInput {
   title: string
   note?: string | null
@@ -29,7 +30,7 @@ export interface TodoFieldsInput {
   imageIds?: string[]
   dueAt?: string | null
   reminder?: TodoReminderKind
-  offsetMinutes?: 10 | 60 | 1440 | null
+  offsetMinutes?: TodoReminderOffset | null
   remindAt?: string | null
 }
 export type TodoCreateInput = TodoFieldsInput & { clientRequestId: string }
@@ -52,7 +53,7 @@ export interface TodoItemDto {
   imageIds?: string[]
   dueAt: string | null
   reminder: TodoReminderKind
-  offsetMinutes: 10 | 60 | 1440 | null
+  offsetMinutes: TodoReminderOffset | null
   remindAt: string | null
   reminderGeneration: number
   reminderStatus: TodoReminderStatus

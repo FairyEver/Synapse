@@ -21,7 +21,7 @@ const fields = {
     description: "Ordered IDs of images already attached to this todo or staged by this account in the desktop editor. Omit to retain; [] removes all." },
   dueAt: date,
   reminder: { type: "string", enum: ["none", "at_due", "before_due", "custom"], description: "Relative reminders require dueAt. Newly set or changed reminder time must be in the future." },
-  offsetMinutes: { type: ["integer", "null"], enum: [10, 60, 1440, null], description: "Only before_due uses an offset." },
+  offsetMinutes: { type: ["integer", "null"], enum: [10, 30, 60, 1440, null], description: "Only before_due uses an offset." },
   remindAt: { ...date, description: date.description + " Required for custom. Relative reminder time is computed by the server." },
 }
 const requestId = { type: "string", format: "uuid", description: "Stable UUID for retries of this exact operation and payload, valid for 24h. Reuse after a lost response; do not generate a new UUID for the retry." }

@@ -25,7 +25,7 @@
 - `APNS_USE_SANDBOX` 保持 `false`；系统权限、Focus、桌面本机通知与静音开关继续生效，不承诺物理横幅恰好一次。
 - 标题 trim 后必填，最多 200 个 Unicode 码点；备注最多 10,000 个 Unicode 码点，空值为 null。提醒分钟精度，秒与毫秒必须为 0。
 - 分页 offset 默认 0，limit 默认 50、最多 100；query 最多 200 个 Unicode 码点，按标题与备注作不区分大小写的字面包含匹配。
-- 提醒选项 `none / at_due / before_due / custom`；相对提前量只允许 10、60、1440 分钟。新增或改变提醒必须晚于服务器当前时间。
+- 提醒选项 `none / at_due / before_due / custom`；相对提前量只允许 10、30、60、1440 分钟。新增或改变提醒必须晚于服务器当前时间。
 - 初始 version 为 1；实际变更递增。幂等收据保留 24 小时，创建请求标识另随条目保留；删除墓碑保留 90 天，完成历史保留到用户删除。
 - 提醒扫描每 30 秒、每批最多 100 项；到期不超过 24 小时才补偿，从原提醒时刻超过 24 小时停止外部投递重试。
 - 日志与审计只包含账号 / 条目 ID、操作、版本、结果；不写标题、备注、推送正文、完整请求体或凭据。
@@ -66,7 +66,7 @@
 
 **Interfaces:**
 - Produces: `TodoFilter = 'pending' | 'all'`、`TodoReminderKind = 'none' | 'at_due' | 'before_due' | 'custom'`、`TodoReminderStatus = 'none' | 'pending' | 'sent' | 'cancelled' | 'expired'`。
-- Produces: `TodoFieldsInput { title: string; note?: string | null; dueAt?: string | null; reminder?: TodoReminderKind; offsetMinutes?: 10 | 60 | 1440 | null; remindAt?: string | null }`。
+- Produces: `TodoFieldsInput { title: string; note?: string | null; dueAt?: string | null; reminder?: TodoReminderKind; offsetMinutes?: 10 | 30 | 60 | 1440 | null; remindAt?: string | null }`。
 - Produces: `TodoCreateInput = TodoFieldsInput & { clientRequestId: string }`；`TodoUpdateInput = Partial<TodoFieldsInput> & { expectedVersion: number; clientRequestId: string }`；`TodoCompletionInput { completed: boolean; expectedVersion: number; clientRequestId: string }`；`TodoDeleteInput { expectedVersion: number; clientRequestId: string }`。
 - Produces: `TodoListInput { filter?: TodoFilter; query?: string; offset?: number; limit?: number }`；`TodoPageDto { items: TodoItemDto[]; nextOffset: number | null }`；`TodoDeleteResult { id: string; version: number; deleted: true }`。
 - Produces: `TodoItemDto` 含设计 §4.1 除 `userId / deletedAt` 外所有字段；可选值显式为 null，时间为 UTC RFC 3339 字符串。`TodoChangedPayload { id: string; version: number }`；`TodoLocator = { id: string; reference?: never } | { reference: string; id?: never }`。
@@ -78,7 +78,7 @@
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
 | `unicode_code_point_limits` | `expect(countTodoCodePoints('😀'.repeat(200))).toBe(200)`；201 个标题 / 10001 个备注返回 400；200 / 10000 个接受；孤立 surrogate 和 NUL 为 400 |
-| `strict_patch_and_time_validation` | `expect(status).toBe(400)`：未知字段、伪造 userId / completedAt、缺截止的相对提醒、非 10/60/1440 提前量、秒不为 0、无偏移或非法日期、新设过去提醒；缺省保留，null 清空 |
+| `strict_patch_and_time_validation` | `expect(status).toBe(400)`：未知字段、伪造 userId / completedAt、缺截止的相对提醒、非 10/30/60/1440 提前量、秒不为 0、无偏移或非法日期、新设过去提醒；缺省保留，null 清空 |
 | `owned_lookup_and_literal_query` | `expect(otherOwnerStatus).toBe(404)`；不存在与已删除同为 404；`query='%'` 只匹配含百分号的本人条目；limit 101 被拒绝，默认 items 不超过 50 |
 | `two_writers_one_version` | `expect(statuses.sort()).toEqual([200, 409])`；真实并发写同一版本，只递增一次，冲突码 `TODO_VERSION_CONFLICT` |
 | `commit_then_lost_response_retry` | 相同 UUID + 相同规范内容重放：`expect(count).toBe(1)`、`expect(replayed.version).toBe(original.version)`；同 UUID 改内容为 409 / `TODO_REQUEST_CONFLICT` |

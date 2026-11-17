@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { todosIpcModule } from "../ipc"
 import { TODOS_CAPABILITY_IDS as capabilityActions } from "../../shared/capability"
-import { todoPageSchema } from "../../shared/schema"
+import { todoCreateInputSchema, todoPageSchema } from "../../shared/schema"
 import { buildTodoTools } from "../../../../synapse-capabilities/shared/todos-domain"
 import { MCP_TOOL_ACTIONS } from "../../../../synapse-capabilities/shared/registry"
 import { validateSystemNotificationInput } from "../../../system-notifier/shared/schema"
@@ -22,6 +22,20 @@ describe("Todo cross-layer contract", () => {
     expect(Object.values(MCP_TOOL_ACTIONS)).not.toContain("app.todos.image.stage")
     expect(Object.values(MCP_TOOL_ACTIONS)).not.toContain("app.todos.image.read")
     expect(buildTodoTools().map((tool) => MCP_TOOL_ACTIONS[tool.name])).toEqual(capabilityActions)
+  })
+  it("accepts a 30-minute reminder through IPC and exposes it to MCP", () => {
+    const clientRequestId = "00000000-0000-4000-8000-000000000001"
+    expect(todoCreateInputSchema.parse({
+      title: "事项",
+      dueAt: "2026-10-12T09:00:00+08:00",
+      reminder: "before_due",
+      offsetMinutes: 30,
+      clientRequestId,
+    })).toMatchObject({ reminder: "before_due", offsetMinutes: 30 })
+
+    const createTool = buildTodoTools().find((tool) => tool.name === "app_todos_item_create")
+    const properties = createTool?.inputSchema.properties as Record<string, { enum?: unknown[] }> | undefined
+    expect(properties?.offsetMinutes.enum).toContain(30)
   })
   it("does not widen the public System Notifier request to allow Todo-owned metadata", () => {
     expect(validateSystemNotificationInput({ title: "待办提醒", body: "事项" }).ok).toBe(true)

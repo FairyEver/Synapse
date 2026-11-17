@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { countTodoCodePoints, isValidTodoText, type TodoFieldsInput, type TodoItemDto, type TodoPriority, type TodoReminderKind } from "@synapse/shared/todo-contracts"
+import { countTodoCodePoints, isValidTodoText, type TodoFieldsInput, type TodoItemDto, type TodoPriority, type TodoReminderKind, type TodoReminderOffset } from "@synapse/shared/todo-contracts"
 import { TODO_MAX_IMAGES, TODO_MAX_IMAGE_BYTES } from "@synapse/shared/todo-contracts"
 import { todosApi } from "@/lib/todos-api"
 import { todoLocalToUtc, todoUtcToLocal } from "./todo-time"
 import { todoErrorMessage } from "./todo-state"
 import { isTodoImageFile, prepareTodoImage, type TodoDraftImage } from "./todo-image-files"
 
-export type TodoEditorDraft = { id: string | null; expectedVersion: number | null; clientRequestId: string; title: string; note: string; priority: TodoPriority | null; originalPriority: TodoPriority | null; due: string; reminder: TodoReminderKind; offsetMinutes: 10 | 60 | 1440; custom: string; images: TodoDraftImage[]; originalImageIds: string[]; originalTimes: { dueLocal: string; customLocal: string; dueAt: string | null; remindAt: string | null } }
+export type TodoEditorDraft = { id: string | null; expectedVersion: number | null; clientRequestId: string; title: string; note: string; priority: TodoPriority | null; originalPriority: TodoPriority | null; due: string; reminder: TodoReminderKind; offsetMinutes: TodoReminderOffset; custom: string; images: TodoDraftImage[]; originalImageIds: string[]; originalTimes: { dueLocal: string; customLocal: string; dueAt: string | null; remindAt: string | null } }
 
 function newDraft(item?: TodoItemDto): TodoEditorDraft {
   const dueAt = item?.dueAt ?? null, remindAt = item?.reminder === "custom" ? item.remindAt : null
@@ -37,6 +37,16 @@ export function useTodoEditor({ generation, online, onSaved, quickCreate = false
     if (busy.current) return
     revision.current++
     setDraft((current) => current && current[key] !== value ? { ...current, [key]: value, clientRequestId: crypto.randomUUID() } : current)
+  }, [])
+  const changeReminder = useCallback((reminder: TodoReminderKind, offsetMinutes: TodoReminderOffset | null) => {
+    if (busy.current) return
+    revision.current++
+    setDraft((current) => {
+      if (!current) return current
+      const nextOffset = reminder === "before_due" ? offsetMinutes ?? 10 : current.offsetMinutes
+      if (current.reminder === reminder && (reminder !== "before_due" || current.offsetMinutes === nextOffset)) return current
+      return { ...current, reminder, offsetMinutes: nextOffset, clientRequestId: crypto.randomUUID() }
+    })
   }, [])
   const addImages = (files: File[]) => {
     if (!draft || busy.current) return
@@ -102,5 +112,5 @@ export function useTodoEditor({ generation, online, onSaved, quickCreate = false
     catch (cause) { if (current()) setError(todoErrorMessage(cause)) }
   }, [draft?.id, open])
   const sameIdentity = epoch.current === generation
-  return { draft: sameIdentity ? draft : null, saving: sameIdentity && saving, error: sameIdentity ? error : null, conflict: sameIdentity && conflict, open, close, change, addImages, removeImage, save, reload }
+  return { draft: sameIdentity ? draft : null, saving: sameIdentity && saving, error: sameIdentity ? error : null, conflict: sameIdentity && conflict, open, close, change, changeReminder, addImages, removeImage, save, reload }
 }

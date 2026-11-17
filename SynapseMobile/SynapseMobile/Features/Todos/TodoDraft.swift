@@ -55,7 +55,7 @@ nonisolated struct TodoDraft {
         }
         if note.unicodeScalars.count > 10_000 || note.unicodeScalars.contains(where: { $0.value == 0 }) { return "备注最多 10000 个字符" }
         if (reminder == .atDue || reminder == .beforeDue) && dueAt == nil { return "请选择截止时间" }
-        if reminder == .beforeDue && ![10, 60, 1440].contains(offsetMinutes) { return "请选择提前时间" }
+        if reminder == .beforeDue && ![10, 30, 60, 1440].contains(offsetMinutes) { return "请选择提前时间" }
         if reminder == .custom && customRemindAt == nil { return "请选择提醒时间" }
         if changesReminder, let remindAt = effectiveRemindAt, remindAt <= now, !isReceiptRetry(now: now) { return "提醒时间必须晚于现在" }
         return nil

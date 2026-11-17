@@ -29,8 +29,10 @@ Title is trimmed, nonblank, max 200 Unicode code points. Note max 10000, blank -
 |---|---|
 | `none` | Clear offsetMinutes/remindAt |
 | `at_due` | dueAt; server computes remindAt |
-| `before_due` | dueAt and offsetMinutes 10/60/1440; server computes remindAt |
+| `before_due` | dueAt and offsetMinutes 10/30/60/1440; server computes remindAt |
 | `custom` | Future remindAt; dueAt optional; no offset |
+
+The desktop reminder selector offers only `none`, `before_due` at 10 or 30 minutes, and `at_due`. `custom` and the 60/1440-minute offsets remain API-compatible for existing records but are not new desktop UI choices.
 
 Completion cancels pending reminders. Restoration does not resend sent/past reminders. Do not change reminder without user intent. A save confirms configuration, not successful notification delivery; report returned reminderStatus accurately: none/pending/sent/cancelled/expired.
 

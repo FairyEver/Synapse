@@ -12,7 +12,7 @@ const fields = {
   imageIds: z.array(z.uuid().transform(id => id.toLowerCase())).max(TODO_MAX_IMAGES).refine(ids => new Set(ids).size === ids.length, "图片不能重复").optional(),
   dueAt: instant.nullable().optional(),
   reminder: z.enum(TODO_REMINDER_KINDS).optional(),
-  offsetMinutes: z.union([z.literal(10), z.literal(60), z.literal(1440)]).nullable().optional(),
+  offsetMinutes: z.union([z.literal(10), z.literal(30), z.literal(60), z.literal(1440)]).nullable().optional(),
   remindAt: instant.nullable().optional(),
 }
 const preconditions = { expectedVersion: z.number().int().positive().max(2147483647), clientRequestId: z.uuid() }

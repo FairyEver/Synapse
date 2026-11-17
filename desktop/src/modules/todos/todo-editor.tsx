@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { TodoPrioritySelect } from "./todo-priority"
-import { TodoReminderFields, TodoReminderSelect } from "./todo-reminder-fields"
+import { TodoReminderSelect } from "./todo-reminder-select"
 import type { useTodoEditor } from "./use-todo-editor"
 import { handleTodoImagePaste, TodoImagePicker } from "./todo-image-picker"
 import { TodoImageStrip } from "./todo-image-strip"
@@ -19,8 +19,7 @@ export function TodoEditor({ editor, online }: { editor: ReturnType<typeof useTo
         <div className="space-y-2"><Label htmlFor="todo-priority">优先级</Label><TodoPrioritySelect id="todo-priority" value={draft.priority} disabled={editor.saving} onChange={(value) => editor.change("priority", value)} /></div>
         <div className="space-y-2"><Label htmlFor="todo-note">备注</Label><Textarea id="todo-note" data-track="todos.note" value={draft.note} disabled={editor.saving} onChange={(event) => editor.change("note", event.target.value)} onPaste={event => handleTodoImagePaste(event, editor.addImages)} /></div>
         <div className="space-y-2"><Label htmlFor="todo-due">截止时间</Label><Input id="todo-due" type="datetime-local" data-track="todos.due" value={draft.due} disabled={editor.saving} onChange={(event) => editor.change("due", event.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="todo-reminder">提醒</Label><TodoReminderSelect id="todo-reminder" value={draft.reminder} disabled={editor.saving} onChange={(value) => editor.change("reminder", value)} /></div>
-        <TodoReminderFields prefix="todo" draft={draft} disabled={editor.saving} change={editor.change} />
+        <div className="space-y-2"><Label htmlFor="todo-reminder">提醒</Label><TodoReminderSelect id="todo-reminder" reminder={draft.reminder} offsetMinutes={draft.offsetMinutes} disabled={editor.saving} onChange={editor.changeReminder} /></div>
         <section className="space-y-2" aria-label="图片附件">
           <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">图片</span><TodoImagePicker disabled={editor.saving} onSelect={editor.addImages} /></div>
           <TodoImageStrip images={draft.images} todoId={draft.id ?? undefined} disabled={editor.saving} onRemove={editor.removeImage} />

@@ -145,6 +145,48 @@ describe("Todo visible actions", () => {
     }
   })
 
+  it("creates a todo with a 30-minute reminder and no extra reminder field", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 10, 17, 9, 12))
+    try {
+      mocks.create.mockResolvedValue({ ...item, id: "quick-reminder", title: "30 分钟提醒" })
+      mount(<TodosModule />); await flush()
+      const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+      const title = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
+      const reminder = form.querySelector<HTMLSelectElement>('select[aria-label="提醒"]')!
+      expect([...reminder.options].map((option) => option.textContent)).toEqual([
+        "不提醒",
+        "提前 10 分钟",
+        "提前 30 分钟",
+        "截止时提醒",
+      ])
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "30 分钟提醒")
+        title.dispatchEvent(new Event("input", { bubbles: true }))
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(reminder, "before_due:30")
+        reminder.dispatchEvent(new Event("change", { bubbles: true }))
+      })
+      await flush()
+
+      const dueTrigger = form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+      expect(dueTrigger.getAttribute("aria-expanded")).toBe("true")
+      act(() => document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!.click())
+      await flush()
+      expect(form.querySelector('select[aria-label="提前"]')).toBeNull()
+      expect(form.querySelector('input[type="datetime-local"]')).toBeNull()
+
+      act(() => form.requestSubmit()); await flush()
+      expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({
+        title: "30 分钟提醒",
+        reminder: "before_due",
+        offsetMinutes: 30,
+        dueAt: todoLocalToUtc("2026-11-17T17:00"),
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("applies a custom deadline without submitting the quick-add form", async () => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date(2026, 10, 17, 9, 12))

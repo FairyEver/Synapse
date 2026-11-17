@@ -24,6 +24,7 @@ struct TodoEditorSheet: View {
                         if draft.reminder == .beforeDue {
                             Picker("提前", selection: field(\.offsetMinutes, fallback: 10)) {
                                 Text("10 分钟").tag(10)
+                                Text("30 分钟").tag(30)
                                 Text("1 小时").tag(60)
                                 Text("1 天").tag(1440)
                             }

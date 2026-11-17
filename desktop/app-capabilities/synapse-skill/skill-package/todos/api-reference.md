@@ -15,7 +15,7 @@ The Synapse MCP server publishes only two tools: `search` and `invoke`. Search e
 
 Unknown fields rejected. No userId/account override. IDs match [A-Za-z0-9_-]{1,200}. Reference is exact synapse://todos/<id>, no query/hash/extra segment/encoded separator. Get is readonly, never marks notification read.
 
-Fields: title (trimmed nonblank max 200 Unicode code points); note (string/null max 10000, blank -> null); dueAt (RFC3339/null); reminder (none/at_due/before_due/custom); offsetMinutes (10/60/1440/null); remindAt (RFC3339/null). Update omission keeps values; null clears nullable fields. No null title/reminder. Times require explicit offset and minute precision; server returns UTC. Relative reminders require dueAt; custom requires future remindAt and permits no dueAt. Only before_due uses offset. New/changed reminder must be future, unchanged sent/past reminder can stay when editing title/note.
+Fields: title (trimmed nonblank max 200 Unicode code points); note (string/null max 10000, blank -> null); dueAt (RFC3339/null); reminder (none/at_due/before_due/custom); offsetMinutes (10/30/60/1440/null); remindAt (RFC3339/null). Update omission keeps values; null clears nullable fields. No null title/reminder. Times require explicit offset and minute precision; server returns UTC. Relative reminders require dueAt; custom requires future remindAt and permits no dueAt. Only before_due uses offset. New/changed reminder must be future, unchanged sent/past reminder can stay when editing title/note.
 
 Priority accepts `high`, `medium`, `low`, or null on create and update. Null clears priority. Omission on update retains the existing level. `"none"` is only a list filter and matches unassigned items.
 

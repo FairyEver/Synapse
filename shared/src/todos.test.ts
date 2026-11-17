@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
 import type { TodoPageDto } from "./todos.js"
-import { countTodoCodePoints, isValidTodoText, parseTodoInstant, parseTodoReference } from "./todos.js"
+import { TODO_REMINDER_OFFSETS, countTodoCodePoints, isValidTodoText, parseTodoInstant, parseTodoReference } from "./todos.js"
 
 describe("todo wire primitives", () => {
+  it("keeps all supported relative reminder offsets in ascending order", () => {
+    expect(TODO_REMINDER_OFFSETS).toEqual([10, 30, 60, 1440])
+  })
   it("counts non-BMP text by Unicode code points", () => {
     expect(countTodoCodePoints("😀".repeat(200))).toBe(200)
     expect(countTodoCodePoints("a\u0301")).toBe(2)

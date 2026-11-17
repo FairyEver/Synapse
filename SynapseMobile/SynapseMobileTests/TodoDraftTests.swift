@@ -26,6 +26,16 @@ struct TodoDraftTests {
         #expect(draft.validationMessage(now: Date(timeIntervalSince1970: 0)) == "请选择截止时间")
     }
 
+    @Test func acceptsThirtyMinuteRelativeReminder() throws {
+        var draft = TodoDraft()
+        draft.title = "提前提醒"
+        draft.dueAt = Date(timeIntervalSince1970: 60_000)
+        draft.reminder = .beforeDue
+        draft.offsetMinutes = 30
+        #expect(draft.validationMessage(now: Date(timeIntervalSince1970: 0)) == nil)
+        #expect(draft.createInput().offsetMinutes == 30)
+    }
+
     @Test func onlyFieldChangesRotateRequestUUIDAndKeepVersion() throws {
         var draft = TodoDraft(item: try TodoTestFixture.item())
         let first = draft.clientRequestId
