@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
 import {
   buildTodoDeadlinePresets,
   getTodoCustomDueDefault,
@@ -63,6 +62,7 @@ export function TodoDuePicker({
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined)
   const [customTime, setCustomTime] = useState("")
   const customSeeded = useRef(false)
+  const trigger = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -101,6 +101,12 @@ export function TodoDuePicker({
     }
     onChange(preset.localValue)
     onOpenChange(false)
+    trigger.current?.focus()
+  }
+
+  const close = () => {
+    onOpenChange(false)
+    trigger.current?.focus()
   }
 
   const presets = buildTodoDeadlinePresets(now)
@@ -113,6 +119,7 @@ export function TodoDuePicker({
     <Popover open={open} onOpenChange={onOpenChange} data-track="todos.quick-due">
       <PopoverTrigger asChild>
         <Button
+          ref={trigger}
           type="button"
           variant={value ? "secondary" : "ghost"}
           data-track="todos.quick-due"
@@ -126,7 +133,7 @@ export function TodoDuePicker({
         align="start"
         sideOffset={6}
         aria-labelledby={titleId}
-        className="w-[352px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0"
+        className="max-h-(--radix-popover-content-available-height) w-[352px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0"
       >
         <PopoverHeader className="flex-row items-center justify-between gap-3 px-3 py-2.5">
           <PopoverTitle id={titleId}>设置截止时间</PopoverTitle>
@@ -136,7 +143,7 @@ export function TodoDuePicker({
             size="icon-sm"
             aria-label="关闭截止时间"
             data-track="todos.quick-due.close"
-            onClick={() => onOpenChange(false)}
+            onClick={close}
           >
             <X />
           </Button>
@@ -157,9 +164,7 @@ export function TodoDuePicker({
                   disabled={preset.disabled}
                   data-track={`todos.quick-due.${preset.key}`}
                   data-preset-key={preset.key}
-                  className={cn(
-                    "h-auto min-h-12 flex-col items-start justify-center gap-0.5 whitespace-normal px-2.5 py-2 text-left"
-                  )}
+                  className="h-auto min-h-12 flex-col items-start justify-center gap-0.5 whitespace-normal px-2.5 py-2 text-left"
                   onClick={() => selectPreset(preset.key)}
                 >
                   <span>{preset.label}</span>
@@ -206,7 +211,7 @@ export function TodoDuePicker({
                     data-track="todos.quick-due.clear"
                     onClick={() => {
                       onChange("")
-                      onOpenChange(false)
+                      close()
                     }}
                   >
                     清除截止时间
@@ -218,7 +223,7 @@ export function TodoDuePicker({
                   variant="outline"
                   size="sm"
                   data-track="todos.quick-due.custom-cancel"
-                  onClick={() => onOpenChange(false)}
+                  onClick={close}
                 >
                   取消
                 </Button>
@@ -230,7 +235,7 @@ export function TodoDuePicker({
                   onClick={() => {
                     if (!customValid) return
                     onChange(customValue)
-                    onOpenChange(false)
+                    close()
                   }}
                 >
                   完成

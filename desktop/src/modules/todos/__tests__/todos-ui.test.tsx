@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { mocks, mount, flush, item, deferred } from "./harness"
 import { TodosModule } from "../index"
 import { EmbeddedSystemAppShell } from "../../apps/components/embedded-system-app-shell"
+import { todoLocalToUtc } from "../todo-time"
 vi.mock("@/components/ui/scroll-area", () => ({ ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock("../todo-image-files", async (original) => ({
   ...await original<typeof import("../todo-image-files")>(),
@@ -88,6 +89,87 @@ describe("Todo visible actions", () => {
     expect(title.value).toBe("")
     expect(document.activeElement).toBe(title)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it("sets a quick deadline and submits it without leaving the quick-add form", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 10, 17, 9, 12))
+    try {
+      mocks.create.mockResolvedValue({ ...item, id: "quick-due", title: "带截止时间" })
+      mount(<TodosModule />); await flush()
+      const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+      const title = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "带截止时间")
+        title.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+
+      const dueTrigger = form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+      act(() => dueTrigger.click()); await flush()
+      const noon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-noon"]')!
+      expect(noon.textContent).toContain("11月17日 12:00")
+      act(() => noon.click()); await flush()
+
+      expect(dueTrigger.textContent).toContain("截止 11-17 12:00")
+      expect(dueTrigger.getAttribute("aria-expanded")).toBe("false")
+      expect(document.activeElement).toBe(dueTrigger)
+      expect(mocks.create).not.toHaveBeenCalled()
+
+      act(() => form.requestSubmit()); await flush()
+      expect(mocks.create).toHaveBeenCalledOnce()
+      expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({
+        title: "带截止时间",
+        dueAt: todoLocalToUtc("2026-11-17T12:00"),
+        reminder: "none",
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("disables passed quick times when the quick-add deadline opens late", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 10, 17, 18, 10))
+    try {
+      mount(<TodosModule />); await flush()
+      const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+      expect(form.querySelector('input[type="datetime-local"]')).toBeNull()
+      act(() => form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!.click()); await flush()
+
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-noon"]')!.disabled).toBe(true)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="today-17"]')!.disabled).toBe(true)
+      expect(document.querySelector<HTMLButtonElement>('[data-preset-key="in-1-hour"]')!.disabled).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("applies a custom deadline without submitting the quick-add form", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 10, 17, 9, 12))
+    try {
+      mount(<TodosModule />); await flush()
+      const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+      const dueTrigger = form.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+      act(() => dueTrigger.click()); await flush()
+      const customTab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')]
+        .find((tab) => tab?.textContent === "自定义")
+      act(() => customTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))); await flush()
+
+      const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]')!
+      expect(popover.querySelector('[data-slot="calendar"]')).not.toBeNull()
+      expect(popover.querySelector<HTMLInputElement>('input[type="time"]')!.value).toBe("10:00")
+      const complete = [...popover.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.trim() === "完成")!
+      act(() => complete.click()); await flush()
+
+      expect(dueTrigger.textContent).toContain("截止 11-17 10:00")
+      expect(dueTrigger.getAttribute("aria-expanded")).toBe("false")
+      expect(document.activeElement).toBe(dueTrigger)
+      expect(mocks.create).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("sets and clears a row priority through the versioned update", async () => {

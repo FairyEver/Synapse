@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
-import { Calendar, Plus, StickyNote } from "lucide-react"
+import { Plus, StickyNote } from "lucide-react"
 import type { TodoReminderKind } from "@synapse/shared/todo-contracts"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { TodoPrioritySelect } from "./todo-priority"
 import { TodoReminderFields, TodoReminderSelect } from "./todo-reminder-fields"
+import { TodoDuePicker } from "./todo-due-picker"
 import type { TodoListView } from "./todo-state"
 import { useTodoEditor } from "./use-todo-editor"
 import { handleTodoImagePaste, TodoImagePicker } from "./todo-image-picker"
@@ -26,7 +27,6 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
   const latestFilter = useRef(priorityFilter)
   latestFilter.current = priorityFilter
   const prefix = useId()
-  const dueId = `${prefix}-due`
   const noteId = `${prefix}-note`
 
   useEffect(() => {
@@ -64,10 +64,8 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="待办选项">
         <TodoPrioritySelect value={draft.priority} disabled={saving} onChange={(value) => change("priority", value)} />
-        <Button type="button" variant={showDue || draft.due ? "secondary" : "ghost"} data-track="todos.quick-due"
-          aria-expanded={showDue} aria-controls={showDue ? dueId : undefined} disabled={saving} onClick={() => setShowDue((open) => !open)}>
-          <Calendar data-icon="inline-start" />{draft.due ? `截止 ${draft.due.slice(5).replace("T", " ")}` : "截止时间"}
-        </Button>
+        <TodoDuePicker open={showDue} value={draft.due} disabled={saving}
+          onOpenChange={setShowDue} onChange={(due) => change("due", due)} />
         <TodoReminderSelect value={draft.reminder} disabled={saving} onChange={changeReminder} />
         <Button type="button" variant={showNote || draft.note ? "secondary" : "ghost"} data-track="todos.quick-note"
           aria-expanded={showNote} aria-controls={showNote ? noteId : undefined} disabled={saving} onClick={() => setShowNote((open) => !open)}>
@@ -75,14 +73,7 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
         </Button>
         <TodoImagePicker disabled={saving} onSelect={editor.addImages} />
       </div>
-      {(showDue || hasReminderTime) && <div className="grid gap-3 sm:grid-cols-2">
-        {showDue && <div className="min-w-0 space-y-2">
-          <Label htmlFor={dueId}>截止时间</Label>
-          <Input id={dueId} type="datetime-local" data-track="todos.due" disabled={saving} value={draft.due}
-            onChange={(event) => change("due", event.target.value)} />
-        </div>}
-        <TodoReminderFields prefix={prefix} draft={draft} disabled={saving} change={change} />
-      </div>}
+      {hasReminderTime && <TodoReminderFields prefix={prefix} draft={draft} disabled={saving} change={change} />}
       {showNote && <div className="space-y-2">
         <Label htmlFor={noteId}>备注</Label>
         <Textarea id={noteId} rows={2} data-track="todos.note" disabled={saving} value={draft.note}
