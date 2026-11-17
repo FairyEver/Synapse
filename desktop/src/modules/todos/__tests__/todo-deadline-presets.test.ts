@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest"
 import { buildTodoDeadlinePresets, getTodoCustomDueDefault } from "../todo-deadline-presets"
 
 describe("todo deadline presets", () => {
-  it("builds five local deadline options from the current minute", () => {
-    const result = buildTodoDeadlinePresets(new Date(2026, 10, 10, 9, 12, 45))
+  it("builds six local deadline options in calendar order", () => {
+    const result = buildTodoDeadlinePresets(new Date(2026, 10, 2, 9, 12, 45))
     expect(result.map(({ key, label, localValue, disabled }) => ({ key, label, localValue, disabled }))).toEqual([
-      { key: "in-1-hour", label: "1 小时后", localValue: "2026-11-10T10:12", disabled: false },
-      { key: "today-afternoon", label: "今天下午", localValue: "2026-11-10T17:00", disabled: false },
-      { key: "tomorrow-afternoon", label: "明天下午", localValue: "2026-11-11T17:00", disabled: false },
+      { key: "in-1-hour", label: "1 小时后", localValue: "2026-11-02T10:12", disabled: false },
+      { key: "today-afternoon", label: "今天下午", localValue: "2026-11-02T17:00", disabled: false },
+      { key: "tomorrow-afternoon", label: "明天下午", localValue: "2026-11-03T17:00", disabled: false },
+      { key: "this-week", label: "本周", localValue: "2026-11-08T17:00", disabled: false },
       { key: "month-midpoint", label: "本月 15 号", localValue: "2026-11-15T17:00", disabled: false },
       { key: "month-end", label: "本月末", localValue: "2026-11-30T17:00", disabled: false },
     ])
@@ -19,6 +20,7 @@ describe("todo deadline presets", () => {
       ["in-1-hour", false],
       ["today-afternoon", true],
       ["tomorrow-afternoon", false],
+      ["this-week", false],
       ["month-midpoint", true],
       ["month-end", false],
     ])
@@ -32,9 +34,10 @@ describe("todo deadline presets", () => {
 
   it("crosses month boundaries for tomorrow and month-end presets", () => {
     const result = buildTodoDeadlinePresets(new Date(2026, 11, 31, 23, 20))
-    expect(result.filter(({ key }) => ["tomorrow-afternoon", "month-end"].includes(key)))
+    expect(result.filter(({ key }) => ["tomorrow-afternoon", "this-week", "month-end"].includes(key)))
       .toMatchObject([
         { localValue: "2027-01-01T17:00", disabled: false },
+        { localValue: "2027-01-03T17:00", disabled: false },
         { localValue: "2026-12-31T17:00", disabled: true },
       ])
     expect(getTodoCustomDueDefault(new Date(2026, 11, 31, 23, 20))).toMatchObject({
@@ -47,5 +50,15 @@ describe("todo deadline presets", () => {
     const monthEnd = buildTodoDeadlinePresets(new Date(2028, 1, 10, 9, 0))
       .find(({ key }) => key === "month-end")
     expect(monthEnd).toMatchObject({ localValue: "2028-02-29T17:00", disabled: false })
+  })
+
+  it("uses Sunday 17:00 for this week and disables it at that instant", () => {
+    const before = buildTodoDeadlinePresets(new Date(2026, 10, 22, 16, 59, 30))
+      .find(({ key }) => key === "this-week")
+    expect(before).toMatchObject({ localValue: "2026-11-22T17:00", disabled: false })
+
+    const atBoundary = buildTodoDeadlinePresets(new Date(2026, 10, 22, 17, 0))
+      .find(({ key }) => key === "this-week")
+    expect(atBoundary).toMatchObject({ localValue: "2026-11-22T17:00", disabled: true })
   })
 })

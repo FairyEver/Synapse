@@ -64,6 +64,14 @@ describe("TodoDuePicker", () => {
     mount(<PickerHarness onOpenChange={onOpenChange} onChange={onChange} />)
     await flush()
 
+    expect([...document.querySelectorAll<HTMLElement>("[data-preset-key]")].map((element) => element.dataset.presetKey)).toEqual([
+      "in-1-hour",
+      "today-afternoon",
+      "tomorrow-afternoon",
+      "this-week",
+      "month-midpoint",
+      "month-end",
+    ])
     const afternoon = document.querySelector<HTMLButtonElement>('[data-preset-key="today-afternoon"]')!
     const monthMidpoint = document.querySelector<HTMLButtonElement>('[data-preset-key="month-midpoint"]')!
     expect(afternoon.disabled).toBe(true)
