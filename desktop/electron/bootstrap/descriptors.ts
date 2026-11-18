@@ -130,23 +130,8 @@ import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors
 import { createPortalSessionDriver } from "../../app-capabilities/connectors/main/portal-session-driver"
 import { createPortalVerifier } from "../../app-capabilities/connectors/main/portal-verifier"
 import { builtinConnectors } from "../../app-capabilities/connectors/main/definitions"
-import { createWecomCliClient } from "../../app-capabilities/wecom/main/cli-client"
-import { resolveWecomCliBinaryPath } from "../../app-capabilities/wecom/main/cli-binary"
-import { createWecomConnectorDriver } from "../../app-capabilities/wecom/main/connector-driver"
-import { WecomConnectionService } from "../../app-capabilities/wecom/main/connection-service"
-import { createWecomCapabilityDispatcher } from "../../app-capabilities/wecom/main/dispatcher"
-import { WecomInvocationService } from "../../app-capabilities/wecom/main/invocation-service"
-import {
-  WECOM_CONNECTION_SERVICE_ID,
-  WECOM_CONNECTION_STATE_NAMESPACE,
-  WECOM_LEGACY_STATE_NAMESPACE,
-} from "../../app-capabilities/wecom/shared/capability"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
-import type {
-  ConnectorCredentialEntryV1,
-  WecomConnectionStateV1,
-  WecomMailStateV1,
-} from "../runtime/data-repo/schemas/connectors"
+import type { ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
 import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
 import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
@@ -784,38 +769,10 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
   },
 }
 
-export const coreWecomDescriptor: ServiceDescriptor<WecomConnectionService> = {
-  id: WECOM_CONNECTION_SERVICE_ID,
-  criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
-  create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    return new WecomConnectionService({
-      state: dataRepository.namespace<WecomConnectionStateV1>(WECOM_CONNECTION_STATE_NAMESPACE),
-      legacyState: dataRepository.namespace<WecomMailStateV1>(WECOM_LEGACY_STATE_NAMESPACE),
-      account: accountService,
-      client: createWecomCliClient({
-        binaryPath: resolveWecomCliBinaryPath({ isPackaged: app.isPackaged }),
-        rootDir: path.join(app.getPath("userData"), "connectors", "wecom-mail"),
-        processRunner: createControlledProcessRunner({
-          permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
-          auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
-        }),
-      }),
-    })
-  },
-  start(instance) {
-    instance.initialize()
-  },
-  stop(instance) {
-    instance.dispose()
-  },
-}
-
 export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsService> = {
   id: "core.connectors",
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink", "core.event-bus", WECOM_CONNECTION_SERVICE_ID],
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink", "core.event-bus"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const drivers = new ConnectorDriverRegistry()
@@ -835,9 +792,6 @@ export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsS
       verify: createPortalVerifier(),
       secureStorageAvailable: () => safeStorage.isEncryptionAvailable()
         && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
-    }))
-    drivers.register("wecom", createWecomConnectorDriver({
-      service: ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID),
     }))
     return createConnectorsService({
       eventBus: ctx.registry.get<EventBus>("core.event-bus"),
@@ -1760,7 +1714,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     MAIL_SERVICE_ID,
     TODOS_SERVICE_ID,
     SKILL_HUB_SERVICE_ID,
-    WECOM_CONNECTION_SERVICE_ID,
     "core.config",
     "core.connectors",
     "core.event-bus",
@@ -1921,12 +1874,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const mailDispatcher = createMailCapabilityDispatcher({ service: ctx.registry.get<MailService>(MAIL_SERVICE_ID), permissionGuard, auditSink })
     const mailInternalDispatcher = createMailInternalCapabilityDispatcher({ accountService, permissionGuard, auditSink, resolveShareImage: (ref, caller) => ctx.registry.get<AgentShareService>(AGENT_SHARE_SERVICE_ID).readImage(ref, caller) })
-    const wecomConnection = ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID)
-    const wecomDispatcher = createWecomCapabilityDispatcher({
-      service: new WecomInvocationService({ connection: wecomConnection }),
-      permissionGuard,
-      auditSink,
-    })
     const cloudTablesDispatcher = createCloudTableCapabilityDispatcher({ account: accountService, permissionGuard, auditSink })
     const skillHubDispatcher = createSkillHubCapabilityDispatcher({ service: ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
@@ -2026,7 +1973,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
       mailInternalDispatch: (action, params, context) => mailInternalDispatcher.dispatch(action, params, context),
-      wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       skillHubDispatch: skillHubDispatcher.dispatch,
       cloudTablesDispatch: cloudTablesDispatcher.dispatch,

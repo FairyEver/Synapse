@@ -339,23 +339,15 @@ const requiredExtraResourceFiles = [
     label: "Todo Skill API contract",
   },
   {
-    relativePath: "synapse-skill/wecom/wecomcli-shared/SKILL.md",
-    label: "Enterprise WeChat shared Skill guide",
-  },
-  {
-    relativePath: "synapse-skill/wecom/wecomcli-message/SKILL.md",
-    label: "Enterprise WeChat message Skill",
-  },
-  {
-    relativePath: "synapse-skill/wecom/LICENSE",
-    label: "Enterprise WeChat Skills license",
-  },
-  {
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",
     label: "Knowledge Base runtime template",
   },
 ]
 const forbiddenExtraResourceFiles = [
+  {
+    relativePath: "synapse-skill/wecom",
+    label: "retired Enterprise WeChat Skills",
+  },
   {
     relativePath: "database/mcp/index.js",
     label: "retired stdio MCP bridge",
@@ -1069,8 +1061,21 @@ async function verifyResources(resourcesPath, label) {
   let packedCount = 0
   let unpackedCount = 0
 
+  const wecomPackagesPath = path.join(unpackedPath, "node_modules", "@wecom")
+  if (existsSync(wecomPackagesPath)) {
+    for (const packageName of readdirSync(wecomPackagesPath)) {
+      if (packageName === "cli" || packageName.startsWith("cli-")) {
+        failures.push(`retired runtime must not be packaged: node_modules/@wecom/${packageName}`)
+      }
+    }
+  }
+
   walkAsarNode(header, "", (node, relativePath) => {
-    if (relativePath.startsWith("dist-electron/app-capabilities/tunnel/")
+    if (relativePath.startsWith("dist-electron/app-capabilities/wecom/")
+      || /^dist-electron\/synapse-capabilities\/shared\/wecom-domain\./u.test(relativePath)
+      || /^dist-electron\/app-capabilities\/connectors\/(?:main|shared)\/wecom-/u.test(relativePath)
+      || /^node_modules\/@wecom\/cli(?:-|\/)/u.test(relativePath)
+      || relativePath.startsWith("dist-electron/app-capabilities/tunnel/")
       || /^dist-electron\/synapse-capabilities\/shared\/tunnel-domain\./u.test(relativePath)
       || /^dist-electron\/electron\/runtime\/data-repo\/schemas\/tunnel\./u.test(relativePath)
       || /^node_modules\/@synapse\/shared\/dist\/tunnel-(?:contracts|stream-node)\./u.test(relativePath)) {

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import { isCanonicalCapabilityId } from "../naming"
 import { MAIL_INTERNAL_DOMAIN } from "../mail-internal-domain"
 import { CAPABILITY_DOMAINS, MCP_TOOL_ACTIONS, getActionDomainId, buildAllMcpTools } from "../registry"
-import { WECOM_DOMAIN } from "../wecom-domain"
 
 describe("mail capability registry", () => {
   it("registers the Todo cloud domain", () => {
@@ -17,11 +16,17 @@ describe("mail capability registry", () => {
 
   it("loads the complete registry with the conversation tool", () => {
     expect(CAPABILITY_DOMAINS).toContain(MAIL_INTERNAL_DOMAIN)
-    expect(CAPABILITY_DOMAINS).toContain(WECOM_DOMAIN)
     expect(getActionDomainId("app.mail_internal.context.list")).toBe("mail_internal")
-    expect(getActionDomainId("app.wecom.cli.run")).toBe("wecom")
     expect(MCP_TOOL_ACTIONS.app_mail_internal_context_list).toBe("app.mail_internal.context.list")
-    expect(MCP_TOOL_ACTIONS.app_wecom_cli_run).toBe("app.wecom.cli.run")
+  })
+
+  it("does not expose retired Enterprise WeChat actions or tools", () => {
+    expect(CAPABILITY_DOMAINS.some((domain) => domain.id === "wecom")).toBe(false)
+    for (const action of ["app.wecom.connection.get", "app.wecom.cli.run"]) {
+      expect(getActionDomainId(action)).toBeNull()
+    }
+    expect(buildAllMcpTools().filter((tool) => tool.name.startsWith("app_wecom_"))).toEqual([])
+    expect(Object.keys(MCP_TOOL_ACTIONS).filter((name) => name.startsWith("app_wecom_"))).toEqual([])
   })
 })
 

@@ -17,8 +17,6 @@ import {
   automationRunsSchema,
   conversationsSchema,
   connectorsStateSchema,
-  connectorsWecomMailStateSchema,
-  wecomConnectionStateSchema,
   coreConfigSchema,
   coreIdentitySchema,
   driveSyncBaselineSchema,
@@ -78,35 +76,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       schemaVersion: 1,
       connectors: { figma: { enabled: "yes" } },
     })).toBe(false)
-    expect(connectorsWecomMailStateSchema.validate({
-      schemaVersion: 1,
-      bindings: {
-        owner: {
-          ownerUserId: "owner",
-          connectorId: "wecom-mail",
-          address: "owner@example.com",
-          connectedAt: "2026-10-22T00:00:00.000Z",
-          lastValidatedAt: "2026-10-22T00:00:00.000Z",
-        },
-      },
-    })).toBe(true)
-    expect(connectorsWecomMailStateSchema.validate({ schemaVersion: 1, bindings: { owner: { ownerUserId: "owner" } } })).toBe(false)
-    expect(wecomConnectionStateSchema.validate({
-      schemaVersion: 1,
-      bindings: {
-        owner: {
-          ownerUserId: "owner",
-          connectorId: "wecom",
-          enabled: true,
-          connectedAt: "2026-10-22T00:00:00.000Z",
-          lastValidatedAt: "2026-10-22T00:00:00.000Z",
-        },
-      },
-    })).toBe(true)
-    expect(wecomConnectionStateSchema.validate({
-      schemaVersion: 1,
-      bindings: { owner: { ownerUserId: "owner", connectorId: "wecom-mail", enabled: true } },
-    })).toBe(false)
   })
 
   it("requires the owner, environment and tenant binding in Portal credential records", () => {
@@ -164,9 +133,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.connectors.credentials",
         "app.connectors.items",
         "app.connectors.state",
-        "app.connectors.wecom-mail",
         "app.custom-apps.snapshots",
-        "app.wecom.connection",
         "app.quick-input.items",
         "app.quick-input.settings",
         "app.secrets.items",

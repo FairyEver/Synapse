@@ -165,7 +165,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.snapshots",
         "core.workflow.window-manager",
         "core.workspace-file-tree",
-        "core.wecom",
         "core.json-repair",
         "core.clipboard",
         "core.clipboard-sync",
@@ -220,12 +219,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.event-bus",
-      "core.wecom",
-    ])
-    expect(byId.get("core.wecom")?.dependsOn).toEqual([
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
     ])
     expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.agent-reference-actions")?.dependsOn).toEqual([
@@ -416,7 +409,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.mail",
       "app.todos.cloud",
       "core.skill-hub",
-      "core.wecom",
       "core.config",
       "core.connectors",
       "core.event-bus",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { figmaConnector } from "../definitions"
+import { builtinConnectors, figmaConnector } from "../definitions"
 import { ConnectorDriverRegistry } from "../driver-registry"
 import { createConnectorsService } from "../service"
 import type { BuiltinConnectorDefinition, ConnectorDriver, ProbeResult } from "../types"
@@ -30,6 +30,7 @@ function createHarness(options: {
   }
   const drivers = new ConnectorDriverRegistry()
   drivers.register("mcp-streamable-http", driver)
+  drivers.register("portal-session", driver)
   const logger = { warn: vi.fn() }
   const eventBus = { emit: vi.fn() }
   const service = createConnectorsService({
@@ -45,6 +46,18 @@ function createHarness(options: {
 }
 
 describe("connectors service", () => {
+  it("lists the remaining connectors without restoring retired saved entries", async () => {
+    const initialState = { schemaVersion: 1, connectors: { figma: { enabled: false }, wecom: { enabled: true } } }
+    const { service, readState } = createHarness({ initialState, definitions: builtinConnectors })
+    await service.initialize()
+
+    const { items } = await service.list()
+    expect(items.map((item) => item.id).sort()).toEqual(["figma", "portal-headless", "portal-headless-test"])
+    await expect(service.connect("wecom")).rejects.toThrow("连接器不存在")
+    await expect(service.getEnabledConnectorIds()).resolves.toEqual([])
+    expect(readState()).toEqual(initialState)
+  })
+
   it("lists builtin definitions and enables a connector only after a successful probe", async () => {
     const { service, driver, readState, eventBus } = createHarness()
 

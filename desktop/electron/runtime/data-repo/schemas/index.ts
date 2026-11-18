@@ -88,17 +88,11 @@ export {
   connectorsItemsSchema,
   connectorsCredentialsSchema,
   connectorsStateSchema,
-  connectorsWecomMailStateSchema,
-  wecomConnectionStateSchema,
   type ConnectorItemEntryV1,
   type ConnectorCredentialEntryV1,
   type ConnectorLocalStateV1,
   type ConnectorProbeErrorCodeV1,
   type ConnectorStateStoreV1,
-  type WecomMailBindingV1,
-  type WecomMailStateV1,
-  type WecomConnectionBindingV1,
-  type WecomConnectionStateV1,
 } from "./connectors"
 export {
   secretsItemsSchema,
@@ -253,8 +247,6 @@ import {
   connectorsItemsSchema,
   connectorsCredentialsSchema,
   connectorsStateSchema,
-  connectorsWecomMailStateSchema,
-  wecomConnectionStateSchema,
 } from "./connectors"
 import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
@@ -333,8 +325,6 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   connectorsItemsSchema,
   connectorsCredentialsSchema,
   connectorsStateSchema,
-  connectorsWecomMailStateSchema,
-  wecomConnectionStateSchema,
   secretsItemsSchema,
   secretsSettingsSchema,
   agentPersonaItemsSchema,

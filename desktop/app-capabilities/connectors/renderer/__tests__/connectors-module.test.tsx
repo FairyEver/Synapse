@@ -158,36 +158,6 @@ describe("ConnectorsModule", () => {
     expect(mocks.connectors.item.connect).toHaveBeenCalledWith({ id: "design-tool" })
     expect(mocks.toast.success).toHaveBeenCalledWith("Design Tool MCP 已激活")
   })
-
-  it("shows connection information without exposing mailbox or permission controls", async () => {
-    const item = {
-      id: "wecom",
-      kind: "wecom" as const,
-      name: "企业微信",
-      enabled: true,
-      probeStatus: "ready" as const,
-      connectionStatus: "connected" as const,
-      wecom: {
-        connectedAt: "2026-10-22T09:00:00Z",
-        lastValidatedAt: "2026-10-22T09:30:00Z",
-      },
-    }
-    mocks.connectors.item.list.mockResolvedValue({ items: [item] })
-    renderModule()
-    await act(async () => { await Promise.resolve() })
-
-    expect(document.body.textContent).toContain("智能机器人已连接")
-    expect(document.body.textContent).not.toContain("打开邮箱")
-    expect(document.body.textContent).not.toContain("申请邮箱权限")
-    const info = document.querySelector<HTMLButtonElement>('button[aria-label="企业微信连接信息"]')
-    await act(async () => {
-      info?.click()
-      await Promise.resolve()
-    })
-    expect(document.body.textContent).toContain("凭据仅保存在本机")
-    expect(document.body.textContent).toContain("工作台 → 智能机器人 → 管理 → 可使用权限")
-    expect(mocks.openExternal).not.toHaveBeenCalled()
-  })
 })
 
 function renderModule() {

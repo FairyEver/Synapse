@@ -59,7 +59,6 @@ import {
   coreProjectContainerRegistryDescriptor,
   coreAgentPersonasDescriptor,
   coreQuickInputDescriptor,
-  coreWecomDescriptor,
   coreConnectorsDescriptor,
   coreSecretsDescriptor,
   coreTodosDescriptor,
@@ -171,7 +170,6 @@ export function buildServiceRegistry(
   registry.register(coreSynapseSkillDescriptor)
   registry.register(coreEditorInstallRecoveryDescriptor)
   registry.register(coreQuickInputDescriptor)
-  registry.register(coreWecomDescriptor)
   registry.register(coreConnectorsDescriptor)
   registry.register(coreSecretsDescriptor)
   registry.register(coreMailDescriptor)

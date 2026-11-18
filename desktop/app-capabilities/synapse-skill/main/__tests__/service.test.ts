@@ -243,7 +243,8 @@ describe("SynapseSkillService", () => {
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("cloud-tables/public-apps.md")
     expect(detail.content).toContain("workflow/index.md")
-    expect(detail.content).toContain("wecom/wecomcli-shared/SKILL.md")
+    expect(detail.content).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
+    expect(source.description).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
     expect(detail.content).toContain("case-insensitive) as a standalone word")
     expect(detail.content).toContain("用 sy 查一下云盘")
     expect(detail.content).toContain("static site publishing or republishing")
@@ -256,7 +257,7 @@ describe("SynapseSkillService", () => {
     // Clients namespace the two tools differently; naming the Codex form saves a
     // discovery round trip. Verified against a live Codex session.
     expect(detail.content).toContain("mcp__synapse_mcp__search")
-    expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toHaveLength(4)
+    expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toEqual([])
     expect(attachmentNames).toEqual(expect.arrayContaining([
       "app/api-reference.md",
       "cloud-tables/public-apps.md",
@@ -266,14 +267,9 @@ describe("SynapseSkillService", () => {
       "skill-authoring/index.md",
       "todos/index.md",
       "web-publishing/index.md",
-      "wecom/LICENSE",
-      "wecom/UPSTREAM.md",
-      "wecom/wecomcli-shared/SKILL.md",
-      "wecom/wecomcli-message/SKILL.md",
       "workflow/index.md",
     ]))
     expect(attachmentNames).not.toContain("wecom-mail/index.md")
-    expect(attachmentNames.filter((name) => /^wecom\/wecomcli-[^/]+\/SKILL\.md$/u.test(name))).toHaveLength(2)
   })
 
   it("routes third-party reports to host presentation without requiring Synapse business tools", async () => {

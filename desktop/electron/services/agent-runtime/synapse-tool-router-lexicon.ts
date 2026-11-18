@@ -71,8 +71,6 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["供应商", "provider"],
   ["设置", "settings"],
   ["待办", "todos"],
-  ["企业微信", "wecom"],
-  ["企微", "wecom"],
   ["映射", "mapping"],
   ["启停", "enabled"],
 

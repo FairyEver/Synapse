@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises"
+import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -864,6 +865,27 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
 }
 
 describe("packaged asar verification", () => {
+  it("excludes retired compiled Enterprise WeChat files from incremental packages", async () => {
+    const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"))
+    const requireFromBuilder = createRequire(createRequire(import.meta.url).resolve("electron-builder/package.json"))
+    const { FileMatcher } = requireFromBuilder("app-builder-lib/out/fileMatcher.js")
+    const filter = new FileMatcher(process.cwd(), path.join(process.cwd(), "release"), (value: string) => value, packageJson.build.files).createFilter()
+
+    for (const relativePath of [
+      "dist-electron/app-capabilities/wecom/main/cli-client.js",
+      "dist-electron/app-capabilities/wecom/main/cli-client.js.map",
+      "dist-electron/synapse-capabilities/shared/wecom-domain.js",
+      "dist-electron/synapse-capabilities/shared/wecom-domain.js.map",
+      "dist-electron/app-capabilities/connectors/main/wecom-mail-driver.js",
+      "dist-electron/app-capabilities/connectors/shared/wecom-mail.js.map",
+    ]) {
+      expect(filter(path.join(process.cwd(), relativePath), { isDirectory: () => false }), relativePath).toBe(false)
+    }
+    for (const relativePath of ["dist-electron/electron/main.js", "dist-electron/app-capabilities/connectors/main/service.js"]) {
+      expect(filter(path.join(process.cwd(), relativePath), { isDirectory: () => false }), relativePath).toBe(true)
+    }
+  })
+
   it("does not apply sandbox inheritance to nested macOS executables", async () => {
     const entitlements = await readFile(
       path.join(process.cwd(), "build/entitlements.mac.inherit.plist"),
@@ -911,9 +933,6 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "index.md"], "# Todos\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "api-reference.md"], "# Todo API\n")
-    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "wecomcli-shared", "SKILL.md"], "# WeCom Shared\n")
-    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "wecomcli-message", "SKILL.md"], "# WeCom Message\n")
-    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "LICENSE"], "MIT License\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
   }
 
@@ -1071,6 +1090,12 @@ describe("packaged asar verification", () => {
     "dist-electron/synapse-capabilities/shared/tunnel-domain.js",
     "dist-electron/electron/runtime/data-repo/schemas/tunnel.js",
     "node_modules/@synapse/shared/dist/tunnel-contracts.cjs",
+    "dist-electron/app-capabilities/wecom/main/cli-client.js",
+    "dist-electron/synapse-capabilities/shared/wecom-domain.js",
+    "dist-electron/app-capabilities/connectors/main/wecom-mail-driver.js",
+    "dist-electron/app-capabilities/connectors/shared/wecom-mail.js",
+    "node_modules/@wecom/cli/package.json",
+    "node_modules/@wecom/cli-darwin-arm64/bin/wecom-cli",
   ])("rejects stale retired runtime code at %s", async (retiredPackedPath) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -1082,6 +1107,44 @@ describe("packaged asar verification", () => {
       await writeExtraResourceFixtures(resourcesPath)
       await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root, "--resources-only"])).rejects.toMatchObject({
         stderr: expect.stringContaining(`retired runtime must not be packaged: ${retiredPackedPath}`),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects retired Enterprise WeChat Skill resources", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "wecomcli-shared", "SKILL.md"], "# Retired Skill\n")
+
+      await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root, "--resources-only"])).rejects.toMatchObject({
+        stderr: expect.stringContaining("forbidden extra resource (retired Enterprise WeChat Skills): synapse-skill/wecom"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each(["cli", "cli-darwin-arm64", "cli-win32-x64"])("rejects unindexed retired CLI files under @wecom/%s", async (packageName) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeUnpackedFixture(resourcesPath, ["app.asar.unpacked", "node_modules", "@wecom", packageName, "bin", "wecom-cli"])
+
+      await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root, "--resources-only"])).rejects.toMatchObject({
+        stderr: expect.stringContaining(`retired runtime must not be packaged: node_modules/@wecom/${packageName}`),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -8,6 +8,7 @@ import {
   NamespaceNotFoundError,
   coreConfigSchema,
   createDataRepository,
+  createFileBackedDataRepository,
   type CoreConfigV1,
   type DataNamespace,
 } from "../index"
@@ -15,6 +16,40 @@ import {
 const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-repo-"))
 
 describe("DataRepositoryImpl (T2.13)", () => {
+  it("leaves retired Enterprise WeChat files untouched while loading connector state", async () => {
+    const dir = await tempDir()
+    try {
+      const dataRoot = path.join(dir, "data")
+      const credentialsRoot = path.join(dir, "connectors", "wecom-mail")
+      await mkdir(dataRoot, { recursive: true })
+      await mkdir(credentialsRoot, { recursive: true })
+      const files = [
+        path.join(dataRoot, "app.wecom.connection.json"),
+        path.join(dataRoot, "app.connectors.wecom-mail.json"),
+        path.join(credentialsRoot, "retired-credential.bin"),
+      ]
+      // Invalid state bytes make accidental restoration observable as a failure.
+      for (const file of files) await writeFile(file, "retired-data-preserved")
+      const state = { schemaVersion: 1, connectors: { figma: { enabled: false }, wecom: { enabled: true } } }
+      await writeFile(path.join(dataRoot, "app.connectors.state.json"), JSON.stringify({ schemaVersion: 1, singleton: state, items: {} }))
+      const repo = createFileBackedDataRepository({
+        rootDir: dataRoot,
+        safeStorage: {
+          isEncryptionAvailable: () => false,
+          encryptString: () => { throw new Error("Unexpected credential encryption") },
+          decryptString: () => { throw new Error("Unexpected credential decryption") },
+        },
+      })
+
+      expect(() => repo.namespace("app.wecom.connection")).toThrowError(NamespaceNotFoundError)
+      expect(() => repo.namespace("app.connectors.wecom-mail")).toThrowError(NamespaceNotFoundError)
+      await expect(repo.namespace("app.connectors.state").getSingleton()).resolves.toEqual(state)
+      for (const file of files) await expect(readFile(file, "utf8")).resolves.toBe("retired-data-preserved")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("namespace() throws NamespaceNotFoundError for unregistered names", () => {
     const repo = createDataRepository()
     expect(() => repo.namespace("ghost")).toThrowError(NamespaceNotFoundError)

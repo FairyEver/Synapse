@@ -40,7 +40,6 @@ import { MAIL_INTERNAL_DOMAIN, MAIL_INTERNAL_MCP_TOOL_ACTIONS, buildMailInternal
 import { CLOUD_TABLES_DOMAIN, CLOUD_TABLES_MCP_TOOL_ACTIONS, buildCloudTableTools } from "../../app-capabilities/cloud-tables/shared/capability"
 import { SKILL_HUB_DOMAIN, SKILL_HUB_MCP_TOOL_ACTIONS, buildSkillHubTools } from "../../app-capabilities/skill-hub/shared/capability"
 import { TODOS_DOMAIN, TODOS_MCP_TOOL_ACTIONS, buildTodoTools } from "./todos-domain"
-import { WECOM_DOMAIN, WECOM_MCP_TOOL_ACTIONS, buildWecomTools } from "./wecom-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import { assertCanonicalCapabilityId } from "./naming"
 
@@ -58,7 +57,6 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   TODOS_DOMAIN,
   SKILL_HUB_DOMAIN,
   CLOUD_TABLES_DOMAIN,
-  WECOM_DOMAIN,
 ]
 
 for (const domain of CAPABILITY_DOMAINS) {
@@ -81,7 +79,6 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...TODOS_MCP_TOOL_ACTIONS,
   ...SKILL_HUB_MCP_TOOL_ACTIONS,
   ...CLOUD_TABLES_MCP_TOOL_ACTIONS,
-  ...WECOM_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
@@ -99,7 +96,6 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildTodoTools(),
     ...buildSkillHubTools(),
     ...buildCloudTableTools(),
-    ...buildWecomTools(),
   ]
 }
 

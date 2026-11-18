@@ -16,10 +16,7 @@ export type PortalIntegration = {
   readonly callbackUrl: string
   readonly language: string
 }
-export type WecomIntegration = {
-  readonly kind: "wecom"
-}
-export type ConnectorIntegration = McpStreamableHttpIntegration | PortalIntegration | WecomIntegration
+export type ConnectorIntegration = McpStreamableHttpIntegration | PortalIntegration
 
 export type BuiltinConnectorDefinition = {
   readonly id: string

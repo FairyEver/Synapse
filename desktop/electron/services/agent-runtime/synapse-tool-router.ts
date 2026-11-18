@@ -33,7 +33,6 @@ const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   model_price: ["模型价格", "费用", "价格", "model price", "pricing", "cost"],
   repository: ["仓库", "repository", "repo"],
   workflow: ["工作流", "节点", "workflow", "node"],
-  wecom: ["企业微信", "企微", "WeCom", "wecom"],
 }
 
 const SEARCH_STOP_WORDS = new Set([
@@ -178,7 +177,7 @@ export const SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS: readonly SynapseToolRouterToo
 export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Synapse is this MCP server's local desktop app. It manages Database, Drive,",
   "Workflow, Automation, Content (Rules/Skills/Prompts), model price rules,",
-  "local secrets and repositories, Enterprise WeChat, Terminal sessions, App capabilities.",
+  "local secrets and repositories, Terminal sessions, App capabilities.",
   "",
   "This server publishes exactly two tools. Every Synapse capability is reached in two steps:",
   "",
@@ -191,7 +190,6 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
   "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":20}}.",
   "",
-  "WeCom: `app_wecom_connection_get` checks status; `app_wecom_cli_run` runs canonical Skill commands without exposing credentials.",
   "邮件/邮箱/收件箱/email use `mail`; only explicit 站内信/internal mail or typed internal references use `mail_internal`.",
   "Use a sole configured email account without asking.",
   "",
@@ -322,10 +320,6 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
       ...excludedSearchDomains(query),
       ...(!domain && !/^app_mail_internal_[a-z_]+$/u.test(query)
         && mailIntent?.domain !== "mail_internal" ? ["mail_internal"] : []),
-      ...(/(?:站内信|通知中心|synapse\s*邮件)/iu.test(query)
-        && !/(?:企业微信|企微|\bwecom\b)/iu.test(query)
-        ? ["wecom"]
-        : []),
     ]),
   ]
   const matchesScope = (entry: SynapseToolCatalogEntry) => (!domain || entry.domain === domain)
