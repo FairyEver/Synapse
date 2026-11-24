@@ -23,6 +23,7 @@ vi.mock("@/definitions/generated/renderer-registry", () => ({
   mcpDefinitions: [
     { target: "claude", label: "CC/Synapse", icon: "claude.png", order: 10 },
     { target: "cursor", label: "Cursor", icon: "cursor.png", order: 20 },
+    { target: "antigravity", label: "Antigravity", icon: "antigravity.png", order: 50 },
   ],
 }))
 
@@ -202,10 +203,76 @@ describe("McpSettingsPanel", () => {
     expect(document.body.textContent).toContain("未注册")
     expect(document.body.textContent).not.toContain("检测中...")
   })
+
+  it("renders dynamically discovered T3 Code Antigravity profiles right after Antigravity with accessible button labels", async () => {
+    const t3Target = `t3-code:antigravity:${"a".repeat(64)}`
+    mocks.mcpRegistrationsList
+      .mockResolvedValueOnce([
+        registration({ target: "antigravity", registered: true, mode: "http" }),
+        registration({
+          target: t3Target,
+          label: "T3 Code · Antigravity",
+          iconTarget: "antigravity",
+          settingsFileExists: true,
+          registered: false,
+          mode: null,
+        }),
+      ])
+      .mockResolvedValueOnce([
+        registration({ target: "antigravity", registered: true, mode: "http" }),
+        registration({
+          target: t3Target,
+          label: "T3 Code · Antigravity",
+          iconTarget: "antigravity",
+          settingsFileExists: true,
+          registered: true,
+          mode: "http",
+        }),
+      ])
+
+    renderPanel()
+    await flush()
+
+    const listItems = Array.from(document.querySelectorAll("ul[role='list'] > li"))
+    const labels = listItems.map((item) => item.querySelector("span.truncate")?.textContent)
+    expect(labels).toEqual(["CC/Synapse", "Cursor", "Antigravity", "T3 Code · Antigravity"])
+
+    const t3Row = listItems[3]!
+    expect(t3Row.querySelector("img")?.getAttribute("src")).toBe("antigravity.png")
+    expect(t3Row.querySelector("img")?.getAttribute("alt")).toBe("")
+
+    const openBtn = t3Row.querySelector<HTMLButtonElement>("button[aria-label='打开文件：T3 Code · Antigravity']")
+    const registerBtn = t3Row.querySelector<HTMLButtonElement>("button[aria-label='注册：T3 Code · Antigravity']")
+    expect(openBtn).not.toBeNull()
+    expect(registerBtn).not.toBeNull()
+
+    await act(async () => {
+      openBtn!.click()
+      await Promise.resolve()
+    })
+    expect(mocks.mcpRegistrationOpenSettings).toHaveBeenCalledWith(t3Target)
+
+    await act(async () => {
+      registerBtn!.click()
+      await Promise.resolve()
+    })
+    await flush()
+
+    expect(mocks.mcpRegistrationRegister).toHaveBeenCalledWith(t3Target)
+    expect(mocks.promise).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        success: "MCP Server 已注册到 T3 Code · Antigravity",
+      }),
+    )
+    expect(t3Row.querySelector("button[aria-label='重新注册：T3 Code · Antigravity']")).not.toBeNull()
+  })
 })
 
 function registration(overrides: {
   target: string
+  label?: string
+  iconTarget?: string
   settingsFileExists?: boolean
   registered?: boolean
   mode?: "http" | "stdio" | null
@@ -213,6 +280,8 @@ function registration(overrides: {
 }) {
   return {
     target: overrides.target as McpTarget,
+    ...(overrides.label ? { label: overrides.label } : {}),
+    ...(overrides.iconTarget ? { iconTarget: overrides.iconTarget as McpTarget } : {}),
     settingsPath: `/Users/test/.${overrides.target}.json`,
     settingsFileExists: overrides.settingsFileExists ?? true,
     registered: overrides.registered ?? false,

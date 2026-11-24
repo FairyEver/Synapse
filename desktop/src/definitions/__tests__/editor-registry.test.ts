@@ -46,6 +46,13 @@ describe("editor definition registry", () => {
       "hermes",
       "workbuddy",
     ])
+    expect(mcpDefinitions.find((definition) => definition.target === "antigravity")).toMatchObject({
+      label: "Antigravity",
+      order: 50,
+      settingsPathSegments: [".gemini", "config", "mcp_config.json"],
+      legacySettingsPathSegments: [[".gemini", "antigravity", "mcp_config.json"]],
+      settingsFormat: "json-mcp-servers",
+    })
     expect(installFormDefinitionByEditorId.has("cursor")).toBe(true)
     expect(installFormDefinitionByEditorId.has("windsurf")).toBe(true)
     expect(installFormDefinitionByEditorId.has("claude-code")).toBe(true)

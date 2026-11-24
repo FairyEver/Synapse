@@ -31,11 +31,71 @@ const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
   icon: definition.icon,
 }))
 
+const MCP_ICON_BY_TARGET = new Map<string, string>(
+  MCP_SERVER_META.map((definition) => [definition.id, definition.icon]),
+)
+
+type McpRegistrationRow = {
+  id: McpTarget
+  label: string
+  icon: string | undefined
+  registered: boolean
+  settingsFileExists: boolean
+  mode: "http" | "stdio" | null
+  readError?: string
+}
+
+function buildRegistrationRows(registrationList: McpRegistrationInfo[]): McpRegistrationRow[] {
+  const stateByTarget = new Map<string, McpRegistrationInfo>(
+    registrationList.map((registration) => [registration.target, registration]),
+  )
+  const staticTargets = new Set<string>(MCP_SERVER_META.map((server) => server.id))
+  const dynamicRegistrations = registrationList.filter((registration) => !staticTargets.has(registration.target))
+  const insertedDynamicTargets = new Set<string>()
+  const rows: McpRegistrationRow[] = []
+
+  const toDynamicRow = (registration: McpRegistrationInfo): McpRegistrationRow => ({
+    id: registration.target,
+    label: registration.label ?? registration.target,
+    icon: MCP_ICON_BY_TARGET.get(registration.iconTarget ?? registration.target),
+    registered: registration.registered,
+    settingsFileExists: registration.settingsFileExists,
+    mode: registration.mode,
+    readError: registration.readError,
+  })
+
+  for (const server of MCP_SERVER_META) {
+    const state = stateByTarget.get(server.id)
+    rows.push({
+      id: server.id,
+      label: server.label,
+      icon: server.icon,
+      registered: Boolean(state?.registered),
+      settingsFileExists: Boolean(state?.settingsFileExists),
+      mode: state?.mode ?? null,
+      readError: state?.readError,
+    })
+
+    for (const dynamic of dynamicRegistrations) {
+      if (dynamic.iconTarget === server.id && !insertedDynamicTargets.has(dynamic.target)) {
+        insertedDynamicTargets.add(dynamic.target)
+        rows.push(toDynamicRow(dynamic))
+      }
+    }
+  }
+
+  for (const dynamic of dynamicRegistrations) {
+    if (!insertedDynamicTargets.has(dynamic.target)) {
+      rows.push(toDynamicRow(dynamic))
+    }
+  }
+
+  return rows
+}
+
 function McpSettingsPanel() {
   const { promise, notify } = useAppNotifications()
-  const [registrationsByTarget, setRegistrationsByTarget] = useState<
-    Partial<Record<McpTarget, McpRegistrationInfo>>
-  >({})
+  const [registrationList, setRegistrationList] = useState<McpRegistrationInfo[]>([])
   const [serverStatus, setServerStatus] = useState<McpServerStatus | null>(null)
   const [serverStatusLoading, setServerStatusLoading] = useState(true)
   const [serverStatusError, setServerStatusError] = useState<string | null>(null)
@@ -72,12 +132,7 @@ function McpSettingsPanel() {
     setRegistrationsLoading(true)
     try {
       const result = await mcpRegistrationsList()
-      setRegistrationsByTarget(
-        result.reduce<Partial<Record<McpTarget, McpRegistrationInfo>>>((registrations, registration) => {
-          registrations[registration.target] = registration
-          return registrations
-        }, {}),
-      )
+      setRegistrationList(result)
       return result
     } finally {
       setRegistrationsLoading(false)
@@ -87,13 +142,15 @@ function McpSettingsPanel() {
   useEffect(() => {
     void refreshRegistrations().catch((error) => {
       logger.error("Failed to load MCP registrations.", error)
-      setRegistrationsByTarget({})
+      setRegistrationList([])
       setRegistrationsLoading(false)
     })
   }, [refreshRegistrations])
 
+  const registrations = buildRegistrationRows(registrationList)
+
   const handleRegisterMcp = useCallback(
-    async (target: McpTarget) => {
+    async (target: McpTarget, label: string) => {
       try {
         await promise(
           async () => {
@@ -105,7 +162,7 @@ function McpSettingsPanel() {
           {
             trackingName: "settings.mcp.register",
             loading: "正在注册 MCP...",
-            success: `MCP Server 已注册到 ${MCP_SERVER_META.find((item) => item.id === target)?.label ?? target}`,
+            success: `MCP Server 已注册到 ${label}`,
           },
         )
       } catch {
@@ -138,16 +195,6 @@ function McpSettingsPanel() {
     [promise],
   )
 
-  const registrations = MCP_SERVER_META.map((server) => {
-    const state = registrationsByTarget[server.id]
-    return {
-      ...server,
-      registered: Boolean(state?.registered),
-      settingsFileExists: Boolean(state?.settingsFileExists),
-      mode: state?.mode ?? null,
-      readError: state?.readError,
-    }
-  })
   const registrationDisabled = !serverStatus?.running || !serverStatus?.url
 
   const handleCopyMcpUrl = useCallback(async () => {
@@ -194,50 +241,59 @@ function McpSettingsPanel() {
         ) : null}
         <Separator />
         {registrationsLoading ? <Skeleton className="h-10 w-full" /> : null}
-        {registrations.map((server) => (
-          <div
-            key={server.id}
-            className="flex items-center justify-between gap-2"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <img
-                src={server.icon}
-                alt={server.label}
-                className="size-5 shrink-0 clip-path-[inset(6%)]"
-              />
-              <span className="truncate text-sm">{server.label}</span>
-              {registrationsLoading ? (
-                <span className="text-xs text-muted-foreground">检测中...</span>
-              ) : server.readError ? (
-                <StatusPill active={false} activeLabel="" inactiveLabel="配置读取失败" variant="warning" />
-              ) : server.registered && server.mode === "http" ? (
-                <StatusPill active activeLabel="已注册" inactiveLabel="" />
-              ) : server.registered && server.mode === "stdio" ? (
-                <StatusPill active activeLabel="需更新" inactiveLabel="" variant="warning" />
-              ) : (
-                <StatusPill active={false} activeLabel="" inactiveLabel="未注册" />
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                variant="outline"
-                size="default"
-                disabled={!server.settingsFileExists}
-                onClick={() => handleOpenSettings(server.id)}
+        <ul role="list" className="flex flex-col gap-2">
+          {registrations.map((server) => {
+            const registerActionLabel = server.registered ? "重新注册" : "注册"
+            return (
+              <li
+                key={server.id}
+                className="flex items-center justify-between gap-2"
               >
-                打开文件
-              </Button>
-              <Button
-                variant="outline"
-                size="default"
-                disabled={Boolean(server.readError) || registrationDisabled}
-                onClick={() => handleRegisterMcp(server.id)}
-              >
-                {server.registered ? "重新注册" : "注册"}
-              </Button>
-            </div>
-          </div>
-        ))}
+                <div className="flex min-w-0 items-center gap-2">
+                  {server.icon ? (
+                    <img
+                      src={server.icon}
+                      alt=""
+                      className="size-5 shrink-0 clip-path-[inset(6%)]"
+                    />
+                  ) : null}
+                  <span className="truncate text-sm">{server.label}</span>
+                  {registrationsLoading ? (
+                    <span className="text-xs text-muted-foreground">检测中...</span>
+                  ) : server.readError ? (
+                    <StatusPill active={false} activeLabel="" inactiveLabel="配置读取失败" variant="warning" />
+                  ) : server.registered && server.mode === "http" ? (
+                    <StatusPill active activeLabel="已注册" inactiveLabel="" />
+                  ) : server.registered && server.mode === "stdio" ? (
+                    <StatusPill active activeLabel="需更新" inactiveLabel="" variant="warning" />
+                  ) : (
+                    <StatusPill active={false} activeLabel="" inactiveLabel="未注册" />
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="default"
+                    disabled={!server.settingsFileExists}
+                    aria-label={`打开文件：${server.label}`}
+                    onClick={() => handleOpenSettings(server.id)}
+                  >
+                    打开文件
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    disabled={Boolean(server.readError) || registrationDisabled}
+                    aria-label={`${registerActionLabel}：${server.label}`}
+                    onClick={() => handleRegisterMcp(server.id, server.label)}
+                  >
+                    {registerActionLabel}
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       </CardContent>
     </Card>
   )

@@ -23,6 +23,7 @@ export type SynapseMcpDefinition = {
   label: string
   order: number
   settingsPathSegments: readonly string[]
+  legacySettingsPathSegments?: readonly (readonly string[])[]
   settingsFormat: "json-mcp-servers" | "codex-toml" | "hermes-yaml"
 }
 

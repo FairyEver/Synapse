@@ -9,6 +9,8 @@ import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../../dat
 
 const registrationInfoSchema = z.object({
   target: z.string(),
+  label: z.string().optional(),
+  iconTarget: z.string().optional(),
   settingsPath: z.string(),
   settingsFileExists: z.boolean(),
   registered: z.boolean(),

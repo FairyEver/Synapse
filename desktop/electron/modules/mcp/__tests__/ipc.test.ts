@@ -98,12 +98,23 @@ describe("mcpIpcModule", () => {
   })
 
   it("validates registration targets and response shapes", () => {
+    const dynamicTarget = `t3-code:antigravity:${"a".repeat(64)}`
     expect(mcpIpcModule.methods.registrationRegister.request.safeParse("").success).toBe(false)
     expect(mcpIpcModule.methods.registrationRegister.request.safeParse("codex").success).toBe(true)
+    expect(mcpIpcModule.methods.registrationRegister.request.safeParse(dynamicTarget).success).toBe(true)
     expect(mcpIpcModule.methods.registrationList.response?.safeParse([{
       target: "codex",
       settingsPath: "/tmp/config.toml",
       settingsFileExists: false,
+      registered: false,
+      mode: null,
+      url: null,
+    }, {
+      target: dynamicTarget,
+      label: "T3 Code · Antigravity",
+      iconTarget: "antigravity",
+      settingsPath: "/tmp/t3/mcp_config.json",
+      settingsFileExists: true,
       registered: false,
       mode: null,
       url: null,

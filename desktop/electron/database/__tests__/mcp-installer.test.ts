@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
@@ -514,5 +515,219 @@ describe("mcp-installer", () => {
     ])
     expect(JSON.parse(readFileSync(userSettingsPath, "utf8")).permissions.allow).toEqual([])
     expect(readFileSync(localSettingsPath, "utf8")).not.toContain("mcp__synapse-mcp__")
+  })
+
+  it("registers Antigravity MCP in ~/.gemini/config/mcp_config.json and syncs existing legacy config", async () => {
+    const { autoRegisterMcp, getMcpServers, registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const primaryPath = path.join(state.home, ".gemini", "config", "mcp_config.json")
+    const legacyPath = path.join(state.home, ".gemini", "antigravity", "mcp_config.json")
+    mkdirSync(path.dirname(primaryPath), { recursive: true })
+    mkdirSync(path.dirname(legacyPath), { recursive: true })
+    writeFileSync(legacyPath, JSON.stringify({
+      mcpServers: {
+        existing: { command: "node", args: ["server.js"] },
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:11111/mcp" },
+      },
+    }), "utf8")
+
+    const result = await registerMcp("antigravity", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    expect(JSON.parse(readFileSync(primaryPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+    expect(JSON.parse(readFileSync(legacyPath, "utf8"))).toEqual({
+      mcpServers: {
+        existing: { command: "node", args: ["server.js"] },
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+    expect(getMcpServers().find((server) => server.target === "antigravity")).toMatchObject({
+      target: "antigravity",
+      settingsPath: primaryPath,
+      settingsFileExists: true,
+      registered: true,
+      mode: "http",
+      url: "http://127.0.0.1:51234/mcp",
+    })
+
+    // Even if primary is already on the current port, autoRegisterMcp repairs stale legacy URL.
+    writeFileSync(legacyPath, JSON.stringify({
+      mcpServers: {
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:19999/mcp" },
+      },
+    }), "utf8")
+    await autoRegisterMcp(51234)
+    expect(JSON.parse(readFileSync(legacyPath, "utf8")).mcpServers["synapse-mcp"]).toEqual({
+      type: "http",
+      url: "http://127.0.0.1:51234/mcp",
+    })
+  })
+
+  it("falls back to ~/.gemini/antigravity/mcp_config.json when only the legacy Antigravity directory exists", async () => {
+    const { autoRegisterMcp, getMcpServers } = await import("../mcp-installer")
+    const primaryDir = path.join(state.home, ".gemini", "config")
+    const legacyPath = path.join(state.home, ".gemini", "antigravity", "mcp_config.json")
+    mkdirSync(path.dirname(legacyPath), { recursive: true })
+
+    await autoRegisterMcp(51234)
+
+    expect(existsSync(primaryDir)).toBe(false)
+    expect(JSON.parse(readFileSync(legacyPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+    expect(getMcpServers().find((server) => server.target === "antigravity")).toMatchObject({
+      target: "antigravity",
+      settingsPath: legacyPath,
+      settingsFileExists: true,
+      registered: true,
+      mode: "http",
+      url: "http://127.0.0.1:51234/mcp",
+    })
+  })
+
+  it("discovers T3 Code Antigravity profiles, handles 0-byte config without empty backup, and updates only registered profiles on auto-register", async () => {
+    const { autoRegisterMcp, getMcpServers, openMcpSettings, registerMcp } = await import("../mcp-installer")
+    const { shell } = await import("electron")
+    const { security } = createSecurity({ allowed: true })
+
+    // No T3 Code directory yet: no dynamic target appears.
+    expect(getMcpServers().some((server) => server.target.startsWith("t3-code:antigravity:"))).toBe(false)
+
+    const defaultHash = createHash("sha256").update("antigravity").digest("hex")
+    const secondHash = "b".repeat(64)
+    const providersRoot = path.join(state.home, ".t3", "userdata", "providers", "antigravity")
+    const defaultConfigDir = path.join(providersRoot, defaultHash, "config")
+    const secondConfigDir = path.join(providersRoot, secondHash, "config")
+    const defaultSettingsPath = path.join(defaultConfigDir, "mcp_config.json")
+    const secondSettingsPath = path.join(secondConfigDir, "mcp_config.json")
+    mkdirSync(defaultConfigDir, { recursive: true })
+    mkdirSync(secondConfigDir, { recursive: true })
+    // Invalid directory names and profiles without config/ must be ignored.
+    mkdirSync(path.join(providersRoot, "not-a-hash", "config"), { recursive: true })
+    mkdirSync(path.join(providersRoot, "c".repeat(64)), { recursive: true })
+    writeFileSync(defaultSettingsPath, "", "utf8")
+    writeFileSync(secondSettingsPath, JSON.stringify({
+      mcpServers: {
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:10001/mcp" },
+        custom: { command: "node", args: ["custom.js"] },
+      },
+    }), "utf8")
+
+    const before = getMcpServers()
+    const antigravityIndex = before.findIndex((server) => server.target === "antigravity")
+    expect(before[antigravityIndex + 1]).toMatchObject({
+      target: `t3-code:antigravity:${defaultHash}`,
+      label: "T3 Code · Antigravity",
+      iconTarget: "antigravity",
+      settingsPath: defaultSettingsPath,
+      settingsFileExists: true,
+      registered: false,
+      mode: null,
+      url: null,
+    })
+    expect(before[antigravityIndex + 2]).toMatchObject({
+      target: `t3-code:antigravity:${secondHash}`,
+      label: "T3 Code · Antigravity (bbbbbbbb)",
+      iconTarget: "antigravity",
+      settingsPath: secondSettingsPath,
+      settingsFileExists: true,
+      registered: true,
+      mode: "http",
+      url: "http://127.0.0.1:10001/mcp",
+    })
+    expect(before.filter((server) => server.target.startsWith("t3-code:antigravity:"))).toHaveLength(2)
+
+    // autoRegisterMcp skips the unregistered default T3 profile, but updates the already-registered second profile.
+    await autoRegisterMcp(51234, {
+      actor: { kind: "system", id: "database" },
+      source: "database.mcp.autoRegister",
+      permissionGuard: createDefaultPermissionGuard(),
+    })
+    expect(readFileSync(defaultSettingsPath, "utf8")).toBe("")
+    expect(JSON.parse(readFileSync(secondSettingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:51234/mcp" },
+        custom: { command: "node", args: ["custom.js"] },
+      },
+    })
+
+    // Manual registration writes the 0-byte file without creating a 0-byte backup.
+    const defaultTarget = `t3-code:antigravity:${defaultHash}`
+    const registerResult = await registerMcp(defaultTarget, 51234, security)
+    expect(registerResult).toEqual({ success: true })
+    expect(JSON.parse(readFileSync(defaultSettingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:51234/mcp" },
+      },
+    })
+    expect(readdirSync(defaultConfigDir).filter((name) => name.includes(".synapse-backup-"))).toEqual([])
+
+    vi.mocked(shell.openPath).mockResolvedValueOnce("")
+    expect(await openMcpSettings(defaultTarget)).toEqual({ success: true })
+    expect(shell.openPath).toHaveBeenCalledWith(defaultSettingsPath)
+
+    // Invalid or nonexistent T3 targets are rejected safely.
+    expect(await registerMcp("t3-code:antigravity:../escape", 51234, security)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("未知 MCP 目标"),
+    })
+    expect(await openMcpSettings(`t3-code:antigravity:${"d".repeat(64)}`)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("未知 MCP 目标"),
+    })
+  })
+
+  it("preserves user symlinks when writing MCP settings files", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { auditEvents, permissionGuard, security } = createSecurity({ allowed: true })
+    const realTargetPath = path.join(state.home, "shared-mcp.json")
+    const symlinkSettingsPath = path.join(state.home, ".cursor", "mcp.json")
+    writeFileSync(realTargetPath, JSON.stringify({
+      mcpServers: {
+        existing: { type: "http", url: "http://127.0.0.1:9999/mcp" },
+      },
+    }), "utf8")
+    symlinkSync(realTargetPath, symlinkSettingsPath)
+
+    const result = await registerMcp("cursor", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    expect(lstatSync(symlinkSettingsPath).isSymbolicLink()).toBe(true)
+    expect(JSON.parse(readFileSync(realTargetPath, "utf8"))).toEqual({
+      mcpServers: {
+        existing: { type: "http", url: "http://127.0.0.1:9999/mcp" },
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:51234/mcp" },
+      },
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: realTargetPath,
+      context: expect.objectContaining({
+        settingsPath: realTargetPath,
+        target: "cursor",
+      }),
+    }))
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "allowed",
+        resource: realTargetPath,
+      }),
+    ])
   })
 })

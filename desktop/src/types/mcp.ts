@@ -2,6 +2,8 @@ type McpTarget = string & { readonly __brand?: "McpTarget" }
 
 type McpRegistrationInfo = {
   target: McpTarget
+  label?: string
+  iconTarget?: McpTarget
   settingsPath: string
   settingsFileExists: boolean
   registered: boolean
