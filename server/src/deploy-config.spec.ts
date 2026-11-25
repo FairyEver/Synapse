@@ -766,6 +766,63 @@ describe("server deployment configuration", () => {
     expect(httpBlock).toContain('proxy_set_header Upgrade "";')
     expect(httpBlock).toContain('proxy_set_header Connection "";')
   })
+
+  it("routes state sync WS/HTTP upgrades safely and serves public /sdk/ assets with tiered cache and CORS headers", () => {
+    const nginx = readFileSync(join(repositoryRoot, "server/nginx.conf"), "utf8")
+    const wsMarker = "location ~* ^/api/open/v1/state-sync/spaces/[^/]+/docs/[^/]+/ws/?$ {"
+    const httpMarker = "location ~* ^/api/(?:open/v1|console)/state-sync(?:/|$) {"
+    const wsIndex = nginx.indexOf(wsMarker)
+    const httpIndex = nginx.indexOf(httpMarker)
+
+    expect(wsIndex).toBeGreaterThan(-1)
+    expect(httpIndex).toBeGreaterThan(wsIndex)
+
+    const wsBlock = nginx.slice(wsIndex).split("}")[0] ?? ""
+    expect(wsBlock).toContain("access_log off;")
+    expect(wsBlock).toContain("error_log /dev/null crit;")
+    expect(wsBlock).toContain("proxy_set_header Upgrade $http_upgrade;")
+    expect(wsBlock).toContain("proxy_set_header Connection $connection_upgrade;")
+    expect(wsBlock).toContain("proxy_read_timeout 3600s;")
+    expect(wsBlock).toContain("proxy_send_timeout 3600s;")
+    expect(wsBlock).toContain("proxy_buffering off;")
+
+    const httpBlock = nginx.slice(httpIndex).split("}")[0] ?? ""
+    expect(httpBlock).toContain("access_log off;")
+    expect(httpBlock).toContain("error_log /dev/null crit;")
+    expect(httpBlock).toContain("client_max_body_size 256k;")
+    expect(httpBlock).toContain('proxy_set_header Upgrade "";')
+    expect(httpBlock).toContain('proxy_set_header Connection "";')
+
+    const sdkExpectations = [
+      {
+        marker: "location = /sdk/manifest.json {",
+        cacheControl: 'add_header Cache-Control "public, max-age=60, must-revalidate" always;',
+      },
+      {
+        marker: "location ~ ^/sdk/[a-z0-9-]+/manifest\\.json$ {",
+        cacheControl: 'add_header Cache-Control "public, max-age=60, must-revalidate" always;',
+      },
+      {
+        marker: "location ~ ^/sdk/[a-z0-9-]+/v[0-9]+/ {",
+        cacheControl: 'add_header Cache-Control "public, max-age=300, must-revalidate" always;',
+      },
+      {
+        marker: "location ~ ^/sdk/[a-z0-9-]+/[0-9]+\\.[0-9]+\\.[0-9]+/ {",
+        cacheControl: 'add_header Cache-Control "public, max-age=31536000, immutable" always;',
+      },
+    ]
+
+    for (const { marker, cacheControl } of sdkExpectations) {
+      const idx = nginx.indexOf(marker)
+      expect(idx, marker).toBeGreaterThan(-1)
+      const block = nginx.slice(idx).split("}")[0] ?? ""
+      expect(block, marker).toContain("root /app;")
+      expect(block, marker).toContain(cacheControl)
+      expect(block, marker).toContain('add_header Access-Control-Allow-Origin "*" always;')
+      expect(block, marker).toContain('add_header Cross-Origin-Resource-Policy "cross-origin" always;')
+      expect(block, marker).toContain('add_header X-Content-Type-Options "nosniff" always;')
+    }
+  })
 })
 
 function extractPgDumpCommands(source: string): string[] {

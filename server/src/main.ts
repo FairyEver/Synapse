@@ -1,7 +1,12 @@
 import "reflect-metadata"
+import { existsSync } from "node:fs"
+import { resolve } from "node:path"
+import express from "express"
 import { cloudTableCors, registerCloudTableIngress, registerCloudTableBodyErrors } from "./cloud-tables/cloud-table-http"
 import { channelCors, registerChannelBodyErrors, registerChannelIngress } from "./channels/channel-http"
 import { ChannelGateway } from "./channels/channel.gateway"
+import { stateSyncCors, registerStateSyncBodyErrors, registerStateSyncIngress } from "./state-sync/state-sync-http"
+import { StateSyncGateway } from "./state-sync/state-sync.gateway"
 import { NestFactory } from "@nestjs/core"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import cookieParser from "cookie-parser"
@@ -26,14 +31,34 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   registerCloudTableIngress(app)
   registerChannelIngress(app)
+  registerStateSyncIngress(app)
   registerHttpBodyParsers(app)
   registerCloudTableBodyErrors(app)
   registerChannelBodyErrors(app)
+  registerStateSyncBodyErrors(app)
   app.use(cookieParser())
   app.use(createHttpSecurityMiddleware(process.env.NODE_ENV === "production"))
+  if (process.env.NODE_ENV !== "production") {
+    const candidateSdkDirs = [
+      resolve(__dirname, "..", "..", "sdk", "dist"),
+      resolve(process.cwd(), "..", "sdk", "dist"),
+      resolve(process.cwd(), "sdk", "dist"),
+    ]
+    const sdkDistDir = candidateSdkDirs.find((dir) => existsSync(dir)) ?? candidateSdkDirs[0]!
+    app.use(
+      "/sdk",
+      express.static(sdkDistDir, {
+        setHeaders: (res) => {
+          res.setHeader("Access-Control-Allow-Origin", "*")
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin")
+          res.setHeader("X-Content-Type-Options", "nosniff")
+        },
+      }),
+    )
+  }
   app.enableCors((request, callback) => {
     const requestUrl = request.originalUrl ?? request.url ?? ""
-    callback(null, cloudTableCors(requestUrl) ?? channelCors(requestUrl) ?? (isProblemFeedbackPublicPath(requestUrl)
+    callback(null, cloudTableCors(requestUrl) ?? channelCors(requestUrl) ?? stateSyncCors(requestUrl) ?? (isProblemFeedbackPublicPath(requestUrl)
       ? { origin: false, preflightContinue: true }
       : {
           origin: process.env.NODE_ENV === "production" ? false : true,
@@ -46,7 +71,8 @@ async function bootstrap(): Promise<void> {
   liveDesktopGateway.attach(app.getHttpServer())
   app.get(DriveCollaborationGateway).attach(app.getHttpServer())
   app.get(ChannelGateway).attach(app.getHttpServer())
-  // Phones connect over their own path; the three gateways share one upgrade
+  app.get(StateSyncGateway).attach(app.getHttpServer())
+  // Phones connect over their own path; the gateways share one upgrade
   // event and each claims its own pathname.
   if (env.mobileLiveEnabled) {
     app.get(MobileLiveGateway).attach(app.getHttpServer())
