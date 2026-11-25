@@ -31,10 +31,12 @@ type ActiveSocketState = {
   readonly channelId: string
   authTimer: NodeJS.Timeout | null
   authenticating: boolean
+  readonly pendingMessages: RawData[]
   connection: LiveChannelConnection | null
   missedPongs: number
   consecutiveRateViolations: number
 }
+const MAX_PENDING_AUTH_MESSAGES = 16
 
 function rejectUpgrade(socket: Duplex, statusCode: number, statusText: string, body: string): void {
   if (!socket.destroyed) {
@@ -86,7 +88,7 @@ function createWsAdapter(ws: WebSocket): ChannelSocketAdapter {
       ws.send(data)
     },
     close(code: number, reason: string) {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      if (ws.readyState === WebSocket.OPEN) {
         ws.close(code, reason)
       }
     },
@@ -134,11 +136,12 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
       if (bearer) {
         void this.channels.authenticateWsCredential(bearer, target.channelId)
           .then((credential) => {
+            if (socket.destroyed || !this.server) return
             if (!credential) {
               rejectUpgrade(socket, 401, "Unauthorized", "Invalid channel credential.")
               return
             }
-            this.server?.handleUpgrade(request, socket, head, (ws) => {
+            this.server.handleUpgrade(request, socket, head, (ws) => {
               this.bindSocket(ws, target.channelId, credential)
             })
           })
@@ -178,7 +181,7 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
         state.authTimer = null
       }
       if (!state.connection) {
-        if (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING) {
+        if (state.ws.readyState === WebSocket.OPEN) {
           state.ws.close(CHANNEL_WS_CLOSE_CODES.GOING_AWAY, "Server shutting down")
         }
       }
@@ -198,7 +201,8 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
       ws,
       channelId,
       authTimer: null,
-      authenticating: false,
+      authenticating: Boolean(preAuthenticated),
+      pendingMessages: [],
       connection: null,
       missedPongs: 0,
       consecutiveRateViolations: 0,
@@ -225,6 +229,18 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
     if (preAuthenticated) {
       void this.completeAuthentication(state, preAuthenticated, {
         includeRetained: true,
+      }).catch((error: unknown) => {
+        this.logger.warn({
+          channelId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        }, "Channel WebSocket upgrade completion failed")
+        if (ws.readyState === WebSocket.OPEN) {
+          sendJson(ws, { type: "error", code: "INTERNAL_ERROR", message: "认证初始化失败，请稍后重试。" })
+          ws.close(CHANNEL_WS_CLOSE_CODES.GOING_AWAY, "Initialization failed")
+        }
+      }).finally(() => {
+        state.authenticating = false
+        this.flushPendingMessages(state)
       })
       return
     }
@@ -238,10 +254,34 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
     state.authTimer.unref?.()
   }
 
+  private flushPendingMessages(state: ActiveSocketState): void {
+    if (!state.connection || state.ws.readyState !== WebSocket.OPEN) {
+      state.pendingMessages.length = 0
+      return
+    }
+    while (state.pendingMessages.length > 0 && state.ws.readyState === WebSocket.OPEN) {
+      const next = state.pendingMessages.shift()!
+      void this.handleMessage(state, next)
+    }
+  }
+
   private async handleMessage(state: ActiveSocketState, raw: RawData): Promise<void> {
+    if (!state.connection && state.authenticating) {
+      if (state.pendingMessages.length < MAX_PENDING_AUTH_MESSAGES) {
+        state.pendingMessages.push(raw)
+      }
+      return
+    }
+
     let parsedJson: unknown
     try {
-      const text = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : Buffer.concat(raw as Buffer[]).toString("utf8")
+      const text = typeof raw === "string"
+        ? raw
+        : Buffer.isBuffer(raw)
+          ? raw.toString("utf8")
+          : raw instanceof ArrayBuffer
+            ? Buffer.from(raw).toString("utf8")
+            : Buffer.concat(raw).toString("utf8")
       parsedJson = JSON.parse(text)
     } catch (error) {
       void error
@@ -271,7 +311,6 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
         state.ws.close(CHANNEL_WS_CLOSE_CODES.AUTH_FAILED, "Unauthenticated")
         return
       }
-      if (state.authenticating) return
       state.authenticating = true
       try {
         const credential = await this.channels.authenticateWsCredential(frame.token, state.channelId)
@@ -301,6 +340,7 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
         }
       } finally {
         state.authenticating = false
+        this.flushPendingMessages(state)
       }
       return
     }

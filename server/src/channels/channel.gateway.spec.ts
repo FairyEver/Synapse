@@ -194,4 +194,93 @@ describe("ChannelGateway", () => {
     gateway.onApplicationShutdown()
     expect((await closePromise).code).toBe(CHANNEL_WS_CLOSE_CODES.GOING_AWAY)
   })
+
+  it("replays missed broadcast events via afterSeq, supports retain & targetClientId over WS, and handles pipelined early frames", async () => {
+    const { wsUrl, service } = await startGateway()
+    vi.mocked(service.authenticateWsCredential).mockImplementation(async (token, channelId) => ({
+      channelId,
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: token,
+      role: "pubsub",
+      isObserver: false,
+      seqFloor: 0,
+    }))
+    // Slow retained fetch to verify pipelined early frames during Upgrade Bearer auth do NOT 4001
+    vi.mocked(service.loadRetainedItems).mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 25))
+      return []
+    })
+
+    const screenA = new WebSocket(wsUrl("ch_1"), { headers: { Authorization: "Bearer syc_a" } })
+    const msgsA: Record<string, unknown>[] = []
+    screenA.on("message", (raw) => msgsA.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>))
+    await new Promise<void>((resolve) => screenA.once("open", () => resolve()))
+    // Immediately send ping before async loadRetainedItems finishes
+    screenA.send(JSON.stringify({ type: "ping" }))
+    await vi.waitFor(() => {
+      expect(msgsA.some((m) => m.type === "ready")).toBe(true)
+      expect(msgsA.some((m) => m.type === "pong")).toBe(true)
+    })
+
+    // Publish seq 1 (retain) and seq 2 (targeted to screenB)
+    const screenB = new WebSocket(wsUrl("ch_1"))
+    await new Promise<void>((resolve) => screenB.once("open", () => resolve()))
+    screenB.send(JSON.stringify({ type: "auth", token: "syc_b", clientId: "screen-b" }))
+    await nextJsonMessage(screenB) // ready
+
+    const ackRetain = nextJsonMessage(screenB)
+    screenB.send(JSON.stringify({ type: "publish", id: "r1", event: "scene.current", payload: { p: 2 }, retain: true }))
+    expect(await ackRetain).toMatchObject({ type: "ack", id: "r1", seq: 1, retained: true })
+
+    const screenAClientId = String(msgsA.find((m) => m.type === "ready")?.clientId)
+    const ackTargeted = nextJsonMessage(screenB)
+    screenB.send(JSON.stringify({ type: "publish", id: "t1", event: "direct.reply", payload: { ok: true }, targetClientId: screenAClientId }))
+    expect(await ackTargeted).toMatchObject({ type: "ack", id: "t1", seq: 2, deliveredCount: 1, retained: false })
+
+    // Reconnecting client with afterSeq: 0 receives ready + replayed seq 1 (NOT targeted seq 2)
+    const late = new WebSocket(wsUrl("ch_1"))
+    const lateMsgs: Record<string, unknown>[] = []
+    late.on("message", (raw) => lateMsgs.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>))
+    await new Promise<void>((resolve) => late.once("open", () => resolve()))
+    late.send(JSON.stringify({ type: "auth", token: "syc_late", clientId: "late-1", afterSeq: 0 }))
+    await vi.waitFor(() => {
+      expect(lateMsgs.some((m) => m.type === "ready")).toBe(true)
+      expect(lateMsgs.some((m) => m.type === "event" && m.replayed === true && m.event === "scene.current")).toBe(true)
+    })
+    expect(lateMsgs.some((m) => m.event === "direct.reply")).toBe(false)
+
+    screenA.close()
+    screenB.close()
+    late.close()
+  })
+
+  it("rejects oversized WS frames (> 128 KiB) and disconnects unresponsive clients on heartbeat timeout (4008)", async () => {
+    const { wsUrl, service } = await startGateway({ heartbeatIntervalMs: 35, maxMissedHeartbeats: 2 })
+    vi.mocked(service.authenticateWsCredential).mockResolvedValue({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t_hb",
+      role: "pubsub",
+      isObserver: false,
+      seqFloor: 0,
+    })
+
+    // 1. Oversized frame (> 128 KiB) triggers WS 1009 message-too-big close
+    const bigClient = new WebSocket(wsUrl("ch_1"), { headers: { Authorization: "Bearer syc_big" } })
+    await nextJsonMessage(bigClient) // ready
+    const bigClosePromise = waitClose(bigClient)
+    bigClient.send(JSON.stringify({ type: "publish", event: "huge", payload: "x".repeat(140_000) }))
+    expect((await bigClosePromise).code).toBe(1009)
+
+    // 2. Client that never answers WS pings is closed with 4008
+    const silent = new WebSocket(wsUrl("ch_1"), {
+      headers: { Authorization: "Bearer syc_silent" },
+      autoPong: false,
+    })
+    await nextJsonMessage(silent) // ready
+    const hbClose = await waitClose(silent, 2000)
+    expect(hbClose.code).toBe(CHANNEL_WS_CLOSE_CODES.TIMEOUT_OR_SLOW)
+  })
 })
