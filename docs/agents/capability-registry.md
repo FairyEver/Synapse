@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-25 频道（`channels`）：新增独立 `channels` MCP domain，共 12 项 capability / MCP 索引（`publish_preflight.get`、`channel.list/get/create/update/delete`、`token.list/create/revoke`、`event.publish`、`state.get`、`retained.clear`，对应 `app_channels_*`）。全局 capability 由 370 增至 382 项，MCP 索引由 366 增至 378 项；公开路由工具仍仅 `search` / `invoke` 2 项，System App、默认 Dock、Workflow Node、Automation Action、桌面 IPC 与 Deep Link 数量均不变。桌面 MCP 仅接受 `mcp-http` / `mcp-stdio` 调用，使用当前登录桌面账号访问 `/console/channels/*`，经 `PermissionGuard` / `AuditSink`（`network.connect` / `synapse-channels`）保护并在切号时中止；外部运行时 WebSocket / HTTP 开放接口独立使用频道角色凭证（`syc_...`）或个人 `UserApiKey`（频道范围），忽略 Cookie 且不接受 URL query 凭证。控制台新增「频道」页面与 API 密钥频道资源配置；系统 Skill 新增 `channels/index.md` 与 `channels/remote-screen.md`。
+
 2026-11-25 外部邮箱本机定时发送：`mail` 域新增 6 项 capability / MCP 索引（`scheduled.create/list/get/update/cancel/send`，对应 `app_mail_scheduled_*`），并新增 1 项 UI 私有正文预览 IPC（`app.mail.scheduled.body`）。邮箱由 44 增至 50 项，全局 capability 由 364 增至 370 项，MCP 索引由 360 增至 366 项；公开路由工具仍仅 `search` / `invoke` 2 项，System App、默认 Dock、Workflow、Automation 与 Deep Link 数量不变。支持设置未来任意具体日期时间（最多 10 年，1 小时分段防溢出定时器），到点时需保持桌面端运行、登录同账号并联网；30 分钟宽限期内恢复自动补发，超时转 `missed` 待人工处理，`unknown` 严禁自动或手动重发。`account.delete` 新增可选 `discardScheduledSends` 影响确认。
 
 2026-11-18 企业微信能力退役：删除连接器、`core.wecom`、内置 CLI、系统 Skill 企业微信目录及两项 capability / MCP 索引。当前全局 capability / MCP 索引由 366 / 362 降至 364 / 360；Connectors 的两项 Portal 凭据工具、两个私有授权回调，以及 System App、Dock、Workflow、Automation、Deep Link 和公开 `search` / `invoke` 数量不变。旧本机凭据与连接状态保留，不再注册、读取或使用。
@@ -140,6 +142,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Secrets | 是 | 否 | — | — | 6 | — |
 | SkillHub | 是（团队技能浏览和安装，可独立开窗） | 否（可手动固定） | — | — | 10 | 1（Skill 安装） |
 | 云端数据表 | 否 | 否 | — | — | 21 | — |
+| 频道 | 否 | 否 | — | — | 12 | — |
 | Skill Installer | 否 | 否 | — | — | — | — |
 | Skill Uninstaller | 否 | 否 | — | — | — | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
@@ -292,15 +295,16 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `content` | 16 | 16 |
 | `drive` | 76 | 76 |
 | `mail_internal` | 18 | 18 |
-| `mail` | 44 | 44 |
+| `mail` | 50 | 50 |
 | `todos` | 6 | 6 |
 | `skill_hub` | 10 | 10 |
 | `cloud_tables` | 21 | 21 |
-| 合计 | 364 | 360 |
+| `channels` | 12 | 12 |
+| 合计 | 382 | 378 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 378 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
