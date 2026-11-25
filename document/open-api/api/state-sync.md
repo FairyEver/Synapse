@@ -125,6 +125,10 @@ const joinedRoom = await client.join(docId, {
 });
 ```
 
+**房间 ID 分配与权限规则**：
+- **空间专属凭证（`sys_...`）**：角色为 `create_write` 时可调用 `client.createRoom()` 动态建房，但**不支持传入自定义 `docId`**（若传入将返回 `403 FORBIDDEN_ROLE`）；服务端会自动分配以 `ssd_` 为前缀的全局唯一随机房间 ID。
+- **自定义 `docId`**：属于管理特权，仅限控制台（Console）、MCP 工具或持有 `state_sync.manage` 作用域的个人 API 密钥（`syn_sk_...`）调用。普通客户端使用空间凭证加入房间时，只需通过 `client.join(docId, ...)` 传入预分配或动态生成的房间 ID 即可。
+
 ### 2. HTTP 快照直读（免建立长连接）
 
 ```javascript
@@ -338,7 +342,8 @@ wss://<host>/api/open/v1/state-sync/spaces/<spaceId>/docs/<docId>/ws
 |---|---|---|---|
 | `REV_CONFLICT` | HTTP / WS | `409` / `error` | CAS 乐观锁版本冲突。响应体或帧携带 `currentRev`（服务端当前最新版本）。SDK `room.transaction()` 会自动根据最新版本重试；直接调用者需按 `currentRev` 刷新后重新计算。 |
 | `PATH_NOT_SUBSCRIBED` | SDK 本地 | 本地异常 | 尝试对未被当前连接订阅的路径执行 `transaction`。建连时须在 `paths` 中包含该路径或其祖先路径（如 `/`）。 |
-| `PATH_CONFLICT` | HTTP / WS | `400` / `error` | 写入路径冲突，例如试图在非对象值（字符串或数字）下方追加子路径，或路径深度超过 16 层。 |
+| `PATH_CONFLICT` | HTTP / WS | `409` / `error` | 路径中间节点或目标不是普通 JSON 对象（如遇到数字/字符串/数组），拒绝静默覆写。 |
+| `INVALID_REQUEST` / `INVALID_INPUT` | HTTP / WS | `400` / `error` | 请求参数或路径格式无效（如路径未以 `/` 开头、包含非法字符/空段/安全敏感段，或路径深度超过 16 层）。 |
 | `DOC_NOT_FOUND` | HTTP / WS | `404` / `4003` Close | 房间不存在或已被销毁。检查空间 ID 与房间 ID 是否匹配，确认房间是否由房主预先创建。 |
 | `DOC_ALREADY_EXISTS` | HTTP | `409` | 使用自定义 `docId` 创建房间时，该 ID 在当前空间下已被占用。 |
 | `DOC_LIMIT_EXCEEDED` | HTTP | `422` | 空间内未过期房间数已达上限（默认 100，硬上限 500）。请清理过期房间或缩短房间 TTL。 |
@@ -346,7 +351,7 @@ wss://<host>/api/open/v1/state-sync/spaces/<spaceId>/docs/<docId>/ws
 | `DOC_TOO_LARGE` | HTTP / WS | `413` / `error` | 更新后文档序列化体积超过单文档 256 KiB 上限。请拆分状态树或清理历史数据。 |
 | `PAYLOAD_TOO_LARGE` | HTTP / WS | `413` / `error` | 单次写入载荷（value）超过 64 KiB 上限。 |
 | `REQUEST_TOO_LARGE` | HTTP | `413` | HTTP 单次请求体或建房 `initialData` 超过 256 KiB 上限。 |
-| `FORBIDDEN_ROLE` | HTTP / WS | `403` / `error` | 凭证角色权限不足（例如使用 `read` 只读凭证执行写入或设置 onDisconnect，或使用 `write` 凭证尝试创建新房间）。 |
+| `FORBIDDEN_ROLE` | HTTP / WS | `403` / `error` | 凭证角色权限不足（例如使用 `read` 只读凭证执行写入或设置 onDisconnect，使用 `write` 凭证尝试创建新房间，或空间专属凭证传递自定义房间 ID）。 |
 | `RATE_LIMITED` | HTTP / WS | `429` / `error` | 写入或建房频率超限。HTTP 响应头携带 `Retry-After` 秒数；WS 客户端请指数退避降低写入频率。 |
 
 ---
@@ -574,28 +579,35 @@ const client = createClient({
 });
 
 async function run() {
-  const docId = process.env.SYNAPSE_DOC_ID || "cluster-live-status";
+  const targetDocId = process.env.SYNAPSE_DOC_ID;
   const workerId = "worker-" + os.hostname();
 
-  // 若房间尚未创建，具备 create_write 权限的节点会自动建房；若已存在则直接加入
   let room;
-  try {
+  let docId;
+
+  if (targetDocId) {
+    // 环境变量指定了房间 ID（通过控制台、MCP 或管理 API 密钥预先创建的固定房间），直接加入
+    console.log(`加入已有监控房间: ${targetDocId}`);
+    room = await client.join(targetDocId, {
+      clientId: workerId,
+      clientName: "节点 " + os.hostname(),
+      paths: ["/nodes"],
+    });
+    docId = targetDocId;
+  } else {
+    // 空间专属凭证（create_write）建房不能传自定义 docId，由服务端动态分配随机 ssd_... 房间 ID
+    console.log("未指定 SYNAPSE_DOC_ID，使用 create_write 凭证动态创建监控房间...");
     const created = await client.createRoom({
-      docId,
       initialData: { nodes: {} },
-      ttlSeconds: 86400,
+      ttlSeconds: 3600,
       clientId: workerId,
       clientName: "节点 " + os.hostname(),
       paths: ["/nodes"],
     });
     room = created.room;
-  } catch (err) {
-    // 房间已由控制台、MCP 或其他 Worker 预先创建，直接加入
-    room = await client.join(docId, {
-      clientId: workerId,
-      clientName: "节点 " + os.hostname(),
-      paths: ["/nodes"],
-    });
+    docId = created.docId;
+    console.log(`监控房间已动态创建: ${docId}`);
+    console.log(`Web 看板访问地址: http://localhost:8080/dashboard.html?room=${encodeURIComponent(docId)}`);
   }
 
   // 掉线时服务端自动设置 offline 标志并记录离线时间
@@ -660,10 +672,12 @@ run().catch(console.error);
       token: "sys_READ_TOKEN", // 看板只需要 read 只读凭证
     });
 
-    const DOC_ID = "cluster-live-status";
+    // 从 URL 参数获取房间 ID（例如 ?room=ssd_xxx），若未指定则回退默认预置房间
+    const urlParams = new URLSearchParams(location.search);
+    const DOC_ID = urlParams.get("room") || "cluster-live-status";
 
     async function init() {
-      // 首参数传入 docId 加入房间，只订阅 /nodes 状态树
+      // 首参数传入 docId 加入房间（匹配 URL 参数 ?room=<docId> 或预置房间 ID），只订阅 /nodes 状态树
       const room = await client.join(DOC_ID, {
         clientId: "dashboard-viewer",
         clientName: "Web 看板端",
