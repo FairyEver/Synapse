@@ -1,7 +1,7 @@
 -- AlterTable
 ALTER TABLE "UserApiKey"
 ADD COLUMN IF NOT EXISTS "stateSyncAccessMode" VARCHAR(16) DEFAULT 'selected',
-ADD COLUMN IF NOT EXISTS "stateSyncSpaceIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ADD COLUMN IF NOT EXISTS "stateSyncSpaceIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "StateSyncSpace" (
