@@ -5,7 +5,7 @@ import { STATE_SYNC_WS_CLOSE_CODES } from "@synapse/shared/state-sync-contracts"
 import { loadStateSyncConfig } from "./state-sync-config"
 import { StateSyncHub, type LoadedDocSnapshot, type StateSyncDocPersister } from "./state-sync-hub"
 import { StateSyncGateway } from "./state-sync.gateway"
-import type { StateSyncService } from "./state-sync.service"
+import type { StateSyncService, ResolvedStateSyncWsCredential } from "./state-sync.service"
 
 function createMessageQueue(ws: WebSocket) {
   const queue: Record<string, unknown>[] = []
@@ -628,5 +628,219 @@ describe("StateSyncGateway", () => {
     expect((await slowClose).code).toBe(STATE_SYNC_WS_CLOSE_CODES.TIMEOUT_OR_SLOW)
 
     writer.close()
+  })
+
+  it("fires onDisconnect and broadcasts presence.leave on client-initiated 1001 (browser tab close) or spoofed close codes, while server shutdown skips onDisconnect", async () => {
+    const { wsUrl, service, hub, gateway } = await startGateway({
+      initialDoc: {
+        data: {
+          players: {
+            tabUser: { online: true },
+            spoofedUser: { online: true },
+            shutdownUser: { online: true },
+          },
+        },
+      },
+    })
+    vi.mocked(service.authenticateWsToken).mockImplementation(async (spaceId, docId, token) => {
+      if (token === "sys_watcher") {
+        return { spaceId, docId, ownerId: "u1", credentialType: "space_token", credentialId: "tok_watch", role: "read", isObserver: false }
+      }
+      if (token === "sys_tab") {
+        return { spaceId, docId, ownerId: "u1", credentialType: "space_token", credentialId: "tok_tab", role: "write", isObserver: false }
+      }
+      if (token === "sys_spoof") {
+        return { spaceId, docId, ownerId: "u1", credentialType: "space_token", credentialId: "tok_spoof", role: "write", isObserver: false }
+      }
+      if (token === "sys_shutdown") {
+        return { spaceId, docId, ownerId: "u1", credentialType: "space_token", credentialId: "tok_shutdown", role: "write", isObserver: false }
+      }
+      return null
+    })
+
+    const watcher = new WebSocket(wsUrl())
+    const watcherQ = createMessageQueue(watcher)
+    await waitOpen(watcher)
+    watcher.send(JSON.stringify({ type: "auth", token: "sys_watcher", clientId: "watcher" }))
+    await watcherQ.next() // ready
+
+    // 1. Client tab close (1001 Going Away) MUST fire onDisconnect and broadcast presence.leave
+    const tabUser = new WebSocket(wsUrl())
+    const tabQ = createMessageQueue(tabUser)
+    await waitOpen(tabUser)
+    tabUser.send(JSON.stringify({ type: "auth", token: "sys_tab", clientId: "tab-user", clientName: "TabUser" }))
+    await tabQ.next() // ready
+    tabUser.send(JSON.stringify({
+      type: "onDisconnect.set",
+      id: "od-tab",
+      actions: [{ op: "delete", path: "/players/tabUser" }],
+    }))
+    expect(await tabQ.next()).toMatchObject({ type: "ack", id: "od-tab" })
+    expect(await watcherQ.nextMatching((m) => m.type === "presence.join")).toMatchObject({
+      type: "presence.join",
+      member: { clientId: "tab-user" },
+    })
+
+    tabUser.close(STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY, "Tab closed")
+    await waitClose(tabUser)
+
+    const leaveMsg = await watcherQ.nextMatching((m) => m.type === "presence.leave")
+    expect(leaveMsg).toMatchObject({
+      type: "presence.leave",
+      member: { clientId: "tab-user" },
+    })
+    const deleteMutation = await watcherQ.nextMatching((m) => m.type === "mutation" && m.path === "/players/tabUser")
+    expect(deleteMutation).toMatchObject({
+      type: "mutation",
+      op: "delete",
+      path: "/players/tabUser",
+    })
+    expect(hub.readDocPath("ss_1", "doc_1", "/players/tabUser")?.exists).toBe(false)
+
+    // 2. Client spoofing server-reserved close codes (e.g. 4003 REVOKED) still fires onDisconnect
+    const spoofUser = new WebSocket(wsUrl())
+    const spoofQ = createMessageQueue(spoofUser)
+    await waitOpen(spoofUser)
+    spoofUser.send(JSON.stringify({ type: "auth", token: "sys_spoof", clientId: "spoof-user" }))
+    await spoofQ.next() // ready
+    spoofUser.send(JSON.stringify({
+      type: "onDisconnect.set",
+      id: "od-spoof",
+      actions: [{ op: "delete", path: "/players/spoofedUser" }],
+    }))
+    expect(await spoofQ.next()).toMatchObject({ type: "ack", id: "od-spoof" })
+    expect(await watcherQ.nextMatching((m) => m.type === "presence.join")).toMatchObject({
+      type: "presence.join",
+      member: { clientId: "spoof-user" },
+    })
+
+    spoofUser.close(STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Spoofed revoke code")
+    await waitClose(spoofUser)
+
+    expect(await watcherQ.nextMatching((m) => m.type === "presence.leave")).toMatchObject({
+      type: "presence.leave",
+      member: { clientId: "spoof-user" },
+    })
+    expect(await watcherQ.nextMatching((m) => m.type === "mutation" && m.path === "/players/spoofedUser")).toMatchObject({
+      type: "mutation",
+      op: "delete",
+      path: "/players/spoofedUser",
+    })
+    expect(hub.readDocPath("ss_1", "doc_1", "/players/spoofedUser")?.exists).toBe(false)
+
+    // 3. Server-initiated shutdown (1001) still SKIPS onDisconnect
+    const shutdownUser = new WebSocket(wsUrl())
+    const shutQ = createMessageQueue(shutdownUser)
+    await waitOpen(shutdownUser)
+    shutdownUser.send(JSON.stringify({ type: "auth", token: "sys_shutdown", clientId: "shut-user" }))
+    await shutQ.next() // ready
+    shutdownUser.send(JSON.stringify({
+      type: "onDisconnect.set",
+      id: "od-shut",
+      actions: [{ op: "delete", path: "/players/shutdownUser" }],
+    }))
+    expect(await shutQ.next()).toMatchObject({ type: "ack", id: "od-shut" })
+
+    const shutClosePromise = waitClose(shutdownUser)
+    await gateway.onApplicationShutdown()
+    expect((await shutClosePromise).code).toBe(STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY)
+    expect(hub.readDocPath("ss_1", "doc_1", "/players/shutdownUser")?.exists).toBe(true)
+
+    watcher.close()
+  })
+
+  it("rejects in-flight Bearer upgrade with 503 if server shutdown begins mid-auth", async () => {
+    const { wsUrl, service, gateway } = await startGateway()
+    let resolveAuth!: (val: ResolvedStateSyncWsCredential | null) => void
+    vi.mocked(service.authenticateWsToken).mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolveAuth = resolve
+      })
+    })
+
+    const ws = new WebSocket(wsUrl(), {
+      headers: { Authorization: "Bearer syn_sk_pending" },
+    })
+    const errPromise = new Promise<Error>((resolve) => {
+      ws.once("error", (e) => resolve(e))
+    })
+
+    await vi.waitFor(() => {
+      expect(service.authenticateWsToken).toHaveBeenCalled()
+    })
+
+    const shutdownPromise = gateway.onApplicationShutdown()
+
+    resolveAuth({
+      spaceId: "ss_1",
+      docId: "doc_1",
+      ownerId: "u1",
+      credentialType: "api_key",
+      credentialId: "k1",
+      role: "create_write",
+      isObserver: false,
+    })
+
+    await shutdownPromise
+    const err = await errPromise
+    expect(err.message).toMatch(/503/u)
+  })
+
+  it("rejects invalid credentials with 401 on Bearer upgrade and 4001 on first-frame auth", async () => {
+    const { wsUrl, service } = await startGateway()
+    vi.mocked(service.authenticateWsToken).mockResolvedValue(null)
+
+    // 1. Upgrade Authorization: Bearer invalid -> HTTP 401
+    const badBearerWs = new WebSocket(wsUrl(), {
+      headers: { Authorization: "Bearer syn_sk_invalid" },
+    })
+    const err = await new Promise<Error>((resolve) => {
+      badBearerWs.once("error", (e) => resolve(e))
+    })
+    expect(err.message).toMatch(/401/u)
+    expect(service.authenticateWsToken).toHaveBeenCalledWith("ss_1", "doc_1", "syn_sk_invalid")
+
+    // 2. First-frame auth with invalid token -> 4001
+    const firstFrameWs = new WebSocket(wsUrl())
+    const q = createMessageQueue(firstFrameWs)
+    await waitOpen(firstFrameWs)
+    firstFrameWs.send(JSON.stringify({ type: "auth", token: "sys_invalid" }))
+    const errFrame = await q.next()
+    expect(errFrame).toMatchObject({
+      type: "error",
+      code: "INVALID_CREDENTIAL",
+    })
+    const closed = await waitClose(firstFrameWs)
+    expect(closed.code).toBe(STATE_SYNC_WS_CLOSE_CODES.AUTH_FAILED)
+  })
+
+  it("catches unexpected exceptions during handleMessage, sends INTERNAL_ERROR frame, and avoids UnhandledPromiseRejection", async () => {
+    const { wsUrl, service, hub } = await startGateway()
+    vi.mocked(service.authenticateWsToken).mockResolvedValue({
+      spaceId: "ss_1",
+      docId: "doc_1",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_1",
+      role: "write",
+      isObserver: false,
+    })
+
+    const ws = new WebSocket(wsUrl(), { headers: { Authorization: "Bearer sys_tok" } })
+    const q = createMessageQueue(ws)
+    await q.next() // ready
+
+    // Make hub.mutate throw unexpectedly
+    vi.spyOn(hub, "mutate").mockRejectedValueOnce(new Error("Unexpected DB crash"))
+
+    ws.send(JSON.stringify({ type: "mutate", id: "m-crash", op: "set", path: "/test", value: 1 }))
+    const resp = await q.next()
+    expect(resp).toMatchObject({
+      type: "error",
+      code: "INTERNAL_ERROR",
+    })
+
+    ws.close()
+    await waitClose(ws)
   })
 })

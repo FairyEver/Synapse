@@ -119,13 +119,7 @@ function sendJson(ws: WebSocket, payload: Record<string, unknown>): void {
   }
 }
 
-function closeCodeToDisconnectReason(code: number): DisconnectReason {
-  if (code === STATE_SYNC_WS_CLOSE_CODES.TIMEOUT_OR_SLOW) return "timeout_or_slow"
-  if (code === STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY) return "shutdown"
-  if (code === STATE_SYNC_WS_CLOSE_CODES.REVOKED) return "revoked"
-  if (code === STATE_SYNC_WS_CLOSE_CODES.ROLE_CHANGED) return "scope_changed"
-  return "normal"
-}
+
 
 @Injectable()
 export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy {
@@ -168,12 +162,17 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
       if (bearer) {
         void this.stateSync.authenticateWsToken(target.spaceId, target.docId, bearer)
           .then((credential) => {
-            if (socket.destroyed || !this.server || this.shutdownPromise) return
+            if (socket.destroyed) return
+            const server = this.server
+            if (!server || this.shutdownPromise) {
+              rejectUpgrade(socket, 503, "Service Unavailable", "Server shutting down.")
+              return
+            }
             if (!credential) {
               rejectUpgrade(socket, 401, "Unauthorized", "Invalid state sync credential.")
               return
             }
-            this.server.handleUpgrade(request, socket, head, (ws) => {
+            server.handleUpgrade(request, socket, head, (ws) => {
               this.bindSocket(ws, target.spaceId, target.docId, credential)
             })
           })
@@ -260,8 +259,8 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
       state.missedPongs = 0
     })
 
-    ws.on("close", (code: number) => {
-      const reason = state.closeReason ?? closeCodeToDisconnectReason(code)
+    ws.on("close", () => {
+      const reason = state.closeReason ?? "normal"
       this.cleanupSocket(state, reason)
     })
 
@@ -271,7 +270,13 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
 
     ws.on("message", (raw: RawData) => {
       state.missedPongs = 0
-      void this.handleMessage(state, raw)
+      void this.handleMessage(state, raw).catch((error: unknown) => {
+        this.logger.warn({
+          spaceId: state.spaceId,
+          docId: state.docId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        }, "Unexpected rejection handling state sync message")
+      })
     })
 
     if (preAuthenticated) {
@@ -311,288 +316,309 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
     }
     while (state.pendingMessages.length > 0 && !state.closed && state.ws.readyState === WebSocket.OPEN) {
       const next = state.pendingMessages.shift()!
-      void this.handleMessage(state, next)
-    }
-  }
-
-  private async handleMessage(state: ActiveSocketState, raw: RawData): Promise<void> {
-    if (state.closed) return
-
-    if (!state.connection && state.authenticating) {
-      if (state.pendingMessages.length < MAX_PENDING_AUTH_MESSAGES) {
-        state.pendingMessages.push(raw)
-      }
-      return
-    }
-
-    let parsedJson: unknown
-    try {
-      const text = typeof raw === "string"
-        ? raw
-        : Buffer.isBuffer(raw)
-          ? raw.toString("utf8")
-          : raw instanceof ArrayBuffer
-            ? Buffer.from(raw).toString("utf8")
-            : Buffer.concat(raw).toString("utf8")
-      parsedJson = JSON.parse(text)
-    } catch (error) {
-      void error
-      sendJson(state.ws, { type: "error", code: "INVALID_JSON", message: "消息必须是合法 JSON。" })
-      return
-    }
-
-    const parsed = stateSyncWsClientFrameSchema.safeParse(parsedJson)
-    if (!parsed.success) {
-      const rawId = parsedJson && typeof parsedJson === "object"
-        ? (parsedJson as { id?: unknown }).id
-        : undefined
-      const requestId = typeof rawId === "string" && rawId.length >= 1 && rawId.length <= 128
-        ? rawId
-        : undefined
-      sendJson(state.ws, {
-        type: "error",
-        ...(requestId ? { id: requestId } : {}),
-        code: "INVALID_FRAME",
-        message: parsed.error.issues[0]?.message ?? "消息帧格式无效。",
-      })
-      return
-    }
-
-    const frame: StateSyncWsClientFrame = parsed.data
-
-    if (!state.connection) {
-      if (frame.type !== "auth") {
-        sendJson(state.ws, { type: "error", code: "UNAUTHENTICATED", message: "请先发送 auth 帧完成认证。" })
-        state.ws.close(STATE_SYNC_WS_CLOSE_CODES.AUTH_FAILED, "Unauthenticated")
-        return
-      }
-      state.authenticating = true
-      try {
-        const credential = await this.stateSync.authenticateWsToken(state.spaceId, state.docId, frame.token)
-        if (state.closed || state.ws.readyState !== WebSocket.OPEN) {
-          return
-        }
-        if (!credential) {
-          sendJson(state.ws, { type: "error", code: "INVALID_CREDENTIAL", message: "状态同步凭证无效或已过期。" })
-          state.ws.close(STATE_SYNC_WS_CLOSE_CODES.AUTH_FAILED, "Invalid credential")
-          return
-        }
-        await this.completeAuthentication(state, credential, {
-          clientId: frame.clientId,
-          clientName: frame.clientName,
-          meta: frame.meta,
-          paths: frame.paths,
-          sinceRev: frame.sinceRev,
-        })
-      } catch (error: unknown) {
+      void this.handleMessage(state, next).catch((error: unknown) => {
         this.logger.warn({
           spaceId: state.spaceId,
           docId: state.docId,
           errorName: error instanceof Error ? error.name : typeof error,
-        }, "State sync WebSocket first-frame auth failed")
-        if (!state.closed && state.ws.readyState === WebSocket.OPEN) {
-          sendJson(state.ws, { type: "error", code: "INTERNAL_ERROR", message: "认证服务暂不可用。" })
-          state.closeReason = "shutdown"
-          state.ws.close(STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY, "Auth unavailable")
-        }
-      } finally {
-        state.authenticating = false
-        this.flushPendingMessages(state)
-      }
-      return
+        }, "Unexpected rejection flushing pending state sync message")
+      })
     }
+  }
 
-    const conn = state.connection
-    switch (frame.type) {
-      case "auth":
-        sendJson(state.ws, { type: "error", code: "ALREADY_AUTHENTICATED", message: "连接已完成认证。" })
-        return
-      case "ping":
-        sendJson(state.ws, { type: "pong", serverTime: new Date().toISOString() })
-        return
-      case "presence.update":
-        if (conn.isObserver) {
-          sendJson(state.ws, { type: "error", code: "FORBIDDEN_OBSERVER", message: "调试台观察者不参与在线名单。" })
-          return
-        }
-        this.stateSync.hub.updatePresence(conn.spaceId, conn.docId, conn.connectionId, {
-          clientName: frame.clientName,
-          meta: frame.meta,
-        })
-        return
-      case "subscribe": {
-        const res = this.stateSync.hub.updateSubscriptions(
-          conn.spaceId,
-          conn.docId,
-          conn.connectionId,
-          "subscribe",
-          frame.paths,
-        )
-        if (!res.ok) {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: res.code,
-            message: res.message,
-          })
-          return
-        }
-        for (const snap of res.snapshots) {
-          sendJson(state.ws, {
-            type: "snapshot",
-            rev: Number(res.rev),
-            path: snap.path,
-            exists: snap.exists,
-            value: snap.value,
-          })
-        }
-        if (frame.id) {
-          sendJson(state.ws, {
-            type: "ack",
-            id: frame.id,
-            rev: Number(res.rev),
-          })
+  private async handleMessage(state: ActiveSocketState, raw: RawData): Promise<void> {
+    try {
+      if (state.closed) return
+
+      if (!state.connection && state.authenticating) {
+        if (state.pendingMessages.length < MAX_PENDING_AUTH_MESSAGES) {
+          state.pendingMessages.push(raw)
         }
         return
       }
-      case "unsubscribe": {
-        const res = this.stateSync.hub.updateSubscriptions(
-          conn.spaceId,
-          conn.docId,
-          conn.connectionId,
-          "unsubscribe",
-          frame.paths,
-        )
-        if (!res.ok) {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: res.code,
-            message: res.message,
-          })
+
+      let parsedJson: unknown
+      try {
+        const text = typeof raw === "string"
+          ? raw
+          : Buffer.isBuffer(raw)
+            ? raw.toString("utf8")
+            : raw instanceof ArrayBuffer
+              ? Buffer.from(raw).toString("utf8")
+              : Buffer.concat(raw).toString("utf8")
+        parsedJson = JSON.parse(text)
+      } catch (error) {
+        void error
+        sendJson(state.ws, { type: "error", code: "INVALID_JSON", message: "消息必须是合法 JSON。" })
+        return
+      }
+
+      const parsed = stateSyncWsClientFrameSchema.safeParse(parsedJson)
+      if (!parsed.success) {
+        const rawId = parsedJson && typeof parsedJson === "object"
+          ? (parsedJson as { id?: unknown }).id
+          : undefined
+        const requestId = typeof rawId === "string" && rawId.length >= 1 && rawId.length <= 128
+          ? rawId
+          : undefined
+        sendJson(state.ws, {
+          type: "error",
+          ...(requestId ? { id: requestId } : {}),
+          code: "INVALID_FRAME",
+          message: parsed.error.issues[0]?.message ?? "消息帧格式无效。",
+        })
+        return
+      }
+
+      const frame: StateSyncWsClientFrame = parsed.data
+
+      if (!state.connection) {
+        if (frame.type !== "auth") {
+          sendJson(state.ws, { type: "error", code: "UNAUTHENTICATED", message: "请先发送 auth 帧完成认证。" })
+          state.ws.close(STATE_SYNC_WS_CLOSE_CODES.AUTH_FAILED, "Unauthenticated")
           return
         }
-        if (frame.id) {
-          sendJson(state.ws, {
-            type: "ack",
-            id: frame.id,
-            rev: Number(res.rev),
+        state.authenticating = true
+        try {
+          const credential = await this.stateSync.authenticateWsToken(state.spaceId, state.docId, frame.token)
+          if (state.closed || state.ws.readyState !== WebSocket.OPEN) {
+            return
+          }
+          if (!credential) {
+            sendJson(state.ws, { type: "error", code: "INVALID_CREDENTIAL", message: "状态同步凭证无效或已过期。" })
+            state.ws.close(STATE_SYNC_WS_CLOSE_CODES.AUTH_FAILED, "Invalid credential")
+            return
+          }
+          await this.completeAuthentication(state, credential, {
+            clientId: frame.clientId,
+            clientName: frame.clientName,
+            meta: frame.meta,
+            paths: frame.paths,
+            sinceRev: frame.sinceRev,
           })
+        } catch (error: unknown) {
+          this.logger.warn({
+            spaceId: state.spaceId,
+            docId: state.docId,
+            errorName: error instanceof Error ? error.name : typeof error,
+          }, "State sync WebSocket first-frame auth failed")
+          if (!state.closed && state.ws.readyState === WebSocket.OPEN) {
+            sendJson(state.ws, { type: "error", code: "INTERNAL_ERROR", message: "认证服务暂不可用。" })
+            state.closeReason = "shutdown"
+            state.ws.close(STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY, "Auth unavailable")
+          }
+        } finally {
+          state.authenticating = false
+          this.flushPendingMessages(state)
         }
         return
       }
-      case "mutate": {
-        if (conn.isObserver || conn.role === "read") {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: "FORBIDDEN_ROLE",
-            message: "当前连接仅允许只读，不能写入房间状态。",
+
+      const conn = state.connection
+      switch (frame.type) {
+        case "auth":
+          sendJson(state.ws, { type: "error", code: "ALREADY_AUTHENTICATED", message: "连接已完成认证。" })
+          return
+        case "ping":
+          sendJson(state.ws, { type: "pong", serverTime: new Date().toISOString() })
+          return
+        case "presence.update":
+          if (conn.isObserver) {
+            sendJson(state.ws, { type: "error", code: "FORBIDDEN_OBSERVER", message: "调试台观察者不参与在线名单。" })
+            return
+          }
+          this.stateSync.hub.updatePresence(conn.spaceId, conn.docId, conn.connectionId, {
+            clientName: frame.clientName,
+            meta: frame.meta,
           })
           return
-        }
-        const res = await this.stateSync.hub.mutate(conn.spaceId, conn.docId, {
-          op: frame.op,
-          path: frame.path,
-          value: frame.value,
-          expectedRev: frame.expectedRev,
-          echo: frame.echo,
-          sourceConnectionId: conn.connectionId,
-          actor: {
-            connectionId: conn.connectionId,
-            clientId: conn.clientId,
-            clientName: conn.clientName,
-          },
-        })
-        if (!res.ok) {
-          if (res.code === "RATE_LIMITED") {
-            state.consecutiveRateViolations += 1
+        case "subscribe": {
+          const res = this.stateSync.hub.updateSubscriptions(
+            conn.spaceId,
+            conn.docId,
+            conn.connectionId,
+            "subscribe",
+            frame.paths,
+          )
+          if (!res.ok) {
             sendJson(state.ws, {
               type: "error",
               ...(frame.id ? { id: frame.id } : {}),
               code: res.code,
               message: res.message,
             })
-            if (state.consecutiveRateViolations >= MAX_CONSECUTIVE_RATE_VIOLATIONS) {
-              state.ws.close(STATE_SYNC_WS_CLOSE_CODES.LIMIT_EXCEEDED, "Rate limit exceeded")
+            return
+          }
+          for (const snap of res.snapshots) {
+            sendJson(state.ws, {
+              type: "snapshot",
+              rev: Number(res.rev),
+              path: snap.path,
+              exists: snap.exists,
+              value: snap.value,
+            })
+          }
+          if (frame.id) {
+            sendJson(state.ws, {
+              type: "ack",
+              id: frame.id,
+              rev: Number(res.rev),
+            })
+          }
+          return
+        }
+        case "unsubscribe": {
+          const res = this.stateSync.hub.updateSubscriptions(
+            conn.spaceId,
+            conn.docId,
+            conn.connectionId,
+            "unsubscribe",
+            frame.paths,
+          )
+          if (!res.ok) {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: res.code,
+              message: res.message,
+            })
+            return
+          }
+          if (frame.id) {
+            sendJson(state.ws, {
+              type: "ack",
+              id: frame.id,
+              rev: Number(res.rev),
+            })
+          }
+          return
+        }
+        case "mutate": {
+          if (conn.isObserver || conn.role === "read") {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: "FORBIDDEN_ROLE",
+              message: "当前连接仅允许只读，不能写入房间状态。",
+            })
+            return
+          }
+          const res = await this.stateSync.hub.mutate(conn.spaceId, conn.docId, {
+            op: frame.op,
+            path: frame.path,
+            value: frame.value,
+            expectedRev: frame.expectedRev,
+            echo: frame.echo,
+            sourceConnectionId: conn.connectionId,
+            actor: {
+              connectionId: conn.connectionId,
+              clientId: conn.clientId,
+              clientName: conn.clientName,
+            },
+          })
+          if (!res.ok) {
+            if (res.code === "RATE_LIMITED") {
+              state.consecutiveRateViolations += 1
+              sendJson(state.ws, {
+                type: "error",
+                ...(frame.id ? { id: frame.id } : {}),
+                code: res.code,
+                message: res.message,
+              })
+              if (state.consecutiveRateViolations >= MAX_CONSECUTIVE_RATE_VIOLATIONS) {
+                state.ws.close(STATE_SYNC_WS_CLOSE_CODES.LIMIT_EXCEEDED, "Rate limit exceeded")
+              }
+              return
             }
+            state.consecutiveRateViolations = 0
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: res.code,
+              message: res.message,
+              ...(res.currentRev !== undefined ? { currentRev: Number(res.currentRev) } : {}),
+            })
             return
           }
           state.consecutiveRateViolations = 0
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: res.code,
-            message: res.message,
-            ...(res.currentRev !== undefined ? { currentRev: Number(res.currentRev) } : {}),
-          })
+          if (frame.id) {
+            sendJson(state.ws, {
+              type: "ack",
+              id: frame.id,
+              rev: Number(res.rev),
+              changed: res.changed,
+            })
+          }
           return
         }
-        state.consecutiveRateViolations = 0
-        if (frame.id) {
-          sendJson(state.ws, {
-            type: "ack",
-            id: frame.id,
-            rev: Number(res.rev),
-            changed: res.changed,
-          })
+        case "onDisconnect.set": {
+          if (conn.isObserver || conn.role === "read") {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: "FORBIDDEN_ROLE",
+              message: "当前连接仅允许只读，不能注册掉线动作。",
+            })
+            return
+          }
+          const res = this.stateSync.hub.setOnDisconnect(
+            conn.spaceId,
+            conn.docId,
+            conn.connectionId,
+            frame.actions,
+          )
+          if (!res.ok) {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: res.code,
+              message: res.message,
+            })
+            return
+          }
+          if (frame.id) {
+            sendJson(state.ws, { type: "ack", id: frame.id })
+          }
+          return
         }
-        return
+        case "onDisconnect.clear": {
+          if (conn.isObserver || conn.role === "read") {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: "FORBIDDEN_ROLE",
+              message: "当前连接仅允许只读，不能清除掉线动作。",
+            })
+            return
+          }
+          const res = this.stateSync.hub.setOnDisconnect(conn.spaceId, conn.docId, conn.connectionId, [])
+          if (!res.ok) {
+            sendJson(state.ws, {
+              type: "error",
+              ...(frame.id ? { id: frame.id } : {}),
+              code: res.code,
+              message: res.message,
+            })
+            return
+          }
+          if (frame.id) {
+            sendJson(state.ws, { type: "ack", id: frame.id })
+          }
+          return
+        }
       }
-      case "onDisconnect.set": {
-        if (conn.isObserver || conn.role === "read") {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: "FORBIDDEN_ROLE",
-            message: "当前连接仅允许只读，不能注册掉线动作。",
-          })
-          return
-        }
-        const res = this.stateSync.hub.setOnDisconnect(
-          conn.spaceId,
-          conn.docId,
-          conn.connectionId,
-          frame.actions,
-        )
-        if (!res.ok) {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: res.code,
-            message: res.message,
-          })
-          return
-        }
-        if (frame.id) {
-          sendJson(state.ws, { type: "ack", id: frame.id })
-        }
-        return
-      }
-      case "onDisconnect.clear": {
-        if (conn.isObserver || conn.role === "read") {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: "FORBIDDEN_ROLE",
-            message: "当前连接仅允许只读，不能清除掉线动作。",
-          })
-          return
-        }
-        const res = this.stateSync.hub.setOnDisconnect(conn.spaceId, conn.docId, conn.connectionId, [])
-        if (!res.ok) {
-          sendJson(state.ws, {
-            type: "error",
-            ...(frame.id ? { id: frame.id } : {}),
-            code: res.code,
-            message: res.message,
-          })
-          return
-        }
-        if (frame.id) {
-          sendJson(state.ws, { type: "ack", id: frame.id })
-        }
-        return
+    } catch (error: unknown) {
+      this.logger.warn({
+        spaceId: state.spaceId,
+        docId: state.docId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      }, "Unhandled error handling state sync WebSocket frame")
+      if (!state.closed && state.ws.readyState === WebSocket.OPEN) {
+        sendJson(state.ws, {
+          type: "error",
+          code: "INTERNAL_ERROR",
+          message: "处理消息帧时发生内部错误，请稍后重试。",
+        })
       }
     }
   }
