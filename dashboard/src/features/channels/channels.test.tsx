@@ -394,7 +394,7 @@ describe('Dashboard Channels Console UI', () => {
       presence: [],
       retained: [],
     })
-    let resolveTicket!: (value: { ticket: string; expiresInSeconds: number }) => void
+    let resolveTicket!: (value: { ticket: string; expiresAt: string }) => void
     vi.spyOn(channelApi, 'issueDebugTicket').mockImplementation(
       () => new Promise((resolve) => { resolveTicket = resolve }),
     )
@@ -408,7 +408,7 @@ describe('Dashboard Channels Console UI', () => {
     expect(document.body.textContent).toContain('连接中')
     await act(async () => findButton('断开连接').click())
     await flush()
-    await act(async () => resolveTicket({ ticket: 'sydbg_late', expiresInSeconds: 60 }))
+    await act(async () => resolveTicket({ ticket: 'sydbg_late', expiresAt: '2026-11-25T08:01:00.000Z' }))
     await flush()
     expect(FakeWebSocket.instances).toHaveLength(0)
     expect(document.body.textContent).toContain('未连接')

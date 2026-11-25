@@ -357,4 +357,71 @@ describe("ChannelService", () => {
     await expect(service.authenticateOpenBearer(randomToken, "ch_missing")).resolves.toBeNull()
     expect(OpenApiHttpError).toBeDefined()
   })
+
+  it("leases Channel.seqEpoch persistently so seq remains strictly monotonic across server restarts", async () => {
+    const harness = createHarness()
+    const ch = await harness.service.createChannel({ kind: "console", userId: "u1" }, { name: "重启单调性" })
+    const tok = await harness.service.createToken({ kind: "console", userId: "u1" }, ch.id, { name: "pub", role: "pubsub" })
+
+    // Process 1: publish two non-retained events (via HTTP and WS)
+    const p1 = await harness.service.publishEvent({ kind: "console", userId: "u1" }, ch.id, { event: "ping", payload: { n: 1 } })
+    const p2 = await harness.service.publishFromWs({
+      channelId: ch.id,
+      event: "ping",
+      payload: { n: 2 },
+      retain: false,
+      echo: true,
+      sender: { connectionId: "conn_1", clientId: "c1", clientName: null },
+    })
+    expect(p1.seq).toBe(1)
+    expect(p2.seq).toBe(2)
+    expect(harness.channels.get(ch.id)?.seqEpoch).toBe(BigInt(10_000))
+
+    // Connecting within the SAME process keeps live seq=2 (does not jump to leased ceiling)
+    const liveAuth = await harness.service.authenticateWsCredential(tok.secret, ch.id)
+    expect(liveAuth?.seqFloor).toBe(2)
+
+    // Process 2 (simulated server restart: fresh ChannelHub + ChannelService sharing same Prisma DB)
+    const restartedHub = new ChannelHub(loadChannelConfig({}))
+    const restartedService = new ChannelService(
+      harness.prisma as never,
+      {} as never,
+      new ApiKeyChangeNotifier(),
+      restartedHub,
+      new ChannelDebugTicketStore(),
+    )
+
+    // Pre-restart client reconnects with afterSeq=2 -> sees seqFloor=10_000 & replayTruncated=true
+    const restartedAuth = await restartedService.authenticateWsCredential(tok.secret, ch.id)
+    expect(restartedAuth?.seqFloor).toBe(10_000)
+    const s = createFakeSocket()
+    const reg = restartedHub.registerConnection({
+      channelId: ch.id,
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: tok.token.id,
+      role: "pubsub",
+      isObserver: false,
+      clientId: "c1",
+      clientName: null,
+      meta: {},
+      afterSeq: 2,
+      seqFloor: restartedAuth!.seqFloor,
+      socket: s.socket,
+    })
+    expect(reg.ok && reg.readySnapshot.latestSeq).toBe(10_000)
+    expect(reg.ok && reg.readySnapshot.replayTruncated).toBe(true)
+
+    // Post-restart WS publish advances strictly above pre-restart seq and leases next epoch
+    const p3 = await restartedService.publishFromWs({
+      channelId: ch.id,
+      event: "ping",
+      payload: { n: 3 },
+      retain: false,
+      echo: true,
+      sender: { connectionId: "conn_2", clientId: "c1", clientName: null },
+    })
+    expect(p3.seq).toBe(10_001)
+    expect(harness.channels.get(ch.id)?.seqEpoch).toBe(BigInt(20_000))
+  })
 })

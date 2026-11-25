@@ -90,6 +90,7 @@ export type ChannelPublishResult = {
 
 const TOKEN_LAST_USED_THROTTLE_MS = 60_000
 const TOKEN_LAST_USED_CACHE_MAX = 5000
+const SEQ_EPOCH_STRIDE = 10_000
 
 function resolveApiKeyWsRole(scopes: readonly string[]): ChannelRole | null {
   const canPub = scopes.includes(CHANNELS_PUBLISH_SCOPE)
@@ -119,6 +120,8 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
   private unsubscribeNotifier: (() => void) | null = null
   private readonly tokenLastUsedCache = new Map<string, number>()
   private readonly retainLocks = new Map<string, Promise<unknown>>()
+  private readonly seqLeaseCeilings = new Map<string, number>()
+  private readonly seqLeaseInflight = new Map<string, Promise<number>>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -340,6 +343,7 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
     await this.requireOwnedChannel(actor, channelId, "manage")
     const result = await this.prisma.channel.deleteMany({ where: { id: channelId } })
     if (result.count === 0) throw new OpenApiHttpError(404, "CHANNEL_NOT_FOUND", "频道不存在。")
+    this.seqLeaseCeilings.delete(channelId)
     this.hub.disconnectByChannel(channelId, CHANNEL_WS_CLOSE_CODES.REVOKED, "Channel deleted")
     return { deleted: true }
   }
@@ -444,7 +448,7 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
   }): Promise<ChannelPublishResult> {
     return this.publishResolved({
       ...input,
-      seqEpoch: BigInt(0),
+      seqEpoch: undefined,
     })
   }
 
@@ -510,7 +514,7 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
 
   private async publishResolved(input: {
     readonly channelId: string
-    readonly seqEpoch: bigint
+    readonly seqEpoch?: bigint
     readonly event: string
     readonly payload: unknown
     readonly retain: boolean
@@ -519,7 +523,7 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
     readonly sender: ChannelEventSender
   }): Promise<ChannelPublishResult> {
     if (!input.retain) {
-      const seqFloor = await this.resolveSeqFloor(input.channelId, input.seqEpoch)
+      const seqFloor = await this.ensureSeqLeaseForPublish(input.channelId, input.seqEpoch)
       const published = this.hub.publishEvent({
         channelId: input.channelId,
         event: input.event,
@@ -541,7 +545,7 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
     // Serialize retain writes per channel and persist BEFORE live fan-out so DB errors
     // or the 20-key cap never emit phantom retain broadcasts, and newer seqs never lose to older ones.
     return this.withChannelRetainLock(input.channelId, async () => {
-      const seqFloor = await this.resolveSeqFloor(input.channelId, input.seqEpoch)
+      const seqFloor = await this.ensureSeqLeaseForPublish(input.channelId, input.seqEpoch)
       const nextSeq = this.hub.allocateNextSeq(input.channelId, seqFloor)
       await this.persistRetainedEvent({
         channelId: input.channelId,
@@ -630,9 +634,52 @@ export class ChannelService implements OnModuleInit, OnModuleDestroy {
     })
   }
 
+  private async ensureSeqLeaseForPublish(channelId: string, knownSeqEpoch?: bigint): Promise<number> {
+    const current = this.hub.getLatestSeq(channelId)
+    const ceiling = this.seqLeaseCeilings.get(channelId)
+    if (ceiling !== undefined && current < ceiling) {
+      return current
+    }
+    const inflight = this.seqLeaseInflight.get(channelId)
+    if (inflight) return inflight
+
+    const work = (async () => {
+      const latestBefore = this.hub.getLatestSeq(channelId)
+      const existingCeiling = this.seqLeaseCeilings.get(channelId)
+      if (existingCeiling !== undefined && latestBefore < existingCeiling) {
+        return latestBefore
+      }
+      let dbEpoch = knownSeqEpoch
+      if (dbEpoch === undefined) {
+        const row = await this.prisma.channel.findUnique({
+          where: { id: channelId },
+          select: { seqEpoch: true },
+        })
+        dbEpoch = row?.seqEpoch ?? BigInt(0)
+      }
+      const floor = await this.resolveSeqFloor(channelId, dbEpoch)
+      const nextCeiling = Math.max(floor, latestBefore) + SEQ_EPOCH_STRIDE
+      await this.prisma.channel.update({
+        where: { id: channelId },
+        data: { seqEpoch: BigInt(nextCeiling) },
+      })
+      this.seqLeaseCeilings.set(channelId, nextCeiling)
+      return floor
+    })()
+
+    this.seqLeaseInflight.set(channelId, work)
+    try {
+      return await work
+    } finally {
+      if (this.seqLeaseInflight.get(channelId) === work) {
+        this.seqLeaseInflight.delete(channelId)
+      }
+    }
+  }
+
   private async resolveSeqFloor(channelId: string, seqEpoch: bigint): Promise<number> {
     const current = this.hub.getLatestSeq(channelId)
-    if (current > 0) return current
+    if (current > 0 || this.seqLeaseCeilings.has(channelId)) return current
     const agg = await this.prisma.channelRetainedEvent.aggregate({
       where: { channelId },
       _max: { seq: true },

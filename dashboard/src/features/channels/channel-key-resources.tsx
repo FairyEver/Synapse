@@ -61,8 +61,11 @@ export function ChannelKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboa
       title='密钥的频道资源'
       saveLabel='保存更改'
       onClose={onClose}
-      onSave={() => mutation.mutate()}
-      pending={mutation.isPending || (mode === 'selected' && channels.isLoading)}
+      onSave={() => {
+        if (mode === 'selected' && channels.isLoading) return
+        mutation.mutate()
+      }}
+      pending={mutation.isPending}
     >
       <div className='space-y-4'>
         <section className='space-y-3' aria-labelledby='channel-resource-scope-heading'>

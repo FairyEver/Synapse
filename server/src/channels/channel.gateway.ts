@@ -481,8 +481,15 @@ export class ChannelGateway implements OnApplicationShutdown, OnModuleDestroy {
     const clientName = credential.isObserver ? "Console 调试台" : (options.clientName ?? null)
 
     const shouldLoadRetained = credential.role !== "publish" && options.includeRetained
-    const retained = shouldLoadRetained ? await this.channels.loadRetainedItems(credential.channelId) : undefined
-    if (state.ws.readyState !== WebSocket.OPEN) return
+    let retained: Awaited<ReturnType<ChannelService["loadRetainedItems"]>> | undefined
+    if (shouldLoadRetained) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const seqBefore = this.channels.hub.getLatestSeq(credential.channelId)
+        retained = await this.channels.loadRetainedItems(credential.channelId)
+        if (state.ws.readyState !== WebSocket.OPEN) return
+        if (this.channels.hub.getLatestSeq(credential.channelId) === seqBefore) break
+      }
+    }
 
     const registered = this.channels.hub.registerConnection({
       channelId: credential.channelId,
