@@ -440,10 +440,11 @@ class StateSyncRoomImpl implements StateSyncRoom {
       const next = updater(currentValue, helpers)
 
       if (next === TRANSACTION_ABORT || next === undefined) {
+        const freshSnap = readPath(this.mirror, normalized)
         return {
           committed: false,
           rev: this._rev,
-          value: currentValue,
+          value: freshSnap.exists ? (freshSnap.value as T) : undefined,
         }
       }
 
@@ -495,18 +496,18 @@ class StateSyncRoomImpl implements StateSyncRoom {
         : { op: action.op, path: normalizedPath, value: cloneJsonValue(action.value) }
     })
 
-    this.desiredOnDisconnect = sanitized
     await this.sendRequest({
       type: "onDisconnect.set",
       actions: sanitized,
     })
+    this.desiredOnDisconnect = sanitized
   }
 
   async clearOnDisconnect(): Promise<void> {
-    this.desiredOnDisconnect = null
     await this.sendRequest({
       type: "onDisconnect.clear",
     })
+    this.desiredOnDisconnect = null
   }
 
   onPresence(cb: (members: StateSyncPresenceMember[]) => void): () => void {
@@ -612,7 +613,7 @@ class StateSyncRoomImpl implements StateSyncRoom {
     if (this._clientId) authPayload.clientId = this._clientId
     if (this.clientName !== undefined) authPayload.clientName = this.clientName
     if (this.meta !== undefined) authPayload.meta = cloneJsonValue(this.meta)
-    if (isReconnect) authPayload.sinceRev = this._rev
+    if (isReconnect) authPayload.sinceRev = this.appliedMirrorRev
 
     try {
       this.transport.send(authPayload)
@@ -692,7 +693,7 @@ class StateSyncRoomImpl implements StateSyncRoom {
 
     if (snapshots.length > 0) {
       const beforeStates = isReconnect ? this.captureListenerSnapshots([...this.listeners]) : null
-      let nextMirror = isReconnect ? this.mirror : {}
+      let nextMirror: Record<string, unknown> = {}
       for (const snap of snapshots) {
         nextMirror = applySnapshotToMirror(nextMirror, snap.path, Boolean(snap.exists), snap.value)
       }
@@ -703,9 +704,10 @@ class StateSyncRoomImpl implements StateSyncRoom {
         this.notifyChangedListeners(beforeStates, this._rev)
       }
     } else {
-      // Incremental replay mode: keep appliedMirrorRev at previous value so replayed mutations apply in order.
-      this._rev = Math.max(this._rev, readyRev)
+      // Incremental replay mode: do not advance this._rev ahead of this.appliedMirrorRev.
+      // Replayed mutation frames will advance both appliedMirrorRev and _rev as they arrive.
       if (!isReconnect) {
+        this._rev = Math.max(this._rev, readyRev)
         this.appliedMirrorRev = readyRev
       }
     }
@@ -786,7 +788,11 @@ class StateSyncRoomImpl implements StateSyncRoom {
     const ackRev = typeof frame.rev === "number" ? frame.rev : undefined
     const changed = typeof frame.changed === "boolean" ? frame.changed : true
 
-    if (entry.localMutation && changed && (ackRev === undefined || ackRev > this.appliedMirrorRev)) {
+    const overlapsSubscribed =
+      entry.localMutation !== undefined
+      && this.isPathOverlappingSubscriptions(entry.localMutation.path)
+
+    if (overlapsSubscribed && entry.localMutation && changed && (ackRev === undefined || ackRev > this.appliedMirrorRev)) {
       const { op, path, value } = entry.localMutation
       const candidates = this.collectAffectedListeners(path)
       const beforeStates = this.captureListenerSnapshots(candidates)
@@ -830,6 +836,7 @@ class StateSyncRoomImpl implements StateSyncRoom {
       const rejectInitial = this.initialReject
       this.initialResolve = null
       this.initialReject = null
+      this.transport.close(1000, error.message)
       rejectInitial(error)
     }
   }
@@ -868,6 +875,15 @@ class StateSyncRoomImpl implements StateSyncRoom {
       this.presenceMembers.push(cloned)
     }
     this.emitPresence()
+  }
+
+  private isPathOverlappingSubscriptions(path: string): boolean {
+    for (const subPath of this.subscribedPaths) {
+      if (isAncestorOrEqualPath(subPath, path) || isAncestorOrEqualPath(path, subPath)) {
+        return true
+      }
+    }
+    return false
   }
 
   private collectAffectedListeners(changedPath: string): PathListenerEntry[] {

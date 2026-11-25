@@ -156,6 +156,10 @@ class MockStateSyncServer {
   readonly onDisconnectSetCount = { value: 0 }
   readonly mutateFrames: Array<Record<string, unknown>> = []
   forceConflictRev: number | null = null
+  dropAfterReplayCount: number | null = null
+  rejectOnDisconnectWithCode: string | null = null
+  sendErrorBeforeReady: { code: string; message: string; closeCode?: number } | null = null
+  forceSnapshotOnReconnect = false
   validToken = "sys_test_token"
   private docSeq = 0
   private connSeq = 0
@@ -348,6 +352,14 @@ class MockStateSyncServer {
           return
         }
         this.authFrames.push(frame)
+        if (this.sendErrorBeforeReady) {
+          const err = this.sendErrorBeforeReady
+          ws.send(JSON.stringify({ type: "error", code: err.code, message: err.message }))
+          if (err.closeCode) {
+            ws.close(err.closeCode, err.message)
+          }
+          return
+        }
         if (frame.token !== this.validToken) {
           ws.send(JSON.stringify({ type: "error", code: "INVALID_CREDENTIAL", message: "Invalid credential" }))
           ws.close(4001, "Invalid credential")
@@ -394,7 +406,7 @@ class MockStateSyncServer {
         const sinceRev = typeof frame.sinceRev === "number" ? frame.sinceRev : undefined
         let snapshots: Array<{ path: string; exists: boolean; value: unknown }> = []
         let replayed: Array<Record<string, unknown>> = []
-        if (sinceRev === undefined) {
+        if (sinceRev === undefined || this.forceSnapshotOnReconnect) {
           snapshots = paths.map((p) => ({ path: p, ...readTreePath(doc.data, p) }))
         } else {
           replayed = doc.history
@@ -424,8 +436,15 @@ class MockStateSyncServer {
           snapshots,
         }))
 
+        let sentReplayCount = 0
         for (const replayFrame of replayed) {
+          if (this.dropAfterReplayCount !== null && sentReplayCount >= this.dropAfterReplayCount) {
+            conn.skipOnDisconnect = true
+            ws.close(1001, "Dropped during replay")
+            break
+          }
           ws.send(JSON.stringify(replayFrame))
+          sentReplayCount += 1
         }
         return
       }
@@ -457,6 +476,15 @@ class MockStateSyncServer {
           }
           return
         case "onDisconnect.set":
+          if (this.rejectOnDisconnectWithCode) {
+            ws.send(JSON.stringify({
+              type: "error",
+              id: frame.id,
+              code: this.rejectOnDisconnectWithCode,
+              message: "Rejected onDisconnect",
+            }))
+            return
+          }
           this.onDisconnectSetCount.value += 1
           conn.onDisconnectActions = Array.isArray(frame.actions)
             ? (structuredClone(frame.actions) as StateSyncOnDisconnectAction[])
@@ -464,6 +492,15 @@ class MockStateSyncServer {
           if (frame.id) ws.send(JSON.stringify({ type: "ack", id: frame.id }))
           return
         case "onDisconnect.clear":
+          if (this.rejectOnDisconnectWithCode) {
+            ws.send(JSON.stringify({
+              type: "error",
+              id: frame.id,
+              code: this.rejectOnDisconnectWithCode,
+              message: "Rejected onDisconnect clear",
+            }))
+            return
+          }
           conn.onDisconnectActions = []
           if (frame.id) ws.send(JSON.stringify({ type: "ack", id: frame.id }))
           return
@@ -880,6 +917,242 @@ describe("@synapse/sdk state-sync client", () => {
     expect(() => room1.get("/__proto__/pollute")).toThrow(StateSyncError)
     expect(() => room1.get("/a/".repeat(17).slice(0, -1))).toThrow(StateSyncError)
     await expect(room1.delete("/")).rejects.toThrow(StateSyncError)
+  })
+
+  it("incremental reconnect followed by a second drop before replay completes still sends sinceRev = pre-drop appliedMirrorRev and never loses missed mutations", async () => {
+    const server = new MockStateSyncServer()
+    servers.push(server)
+    const baseUrl = await server.start()
+
+    const client = createClient({
+      baseUrl,
+      spaceId: "ss_game",
+      token: "sys_test_token",
+      WebSocket: NodeWebSocket,
+      reconnectBaseDelayMs: 30,
+      reconnectMaxDelayMs: 60,
+    })
+
+    const { docId, room } = await client.createRoom({
+      initialData: { items: { "1": "one" } },
+      clientId: "p1",
+    })
+    rooms.push(room)
+
+    const observer = await client.join(docId, { clientId: "obs" })
+    rooms.push(observer)
+
+    expect(room.rev).toBe(0)
+    expect(room.get("/items/1")).toBe("one")
+
+    // Drop connection on room (code 1001)
+    const firstConnId = room.connectionId
+    const firstConn = [...server.conns].find((c) => c.connectionId === firstConnId)!
+    firstConn.skipOnDisconnect = true
+    firstConn.ws.close(1001, "First disconnect")
+
+    // While room is disconnected, observer generates 3 mutations: rev 1, rev 2, rev 3
+    await observer.set("/items/2", "two")
+    await observer.set("/items/3", "three")
+    await observer.set("/items/4", "four")
+
+    // Configure server to drop room during replay after sending exactly 1 replayed mutation
+    server.dropAfterReplayCount = 1
+
+    // Wait until room reconnects and receives the first replayed frame (items/2)
+    // Server will drop it immediately after 1 replay frame, triggering a second reconnect
+    await waitForCondition(() => room.get("/items/2") === "two", 3000)
+
+    // Now clear the drop trigger so the second reconnect can finish completely
+    server.dropAfterReplayCount = null
+
+    // Wait for the second reconnect to complete
+    await waitForCondition(
+      () =>
+        room.status === "connected"
+        && room.get("/items/3") === "three"
+        && room.get("/items/4") === "four",
+      3000,
+    )
+
+    // Verify auth frames sent on reconnect:
+    // First reconnect sent sinceRev: 0 (appliedMirrorRev was 0)
+    // Second reconnect sent sinceRev: 1 (appliedMirrorRev after receiving /items/2 was 1)
+    // NOT sinceRev: 3 (the document rev at the time of the first ready frame)!
+    const p1Auths = server.authFrames.filter((f) => f.clientId === "p1")
+    expect(p1Auths.length).toBeGreaterThanOrEqual(3) // initial + reconnect1 + reconnect2
+    expect(p1Auths[1]?.sinceRev).toBe(0)
+    expect(p1Auths[2]?.sinceRev).toBe(1)
+
+    // All missed mutations are present in the mirror!
+    expect(room.get("/items/1")).toBe("one")
+    expect(room.get("/items/2")).toBe("two")
+    expect(room.get("/items/3")).toBe("three")
+    expect(room.get("/items/4")).toBe("four")
+    expect(room.rev).toBe(3)
+  })
+
+  it("rejected onDisconnect() does not persist or re-register on reconnect", async () => {
+    const server = new MockStateSyncServer()
+    servers.push(server)
+    const baseUrl = await server.start()
+
+    const client = createClient({
+      baseUrl,
+      spaceId: "ss_game",
+      token: "sys_test_token",
+      WebSocket: NodeWebSocket,
+      reconnectBaseDelayMs: 30,
+      reconnectMaxDelayMs: 60,
+    })
+
+    const { docId, room } = await client.createRoom({
+      initialData: { status: "active" },
+      clientId: "p_readonly",
+    })
+    rooms.push(room)
+
+    // Server rejects onDisconnect.set with FORBIDDEN_ROLE
+    server.rejectOnDisconnectWithCode = "FORBIDDEN_ROLE"
+
+    await expect(
+      room.onDisconnect([{ op: "set", path: "/status", value: "left" }]),
+    ).rejects.toSatisfy(
+      (err: unknown) => err instanceof StateSyncError && err.code === "FORBIDDEN_ROLE",
+    )
+
+    // Reset rejection code on server
+    server.rejectOnDisconnectWithCode = null
+    const beforeDisconnectCount = server.onDisconnectSetCount.value
+    expect(beforeDisconnectCount).toBe(0)
+
+    // Drop connection on room (1001)
+    const currentConn = [...server.conns].find((c) => c.connectionId === room.connectionId)!
+    currentConn.skipOnDisconnect = true
+    currentConn.ws.close(1001, "Server restart")
+
+    // Wait for room to reconnect
+    await waitForCondition(() => room.status === "connected", 3000)
+
+    // Give a brief window to confirm onDisconnect.set was NOT sent on reconnect
+    await new Promise((r) => setTimeout(r, 100))
+    expect(server.onDisconnectSetCount.value).toBe(0)
+  })
+
+  it("transaction() returning JSON null sends set(path, null) rather than aborting, aborted transaction returns fresh mirror clone, and 4001 stops reconnect", async () => {
+    const server = new MockStateSyncServer()
+    servers.push(server)
+    const baseUrl = await server.start()
+
+    const client = createClient({
+      baseUrl,
+      spaceId: "ss_game",
+      token: "sys_test_token",
+      WebSocket: NodeWebSocket,
+      reconnectBaseDelayMs: 30,
+      reconnectMaxDelayMs: 60,
+    })
+
+    const { docId, room } = await client.createRoom({
+      initialData: { settings: { theme: "dark" }, counter: { count: 10 } },
+      clientId: "p1",
+    })
+    rooms.push(room)
+
+    // 1. transaction() returning null sets path to null rather than aborting
+    const mutateFramesBefore = server.mutateFrames.length
+    const nullTxResult = await room.transaction<unknown>("/settings/theme", () => null)
+    expect(nullTxResult.committed).toBe(true)
+    expect(nullTxResult.value).toBeNull()
+    expect(room.get("/settings/theme")).toBeNull()
+    expect(server.mutateFrames.length).toBe(mutateFramesBefore + 1)
+    const lastMutate = server.mutateFrames[server.mutateFrames.length - 1]
+    expect(lastMutate?.op).toBe("set")
+    expect(lastMutate?.path).toBe("/settings/theme")
+    expect(lastMutate?.value).toBeNull()
+
+    // 2. Aborted transaction returns fresh clone from this.mirror even if updater mutated current in-place
+    const abortedResult = await room.transaction<{ count: number }>("/counter", (curr, { abort }) => {
+      if (curr) {
+        curr.count = 999999
+      }
+      return abort()
+    })
+    expect(abortedResult.committed).toBe(false)
+    expect(abortedResult.value).toEqual({ count: 10 })
+    expect(room.get("/counter")).toEqual({ count: 10 })
+
+    // 3. Close code 4001 stops reconnect cleanly
+    const statuses: StateSyncConnectionStatus[] = []
+    room.onStatus((s) => statuses.push(s))
+
+    const authCountBefore = server.authFrames.length
+    const conn = [...server.conns].find((c) => c.connectionId === room.connectionId)!
+    conn.skipOnDisconnect = true
+    conn.ws.close(4001, "Unauthorized")
+
+    await waitForCondition(() => room.status === "closed", 2000)
+    await new Promise((r) => setTimeout(r, 150))
+    expect(statuses[statuses.length - 1]).toBe("closed")
+    expect(statuses).not.toContain("reconnecting")
+    expect(server.authFrames.length).toBe(authCountBefore)
+  })
+
+  it("closes transport on pre-ready error, gates handleAckFrame on subscribed paths, and cleans mirror on full resync snapshot", async () => {
+    const server = new MockStateSyncServer()
+    servers.push(server)
+    const baseUrl = await server.start()
+
+    const client = createClient({
+      baseUrl,
+      spaceId: "ss_game",
+      token: "sys_test_token",
+      WebSocket: NodeWebSocket,
+      reconnectBaseDelayMs: 30,
+      reconnectMaxDelayMs: 60,
+    })
+
+    // 1. Pre-ready error closes transport and rejects initial connect
+    server.sendErrorBeforeReady = { code: "BANNED", message: "User is banned", closeCode: 4001 }
+    await expect(client.join("some_doc")).rejects.toSatisfy(
+      (err: unknown) => err instanceof StateSyncError && err.code === "BANNED",
+    )
+    server.sendErrorBeforeReady = null
+
+    // 2. handleAckFrame gates local mirror mutation on subscribedPaths overlap
+    const { docId, room } = await client.createRoom({
+      initialData: { board: { a: 1, b: 2 }, chat: { msg: "hi" } },
+      clientId: "p_sub",
+      paths: ["/board"],
+    })
+    rooms.push(room)
+
+    expect(room.get("/board")).toEqual({ a: 1, b: 2 })
+    expect(room.get("/chat")).toBeUndefined()
+
+    // Write to /chat (unsubscribed path)
+    const mutateRes = await room.set("/chat/msg2", "world")
+    expect(mutateRes.changed).toBe(true)
+    // Mirror must NOT have /chat or /chat/msg2 because /chat is not subscribed
+    expect(room.get("/chat")).toBeUndefined()
+    expect(room.get("/chat/msg2")).toBeUndefined()
+
+    // 3. Full resync snapshots rebuild nextMirror cleanly without leftover keys
+    const docKey = `ss_game:${docId}`
+    const serverDoc = server.docs.get(docKey)!
+    // Server doc deletes b from board
+    delete (serverDoc.data.board as Record<string, unknown>).b
+    serverDoc.rev += 1
+    server.forceSnapshotOnReconnect = true
+
+    // Trigger reconnect
+    const activeConn = [...server.conns].find((c) => c.connectionId === room.connectionId)!
+    activeConn.skipOnDisconnect = true
+    activeConn.ws.close(1001, "Snapshot resync trigger")
+
+    await waitForCondition(() => room.status === "connected" && room.rev === serverDoc.rev, 3000)
+    // Board in mirror should only contain { a: 1 }, without leftover b
+    expect(room.get("/board")).toEqual({ a: 1 })
   })
 })
 
