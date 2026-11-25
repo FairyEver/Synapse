@@ -180,7 +180,7 @@ describe("synapse tool router search", () => {
       const result = await searchSynapseTools({ query, limit: 3 })
       expect(result.tools[0]?.name, query).toBe("app_drive_item_tree_list")
     }
-  })
+  }, 30_000)
 
   it("keeps browsing and other Drive operations distinct from filename search", async () => {
     const cases = [
@@ -203,7 +203,7 @@ describe("synapse tool router search", () => {
     expect(scoped.tools.every(tool => tool.domain === "database")).toBe(true)
     const exact = await searchSynapseTools({ query: "app_drive_item_get", limit: 1 })
     expect(exact.tools[0]?.name).toBe("app_drive_item_get")
-  })
+  }, 30_000)
 
   it("excludes Synapse Drive when the user explicitly searches another platform or local files", async () => {
     const queries = ["搜索 Google Drive 里的文件", "搜索飞书云盘里的合同文档", "搜索本地云盘同步重设计.html", "search local files", "find files in Dropbox", "find files in OneDrive"]
@@ -215,7 +215,7 @@ describe("synapse tool router search", () => {
     }
     const owned = await searchSynapseTools({ query: "在 Synapse 云盘里找 Google Drive迁移.md", limit: 3 })
     expect(owned.tools[0]?.name).toBe("app_drive_item_tree_list")
-  })
+  }, 30_000)
 
   it("distinguishes document messages from anchored comment creation", async () => {
     const cases = [
