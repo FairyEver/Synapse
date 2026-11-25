@@ -94,6 +94,17 @@
       },
       "default": "./dist/cloud-table-contracts.js"
     },
+    "./channel-contracts": {
+      "import": {
+        "types": "./dist/channel-contracts.d.ts",
+        "default": "./dist/channel-contracts.js"
+      },
+      "require": {
+        "types": "./dist/channel-contracts.d.cts",
+        "default": "./dist/channel-contracts.cjs"
+      },
+      "default": "./dist/channel-contracts.js"
+    },
     "./skill-hub-contracts": {
       "import": {
         "types": "./dist/skill-hub-contracts.d.ts",
