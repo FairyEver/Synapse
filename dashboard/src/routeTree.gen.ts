@@ -23,6 +23,7 @@ import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedSkillHubIndexRouteImport } from './routes/_authenticated/skill-hub/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
+import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as NotificationsNotificationIdOpenRouteImport } from './routes/notifications/$notificationId/open'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as AuthenticatedSkillHubSkillIdRouteImport } from './routes/_authenticated/skill-hub/$skillId'
@@ -107,6 +108,12 @@ const AuthenticatedMyDevicesIndexRoute =
     path: '/my-devices/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedChannelsIndexRoute =
+  AuthenticatedChannelsIndexRouteImport.update({
+    id: '/channels/',
+    path: '/channels/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const NotificationsNotificationIdOpenRoute =
   NotificationsNotificationIdOpenRouteImport.update({
     id: '/notifications/$notificationId/open',
@@ -162,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
+  '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
@@ -183,6 +191,7 @@ export interface FileRoutesByTo {
   '/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
+  '/channels': typeof AuthenticatedChannelsIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-hub': typeof AuthenticatedSkillHubIndexRoute
@@ -207,6 +216,7 @@ export interface FileRoutesById {
   '/_authenticated/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
+  '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
@@ -231,6 +241,7 @@ export interface FileRouteTypes {
     | '/skill-hub/$skillId'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
+    | '/channels/'
     | '/my-devices/'
     | '/settings/'
     | '/skill-hub/'
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | '/skill-hub/$skillId'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
+    | '/channels'
     | '/my-devices'
     | '/settings'
     | '/skill-hub'
@@ -275,6 +287,7 @@ export interface FileRouteTypes {
     | '/_authenticated/skill-hub/$skillId'
     | '/_authenticated/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
+    | '/_authenticated/channels/'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-hub/'
@@ -397,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyDevicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/channels/': {
+      id: '/_authenticated/channels/'
+      path: '/channels'
+      fullPath: '/channels/'
+      preLoaderRoute: typeof AuthenticatedChannelsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/notifications/$notificationId/open': {
       id: '/notifications/$notificationId/open'
       path: '/notifications/$notificationId/open'
@@ -470,6 +490,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedSkillHubSkillIdRoute: typeof AuthenticatedSkillHubSkillIdRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
+  AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSkillHubIndexRoute: typeof AuthenticatedSkillHubIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
@@ -483,6 +504,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedSkillHubSkillIdRoute: AuthenticatedSkillHubSkillIdRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
+  AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSkillHubIndexRoute: AuthenticatedSkillHubIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,

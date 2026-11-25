@@ -1,5 +1,6 @@
 import { TextField } from '@heroui/react';
 import { CloudKeyResourcesDialog } from '@/features/cloud-tables/cloud-key-resources';
+import { ChannelKeyResourcesDialog } from '@/features/channels/channel-key-resources';
 import { useReturnFocus } from '@/hooks/use-return-focus';
 import { Link as HeroLink } from '@heroui/react';
 import { Button, Card, Checkbox, Chip, Input, Label, Modal, Separator, Skeleton, toast } from '@heroui/react';
@@ -15,6 +16,7 @@ import { RelativeTime } from '@/components/relative-time';
 const apiKeysQueryKey = ['dashboard-api-keys'] as const;
 export function ApiKeysSettings() {
     const [resourceTarget, setResourceTarget] = useState<DashboardApiKey | null>(null);
+    const [channelResourceTarget, setChannelResourceTarget] = useState<DashboardApiKey | null>(null);
     const queryClient = useQueryClient();
     const createTriggerRef = useRef<HTMLButtonElement>(null);
     const renameTriggerRef = useRef<HTMLButtonElement>(null);
@@ -150,6 +152,7 @@ export function ApiKeysSettings() {
     }
     return (<section className='flex flex-1 flex-col'>
       {resourceTarget && <CloudKeyResourcesDialog key={resourceTarget.id} apiKey={resourceTarget} onClose={() => setResourceTarget(null)} />}
+      {channelResourceTarget && <ChannelKeyResourcesDialog key={channelResourceTarget.id} apiKey={channelResourceTarget} onClose={() => setChannelResourceTarget(null)} />}
       <div className='flex flex-none items-center justify-between gap-3'>
         <h3 className='text-lg font-medium'>API 密钥</h3>
         <Button ref={createTriggerRef} onPress={() => setCreateOpen(true)}>
@@ -184,6 +187,7 @@ export function ApiKeysSettings() {
                     </div>
                     <div className='flex flex-wrap items-center gap-1 sm:justify-end'>
                       {apiKey.scopes.some(scope => scope.startsWith('tables.')) && <Button variant='ghost' onPress={() => setResourceTarget(apiKey)}>表资源</Button>}
+                      {apiKey.scopes.some(scope => scope.startsWith('channels.')) && <Button variant='ghost' onPress={() => setChannelResourceTarget(apiKey)}>频道资源</Button>}
                       <Button variant="ghost" onPress={(event) => {
                     renameTriggerRef.current = event.target.closest('button');
                     openRenameDialog(apiKey);

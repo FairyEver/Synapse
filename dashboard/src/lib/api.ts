@@ -385,6 +385,7 @@ export type DashboardMe = {
 
 export type DashboardApiKey = {
   tableResources?: import('@synapse/shared').CloudKeyResources
+  channelResources?: import('@synapse/shared/channel-contracts').ChannelKeyResources
   id: string
   name: string
   prefix: string
