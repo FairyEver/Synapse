@@ -308,7 +308,7 @@ export function buildSynapseToolCatalog(): readonly SynapseToolCatalogEntry[] {
 export async function searchSynapseTools(input: SynapseToolSearchInput): Promise<SynapseToolSearchResult> {
   const query = (input.query ?? "").trim()
   const domain = input.domain?.trim() || (
-    /频道|\bchannels?\b/iu.test(query)
+    /频道|\bchannels?\b/iu.test(query) && !/云盘|网盘|云文档|\bdrive\b/iu.test(query)
       ? "channels"
       : /云端数据表|云表|\bcloud[ _-]+tables?\b/iu.test(query)
         ? "cloud_tables"

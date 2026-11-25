@@ -65,7 +65,7 @@ export const channelOperations = {
     "GET",
     "/publish-preflight",
     "频道发布前检查",
-    "Before creating a channel or publishing connected webpages (频道、大屏+手机遥控器、网页实时控制后端), check the signed-in account, configured public base URL, audience (local_only vs external_verification_required), and channel capabilities. Does not create or mutate resources.",
+    "Before creating a channel or publishing connected webpages (频道、大屏+手机遥控器、网页实时控制后端), check the signed-in account, configured public base URL, audience (local_only, public, or environment_mismatch), and channel capabilities. Does not create or mutate resources.",
   ),
   "app.channels.channel.list": operation(
     "GET",

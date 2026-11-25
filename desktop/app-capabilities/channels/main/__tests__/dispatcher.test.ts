@@ -62,7 +62,7 @@ describe("channels MCP capability", () => {
       accountId: "signed-in",
       publicAppUrl: origin,
       audience: "local_only",
-      capabilities: { websocket: true, httpPublish: true, retain: true, presence: true },
+      capabilities: { channels: true, websocket: true, retain: true, presence: true },
     }
     f.account.fetchAuthenticated.mockResolvedValueOnce(Response.json(payload))
     expect(await f.dispatch("app.channels.publish_preflight.get", {}, caller)).toEqual({ ok: true, data: payload })

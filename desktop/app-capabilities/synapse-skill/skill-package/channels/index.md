@@ -11,7 +11,7 @@ Use this guide for **频道（Channels）** — lightweight realtime WebSocket +
 - Management operations through MCP use the currently signed-in Synapse desktop account. Never ask the user for a personal API key to run MCP tools.
 - Discover with `search({ domain: "channels" })`, then search for the exact tool name before calling `invoke`.
 - If the tool returns `CHANNEL_ACCOUNT_REQUIRED`, ask the user to sign into Synapse Desktop and check its connection. If the tool returns `CHANNEL_ACCOUNT_CHANGED`, stop and rediscover targets under the new identity.
-- Runtime external clients connect to `/api/open/v1/channels/{channelId}/ws` (WebSocket) or `/api/open/v1/channels/{channelId}/events` (HTTP POST) using **channel tokens (`syc_...`)** or personal `UserApiKey` with channel scopes. Runtime endpoints **ignore Synapse login cookies and reject URL query tokens** (`?token=...` returns HTTP `400`).
+- Runtime external clients connect to `/api/open/v1/channels/{channelId}/ws` (WebSocket) or `/api/open/v1/channels/{channelId}/events` (HTTP POST) using **channel tokens (`syc_...`)** or personal `UserApiKey` with channel scopes. Runtime endpoints **ignore Synapse login cookies and never accept URL query tokens** (WebSocket `?token=...` returns HTTP `400`; Open HTTP endpoints ignore query tokens/cookies and require `Authorization: Bearer`, returning HTTP `401` when missing).
 - Browser WebSocket clients must authenticate via the **first WebSocket frame** (`{"type":"auth","token":"syc_..."}`) within 5 seconds. Node.js / Python / Go services may use either the `Authorization: Bearer <token>` Upgrade header or the first-frame `auth`.
 - Always issue **minimal-privilege** channel tokens per client role:
   - `subscribe`: read-only subscribers (e.g., big screen display page).
@@ -23,7 +23,7 @@ Use this guide for **频道（Channels）** — lightweight realtime WebSocket +
 
 | 工具名 | 用途 |
 |---|---|
-| `app_channels_publish_preflight_get` | 检查当前桌面登录账号、公网地址（`local_only` / `external_verification_required` / `environment_mismatch`）与频道能力 |
+| `app_channels_publish_preflight_get` | 检查当前桌面登录账号、公网地址（`local_only` / `public` / `environment_mismatch`）与频道能力 |
 | `app_channels_channel_list` | 列出本人名下的频道（含 `onlineCount` 与 `tokenCount`） |
 | `app_channels_channel_get` | 读取单个频道详情 |
 | `app_channels_channel_create` | 创建新频道，返回 `id` |

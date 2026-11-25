@@ -11,8 +11,8 @@
 | `audience` | 处理方式 |
 |---|---|
 | `local_only` | 当前环境仅限本机访问，生成的网页链接与 `ws://` 地址不能给手机外网使用；需向用户如实说明。 |
-| `external_verification_required` | 已配置公网 HTTPS 地址，WebSocket 使用 `wss://<origin>/api/open/v1/channels/{channelId}/ws`。 |
-| `unconfigured` / `https_required` / `environment_mismatch` | 先向用户说明地址问题并停下，不继续建频道或发布网页。 |
+| `public` | 已配置公网地址；确认 `publicAppUrl` 为 `https://` 后使用 `wss://<origin>/api/open/v1/channels/{channelId}/ws`（若非 HTTPS 需先提醒用户并停下）。 |
+| `environment_mismatch` | 桌面端配置地址与当前登录服务端公网地址不一致，先向用户说明地址问题并停下，不继续建频道或发布网页。 |
 
 ## 2. 场景 A：大屏展示页 + 手机遥控器
 
@@ -38,7 +38,7 @@
    - 自有后端服务：`role: "pubsub"`（接收指令并定向回传结果）。
    - 手机控制网页：`role: "pubsub"`（发送指令并接收后端回传结果；若只发不看回执则用 `"publish"`）。
 2. **自有后端主动外连 Synapse（无需暴露公网端口）**：
-   - 使用 `ws` 连接 `wss://<publicOrigin>/api/open/v1/channels/<channelId>/ws`，在 Upgrade Header 传 `Authorization: Bearer <SY_CHANNEL_TOKEN>`（或首帧 `auth` 携带 `clientId: "worker-1"`）。
+   - 使用 `ws` 连接 `wss://<publicOrigin>/api/open/v1/channels/<channelId>/ws`。如果手机网页需要按固定 `targetClientId: "worker-1"` 定向投递，后端应在连接建立后通过首帧 `auth` 认证并显式传入 `"clientId": "worker-1"`（使用 Upgrade Header `Authorization: Bearer <SY_CHANNEL_TOKEN>` 认证时，服务端会分配随机 `clientId`，此时手机端需通过 Presence 发现后端的 `clientId`）。
    - 收到 `type === "event"` 且 `event === "command.run"` 时执行对应本地操作，并通过 `targetClientId: msg.sender.clientId` 定向回传 `command.result`（**不要**对定向回复设置 `retain: true`）。
 3. **手机网页**：
    - 首帧 `auth` 指定唯一 `clientId`（例如 `phone-xxxx`），点击按钮时发送 `event: "command.run"` 并指定 `targetClientId: "worker-1"`，监听 `command.result` 渲染结果。

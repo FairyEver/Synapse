@@ -272,6 +272,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["插入", "upsert"],
   ["删除", "delete"],
   ["清空", "clear"],
+  ["清除", "clear"],
   ["准备", "prepare"],
   ["清空已发送", "delete"],
   ["清空已发送", "all"],

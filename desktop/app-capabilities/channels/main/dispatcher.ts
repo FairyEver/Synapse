@@ -125,7 +125,15 @@ export function createChannelCapabilityDispatcher({ account, permissionGuard, au
           const preflight = data as { accountId?: unknown; publicAppUrl?: unknown; audience?: unknown }
           if (preflight.accountId !== scope.accountId) throw new Error("Unexpected preflight account")
           const desktopOrigin = new URL(SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl).origin
-          if (typeof preflight.publicAppUrl === "string" && preflight.publicAppUrl !== desktopOrigin) {
+          let preflightOrigin = typeof preflight.publicAppUrl === "string" ? preflight.publicAppUrl : null
+          if (preflightOrigin) {
+            try {
+              preflightOrigin = new URL(preflightOrigin).origin
+            } catch {
+              // Keep raw string so malformed server URLs trigger environment_mismatch.
+            }
+          }
+          if (preflightOrigin && preflightOrigin !== desktopOrigin) {
             audit("allowed")
             return {
               ok: true,
