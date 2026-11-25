@@ -1,6 +1,8 @@
 import { TextField } from '@heroui/react';
 import { CloudKeyResourcesDialog } from '@/features/cloud-tables/cloud-key-resources';
 import { ChannelKeyResourcesDialog } from '@/features/channels/channel-key-resources';
+import { StateSyncKeyResourcesDialog, StateSyncKeyResourcesField } from '@/features/state-sync/state-sync-key-resources';
+import type { StateSyncKeyResources } from '@synapse/shared/state-sync-contracts';
 import { useReturnFocus } from '@/hooks/use-return-focus';
 import { Link as HeroLink } from '@heroui/react';
 import { Button, Card, Checkbox, Chip, Input, Label, Modal, Separator, Skeleton, toast } from '@heroui/react';
@@ -17,6 +19,7 @@ const apiKeysQueryKey = ['dashboard-api-keys'] as const;
 export function ApiKeysSettings() {
     const [resourceTarget, setResourceTarget] = useState<DashboardApiKey | null>(null);
     const [channelResourceTarget, setChannelResourceTarget] = useState<DashboardApiKey | null>(null);
+    const [stateSyncResourceTarget, setStateSyncResourceTarget] = useState<DashboardApiKey | null>(null);
     const queryClient = useQueryClient();
     const createTriggerRef = useRef<HTMLButtonElement>(null);
     const renameTriggerRef = useRef<HTMLButtonElement>(null);
@@ -26,6 +29,7 @@ export function ApiKeysSettings() {
     const [createOpen, setCreateOpen] = useState(false);
     const [name, setName] = useState('');
     const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+    const [createStateSyncResources, setCreateStateSyncResources] = useState<StateSyncKeyResources>({ mode: 'selected', spaceIds: [] });
     const [created, setCreated] = useState<DashboardApiKeyCreateResult | null>(null);
     const [renameTarget, setRenameTarget] = useState<DashboardApiKey | null>(null);
     const [renameName, setRenameName] = useState('');
@@ -50,6 +54,7 @@ export function ApiKeysSettings() {
         mutationFn: (input: {
             name: string;
             scopes: string[];
+            stateSyncResources?: StateSyncKeyResources;
         }) => dashboardApi.createApiKey(input),
         onSuccess: (result) => {
             queryClient.setQueryData<DashboardApiKey[]>(apiKeysQueryKey, (current = []) => [
@@ -95,17 +100,30 @@ export function ApiKeysSettings() {
         },
         onError: (mutationError: Error) => toast.danger(mutationError.message),
     });
+    const hasCreateStateSyncScope = selectedScopes.some((scope) => scope.startsWith('state_sync.'));
     function submitCreate(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const trimmedName = name.trim();
         if (!trimmedName || selectedScopes.length === 0)
             return;
+        if (hasCreateStateSyncScope) {
+            createApiKey.mutate({
+                name: trimmedName,
+                scopes: selectedScopes,
+                stateSyncResources: {
+                    mode: createStateSyncResources.mode,
+                    spaceIds: createStateSyncResources.mode === 'all_owned' ? [] : createStateSyncResources.spaceIds,
+                },
+            });
+            return;
+        }
         createApiKey.mutate({ name: trimmedName, scopes: selectedScopes });
     }
     function closeCreateDialog() {
         setCreateOpen(false);
         setName('');
         setSelectedScopes([]);
+        setCreateStateSyncResources({ mode: 'selected', spaceIds: [] });
     }
     function toggleScope(scope: string, checked: boolean) {
         setSelectedScopes((current) => toggleScopeValue(current, scope, checked));
@@ -153,6 +171,7 @@ export function ApiKeysSettings() {
     return (<section className='flex flex-1 flex-col'>
       {resourceTarget && <CloudKeyResourcesDialog key={resourceTarget.id} apiKey={resourceTarget} onClose={() => setResourceTarget(null)} />}
       {channelResourceTarget && <ChannelKeyResourcesDialog key={channelResourceTarget.id} apiKey={channelResourceTarget} onClose={() => setChannelResourceTarget(null)} />}
+      {stateSyncResourceTarget && <StateSyncKeyResourcesDialog key={stateSyncResourceTarget.id} apiKey={stateSyncResourceTarget} onClose={() => setStateSyncResourceTarget(null)} />}
       <div className='flex flex-none items-center justify-between gap-3'>
         <h3 className='text-lg font-medium'>API 密钥</h3>
         <Button ref={createTriggerRef} onPress={() => setCreateOpen(true)}>
@@ -188,6 +207,7 @@ export function ApiKeysSettings() {
                     <div className='flex flex-wrap items-center gap-1 sm:justify-end'>
                       {apiKey.scopes.some(scope => scope.startsWith('tables.')) && <Button variant='ghost' onPress={() => setResourceTarget(apiKey)}>表资源</Button>}
                       {apiKey.scopes.some(scope => scope.startsWith('channels.')) && <Button variant='ghost' onPress={() => setChannelResourceTarget(apiKey)}>频道资源</Button>}
+                      {apiKey.scopes.some(scope => scope.startsWith('state_sync.')) && <Button variant='ghost' onPress={() => setStateSyncResourceTarget(apiKey)}>同步空间资源</Button>}
                       <Button variant="ghost" onPress={(event) => {
                     renameTriggerRef.current = event.target.closest('button');
                     openRenameDialog(apiKey);
@@ -258,6 +278,7 @@ export function ApiKeysSettings() {
                 <Input variant="secondary" id='api-key-name' value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoFocus></Input>
               </TextField>
               <ApiKeyPermissionSelector idPrefix='api-key-create' capabilities={capabilities} selectedScopes={selectedScopes} onToggle={toggleScope} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={createApiKey.isPending}/>
+              {hasCreateStateSyncScope && <StateSyncKeyResourcesField value={createStateSyncResources} onChange={setCreateStateSyncResources} disabled={createApiKey.isPending}/>}
             </Modal.Body>
             <Modal.Footer>
               <Button type='button' variant="outline" onPress={closeCreateDialog}>

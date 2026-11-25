@@ -20,6 +20,7 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
 import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
+import { Route as AuthenticatedStateSyncIndexRouteImport } from './routes/_authenticated/state-sync/index'
 import { Route as AuthenticatedSkillHubIndexRouteImport } from './routes/_authenticated/skill-hub/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
@@ -88,6 +89,12 @@ const AuthenticatedTablesIndexRoute =
   AuthenticatedTablesIndexRouteImport.update({
     id: '/tables/',
     path: '/tables/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedStateSyncIndexRoute =
+  AuthenticatedStateSyncIndexRouteImport.update({
+    id: '/state-sync/',
+    path: '/state-sync/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSkillHubIndexRoute =
@@ -173,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
+  '/state-sync/': typeof AuthenticatedStateSyncIndexRoute
   '/tables/': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
@@ -195,6 +203,7 @@ export interface FileRoutesByTo {
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-hub': typeof AuthenticatedSkillHubIndexRoute
+  '/state-sync': typeof AuthenticatedStateSyncIndexRoute
   '/tables': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
@@ -220,6 +229,7 @@ export interface FileRoutesById {
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
+  '/_authenticated/state-sync/': typeof AuthenticatedStateSyncIndexRoute
   '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/my-devices/'
     | '/settings/'
     | '/skill-hub/'
+    | '/state-sync/'
     | '/tables/'
     | '/webhook-deliveries/'
     | '/webhooks/'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/my-devices'
     | '/settings'
     | '/skill-hub'
+    | '/state-sync'
     | '/tables'
     | '/webhook-deliveries'
     | '/webhooks'
@@ -291,6 +303,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-hub/'
+    | '/_authenticated/state-sync/'
     | '/_authenticated/tables/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
@@ -387,6 +400,13 @@ declare module '@tanstack/react-router' {
       path: '/tables'
       fullPath: '/tables/'
       preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/state-sync/': {
+      id: '/_authenticated/state-sync/'
+      path: '/state-sync'
+      fullPath: '/state-sync/'
+      preLoaderRoute: typeof AuthenticatedStateSyncIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/skill-hub/': {
@@ -493,6 +513,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSkillHubIndexRoute: typeof AuthenticatedSkillHubIndexRoute
+  AuthenticatedStateSyncIndexRoute: typeof AuthenticatedStateSyncIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
@@ -507,6 +528,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSkillHubIndexRoute: AuthenticatedSkillHubIndexRoute,
+  AuthenticatedStateSyncIndexRoute: AuthenticatedStateSyncIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,

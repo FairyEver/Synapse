@@ -386,6 +386,7 @@ export type DashboardMe = {
 export type DashboardApiKey = {
   tableResources?: import('@synapse/shared').CloudKeyResources
   channelResources?: import('@synapse/shared/channel-contracts').ChannelKeyResources
+  stateSyncResources?: import('@synapse/shared/state-sync-contracts').StateSyncKeyResources
   id: string
   name: string
   prefix: string
@@ -951,7 +952,11 @@ export const dashboardApi = {
     request<DashboardApiKey[]>(`${consoleApiBasePath}/api-keys`),
   listApiKeyCapabilities: () =>
     request<DashboardApiKeyCapability[]>(`${consoleApiBasePath}/api-key-capabilities`),
-  createApiKey: (input: { name: string; scopes: string[] }) =>
+  createApiKey: (input: {
+    name: string
+    scopes: string[]
+    stateSyncResources?: import('@synapse/shared/state-sync-contracts').StateSyncKeyResources
+  }) =>
     request<DashboardApiKeyCreateResult>(`${consoleApiBasePath}/api-keys`, {
       method: 'POST',
       body: JSON.stringify(input),
