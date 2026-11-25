@@ -341,3 +341,28 @@ it("discovers the team, upload and receipt operations in the Skill Hub domain", 
   }
   expect(buildSynapseToolRouterTools().map((tool) => tool.name)).toEqual(["search", "invoke"])
 })
+
+it("discovers channel tools for remote-screen, web-to-backend, and channel creation intents", async () => {
+  const index = indexOf(await searchSynapseTools({ domain: "channels" }))
+  expect(index.total).toBe(12)
+  expect(isSynapseToolReadOnly("app_channels_channel_create")).toBe(false)
+  expect(isSynapseToolReadOnly("app_channels_state_get")).toBe(true)
+
+  const remoteScreen = searchMatches(await searchSynapseTools({ query: "做个大屏和手机遥控器", limit: 5 }))
+  expect(remoteScreen.tools.map((t) => t.name)).toEqual([
+    "app_channels_publish_preflight_get",
+    "app_channels_channel_create",
+    "app_channels_token_create",
+    "app_drive_folder_upload",
+    "app_drive_site_create",
+  ])
+  expect(remoteScreen.guidance).toContain("channels/remote-screen.md")
+
+  const webControl = searchMatches(await searchSynapseTools({ query: "网页实时控制后端", limit: 5 }))
+  expect(webControl.tools.map((t) => t.name)).toContain("app_channels_channel_create")
+  expect(webControl.tools.map((t) => t.name)).toContain("app_channels_token_create")
+
+  const channelCreate = searchMatches(await searchSynapseTools({ query: "创建频道", limit: 5 }))
+  expect(channelCreate.tools.map((t) => t.name)).toContain("app_channels_channel_create")
+  expect(channelCreate.tools.map((t) => t.name)).toContain("app_channels_event_publish")
+})

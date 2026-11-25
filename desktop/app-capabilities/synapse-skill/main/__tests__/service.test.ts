@@ -242,6 +242,8 @@ describe("SynapseSkillService", () => {
     expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("cloud-tables/public-apps.md")
+    expect(detail.content).toContain("channels/index.md")
+    expect(detail.content).toContain("channels/remote-screen.md")
     expect(detail.content).toContain("workflow/index.md")
     expect(detail.content).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
     expect(source.description).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
@@ -260,6 +262,8 @@ describe("SynapseSkillService", () => {
     expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toEqual([])
     expect(attachmentNames).toEqual(expect.arrayContaining([
       "app/api-reference.md",
+      "channels/index.md",
+      "channels/remote-screen.md",
       "cloud-tables/public-apps.md",
       "cloud-tables/public-signup.html",
       "database/index.md",

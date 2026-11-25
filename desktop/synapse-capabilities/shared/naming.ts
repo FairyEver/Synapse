@@ -60,6 +60,8 @@ const CAPABILITY_ACTIONS = [
   "open",
   "preview",
   "republish",
+  "publish",
+  "revoke",
   "resolve",
   "read_text",
   "update_access",

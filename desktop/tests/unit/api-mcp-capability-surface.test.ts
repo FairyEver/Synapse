@@ -120,10 +120,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(370)
+    expect(allCapabilityIds()).toHaveLength(382)
     expect(APP_DOMAIN.capabilities).toHaveLength(98)
     expect(buildAppTools()).toHaveLength(94)
-    expect(toolNames).toHaveLength(366)
+    expect(toolNames).toHaveLength(378)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual([])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -135,8 +135,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(366)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(366)
+    expect(buildAllMcpTools()).toHaveLength(378)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(378)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -188,6 +188,7 @@ describe("API and MCP capability surface", () => {
       todos: vi.fn(async () => ({ ok: true as const })),
       skill_hub: vi.fn(async () => ({ ok: true as const })),
       cloud_tables: vi.fn(async () => ({ ok: true as const })),
+      channels: vi.fn(async () => ({ ok: true as const })),
       model_price: vi.fn(async () => ({ ok: true as const })),
       repository: vi.fn(async () => ({ ok: true as const })),
       workflow: vi.fn(async () => ({ ok: true as const })),
@@ -203,6 +204,7 @@ describe("API and MCP capability surface", () => {
       todosDispatch: dispatchers.todos,
       skillHubDispatch: dispatchers.skill_hub,
       cloudTablesDispatch: dispatchers.cloud_tables,
+      channelsDispatch: dispatchers.channels,
       modelPriceDispatch: dispatchers.model_price,
       repositoryDispatch: dispatchers.repository,
       workflowDispatch: dispatchers.workflow,
@@ -264,7 +266,7 @@ describe("API and MCP capability surface", () => {
       && !file.path.startsWith("skill-authoring/")
     ))
 
-    expect(routingDocs).toHaveLength(32)
+    expect(routingDocs).toHaveLength(33)
     for (const doc of routingDocs) {
       expect(doc.content, doc.path).toContain("Reaching Synapse tools")
       expect(doc.content, doc.path).toContain("publishes only two tools")
