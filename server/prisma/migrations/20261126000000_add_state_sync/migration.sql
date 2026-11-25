@@ -1,10 +1,10 @@
 -- AlterTable
 ALTER TABLE "UserApiKey"
-ADD COLUMN "stateSyncAccessMode" VARCHAR(16) DEFAULT 'selected',
-ADD COLUMN "stateSyncSpaceIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
+ADD COLUMN IF NOT EXISTS "stateSyncAccessMode" VARCHAR(16) DEFAULT 'selected',
+ADD COLUMN IF NOT EXISTS "stateSyncSpaceIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 
 -- CreateTable
-CREATE TABLE "StateSyncSpace" (
+CREATE TABLE IF NOT EXISTS "StateSyncSpace" (
     "id" TEXT NOT NULL,
     "ownerId" TEXT NOT NULL,
     "name" VARCHAR(100) NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE "StateSyncSpace" (
 );
 
 -- CreateTable
-CREATE TABLE "StateSyncToken" (
+CREATE TABLE IF NOT EXISTS "StateSyncToken" (
     "id" TEXT NOT NULL,
     "spaceId" TEXT NOT NULL,
     "name" VARCHAR(80) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE "StateSyncToken" (
 );
 
 -- CreateTable
-CREATE TABLE "StateSyncDoc" (
+CREATE TABLE IF NOT EXISTS "StateSyncDoc" (
     "id" TEXT NOT NULL,
     "spaceId" TEXT NOT NULL,
     "data" JSONB NOT NULL DEFAULT '{}',
@@ -51,13 +51,13 @@ CREATE TABLE "StateSyncDoc" (
 );
 
 -- CreateIndex
-CREATE INDEX "StateSyncSpace_ownerId_createdAt_idx" ON "StateSyncSpace"("ownerId", "createdAt");
+CREATE INDEX IF NOT EXISTS "StateSyncSpace_ownerId_createdAt_idx" ON "StateSyncSpace"("ownerId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "StateSyncToken_spaceId_revokedAt_createdAt_idx" ON "StateSyncToken"("spaceId", "revokedAt", "createdAt");
+CREATE INDEX IF NOT EXISTS "StateSyncToken_spaceId_revokedAt_createdAt_idx" ON "StateSyncToken"("spaceId", "revokedAt", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "StateSyncDoc_spaceId_updatedAt_idx" ON "StateSyncDoc"("spaceId", "updatedAt");
+CREATE INDEX IF NOT EXISTS "StateSyncDoc_spaceId_updatedAt_idx" ON "StateSyncDoc"("spaceId", "updatedAt");
 
 -- CreateIndex
-CREATE INDEX "StateSyncDoc_expiresAt_idx" ON "StateSyncDoc"("expiresAt");
+CREATE INDEX IF NOT EXISTS "StateSyncDoc_expiresAt_idx" ON "StateSyncDoc"("expiresAt");
