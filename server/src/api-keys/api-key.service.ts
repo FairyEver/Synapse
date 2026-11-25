@@ -43,8 +43,8 @@ export type OpenApiPrincipal = {
   readonly userId: string
   readonly apiKeyId: string
   readonly scopes: readonly string[]
-  readonly channelAccessMode: ChannelKeyResources["mode"]
-  readonly channelIds: readonly string[]
+  readonly channelAccessMode?: ChannelKeyResources["mode"]
+  readonly channelIds?: readonly string[]
 }
 
 export type UserApiKeyCreateResult = {

@@ -534,7 +534,7 @@ function toPresenceMember(connection: LiveChannelConnection): ChannelPresenceMem
     clientId: connection.clientId,
     clientName: connection.clientName,
     role: connection.role,
-    meta: { ...connection.meta },
+    meta: { ...connection.meta } as ChannelPresenceMember["meta"],
     connectedAt: connection.connectedAt,
   }
 }

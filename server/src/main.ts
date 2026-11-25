@@ -1,5 +1,7 @@
 import "reflect-metadata"
 import { cloudTableCors, registerCloudTableIngress, registerCloudTableBodyErrors } from "./cloud-tables/cloud-table-http"
+import { channelCors, registerChannelBodyErrors, registerChannelIngress } from "./channels/channel-http"
+import { ChannelGateway } from "./channels/channel.gateway"
 import { NestFactory } from "@nestjs/core"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import cookieParser from "cookie-parser"
@@ -23,12 +25,15 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger))
   app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   registerCloudTableIngress(app)
+  registerChannelIngress(app)
   registerHttpBodyParsers(app)
   registerCloudTableBodyErrors(app)
+  registerChannelBodyErrors(app)
   app.use(cookieParser())
   app.use(createHttpSecurityMiddleware(process.env.NODE_ENV === "production"))
   app.enableCors((request, callback) => {
-    callback(null, cloudTableCors(request.originalUrl ?? request.url ?? "") ?? (isProblemFeedbackPublicPath(request.originalUrl ?? request.url ?? "")
+    const requestUrl = request.originalUrl ?? request.url ?? ""
+    callback(null, cloudTableCors(requestUrl) ?? channelCors(requestUrl) ?? (isProblemFeedbackPublicPath(requestUrl)
       ? { origin: false, preflightContinue: true }
       : {
           origin: process.env.NODE_ENV === "production" ? false : true,
@@ -40,6 +45,7 @@ async function bootstrap(): Promise<void> {
   registerLiveShutdownSignalHandlers(liveDesktopGateway)
   liveDesktopGateway.attach(app.getHttpServer())
   app.get(DriveCollaborationGateway).attach(app.getHttpServer())
+  app.get(ChannelGateway).attach(app.getHttpServer())
   // Phones connect over their own path; the three gateways share one upgrade
   // event and each claims its own pathname.
   if (env.mobileLiveEnabled) {

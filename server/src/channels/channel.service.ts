@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy, OnModuleInit, Optional } from "@nestjs/common"
+import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import {
@@ -115,7 +115,7 @@ function parseBody<T>(schema: { safeParse(v: unknown): { success: true; data: T 
 }
 
 @Injectable()
-export class ChannelService implements OnModuleInit, OnDestroy {
+export class ChannelService implements OnModuleInit, OnModuleDestroy {
   private unsubscribeNotifier: (() => void) | null = null
   private readonly tokenLastUsedCache = new Map<string, number>()
   private readonly retainLocks = new Map<string, Promise<unknown>>()
@@ -168,8 +168,8 @@ export class ChannelService implements OnModuleInit, OnDestroy {
       userId: principal.userId,
       apiKeyId: principal.apiKeyId,
       scopes: principal.scopes,
-      channelAccessMode: principal.channelAccessMode,
-      channelIds: principal.channelIds,
+      channelAccessMode: principal.channelAccessMode ?? "selected",
+      channelIds: principal.channelIds ?? [],
     }
   }
 

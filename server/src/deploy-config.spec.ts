@@ -741,6 +741,31 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_set_header Connection $connection_upgrade")
     expect(nginx).toContain("map $http_upgrade $connection_upgrade")
   })
+
+  it("routes channel WebSocket upgrades with long timeouts and suppresses access logs on channel HTTP/WS routes", () => {
+    const nginx = readFileSync(join(repositoryRoot, "server/nginx.conf"), "utf8")
+    const wsMarker = "location ~* ^/api/open/v1/channels/[^/]+/ws/?$ {"
+    const httpMarker = "location ~* ^/api/(?:open/v1|console)/channels(?:/|$) {"
+    const wsIndex = nginx.indexOf(wsMarker)
+    const httpIndex = nginx.indexOf(httpMarker)
+
+    expect(wsIndex).toBeGreaterThan(-1)
+    expect(httpIndex).toBeGreaterThan(wsIndex)
+
+    const wsBlock = nginx.slice(wsIndex).split("}")[0] ?? ""
+    expect(wsBlock).toContain("access_log off;")
+    expect(wsBlock).toContain("proxy_set_header Upgrade $http_upgrade;")
+    expect(wsBlock).toContain("proxy_set_header Connection $connection_upgrade;")
+    expect(wsBlock).toContain("proxy_read_timeout 3600s;")
+    expect(wsBlock).toContain("proxy_send_timeout 3600s;")
+    expect(wsBlock).toContain("proxy_buffering off;")
+
+    const httpBlock = nginx.slice(httpIndex).split("}")[0] ?? ""
+    expect(httpBlock).toContain("access_log off;")
+    expect(httpBlock).toContain("client_max_body_size 256k;")
+    expect(httpBlock).toContain('proxy_set_header Upgrade "";')
+    expect(httpBlock).toContain('proxy_set_header Connection "";')
+  })
 })
 
 function extractPgDumpCommands(source: string): string[] {
