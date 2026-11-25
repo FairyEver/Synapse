@@ -1,4 +1,6 @@
 import { CloudTableModule } from "./cloud-tables/cloud-table.module"
+import { ChannelModule } from "./channels/channel.module"
+import { channelLogRequest } from "./channels/channel-http"
 import { CustomAppsModule } from "./custom-apps/custom-apps.module"
 import { cloudTableLogRequest } from "./cloud-tables/cloud-table-log"
 import { TodosModule } from "./todos/todos.module"
@@ -53,6 +55,7 @@ type RequestLogObject = {
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
   return /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/iu.test(pathname)
+    || /^\/api\/(?:open\/v1|console)\/channels(?:\/|$)/iu.test(pathname)
     || pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
     || pathname === "/api/problem-feedback"
@@ -65,6 +68,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
 @Module({
   imports: [
     CloudTableModule,
+    ChannelModule,
     CustomAppsModule,
     ThrottlerModule.forRoot([{ name: "default", ttl: RATE_LIMIT_TTL_MS, limit: DEFAULT_API_RATE_LIMIT_PER_MINUTE }]),
     ScheduleModule.forRoot(),
@@ -82,7 +86,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
         redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
-            return skillHubLogRequest(request) ?? cloudTableLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
+            return skillHubLogRequest(request) ?? cloudTableLogRequest(request) ?? channelLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
           },
         },
         transport: {

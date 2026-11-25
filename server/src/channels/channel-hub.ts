@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import {
   CHANNEL_WS_CLOSE_CODES,
@@ -116,7 +116,7 @@ export class ChannelHub {
   private globalProductionCount = 0
   private readonly config: ChannelLimitsConfig
 
-  constructor(config?: ChannelLimitsConfig) {
+  constructor(@Optional() config?: ChannelLimitsConfig) {
     this.config = config ?? loadChannelConfig()
   }
 
