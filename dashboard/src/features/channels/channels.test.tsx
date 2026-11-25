@@ -324,4 +324,93 @@ describe('Dashboard Channels Console UI', () => {
     await flush()
     expect(clearRetained).toHaveBeenCalledWith('ch_2', 'scene.current')
   })
+
+  it('prunes stale deleted channel IDs when saving ChannelKeyResourcesDialog', async () => {
+    vi.spyOn(channelApi, 'list').mockResolvedValue({
+      data: [{
+        id: 'ch_alive',
+        name: '存活频道',
+        description: '',
+        onlineCount: 0,
+        tokenCount: 0,
+        createdAt: '2026-11-25T08:00:00.000Z',
+        updatedAt: '2026-11-25T08:00:00.000Z',
+      }],
+    })
+    const updateKeyResources = vi.spyOn(channelApi, 'updateKeyResources').mockResolvedValue({
+      channelResources: { mode: 'selected', channelIds: ['ch_alive'] },
+    })
+    const apiKey: DashboardApiKey = {
+      id: 'key_stale',
+      name: '带失效频道的密钥',
+      prefix: 'syn_stale',
+      scopes: ['channels.publish'],
+      channelResources: { mode: 'selected', channelIds: ['ch_deleted_1', 'ch_alive'] },
+      expiresAt: null,
+      lastUsedAt: null,
+      createdAt: '2026-11-25T08:00:00.000Z',
+    }
+
+    await renderNode(<ChannelKeyResourcesDialog apiKey={apiKey} onClose={() => undefined} />)
+    await flush()
+    expect(document.body.textContent).toContain('已自动排除 1 个已删除的失效频道 ID')
+    await act(async () => {
+      const form = document.querySelector('[role="dialog"] form') as HTMLFormElement
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    await flush()
+    expect(updateKeyResources).toHaveBeenCalledWith('key_stale', {
+      mode: 'selected',
+      channelIds: ['ch_alive'],
+    })
+  })
+
+  it('aborts opening WebSocket if disconnected while debug-ticket request is still in flight', async () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.spyOn(channelApi, 'list').mockResolvedValue({
+      data: [{
+        id: 'ch_race',
+        name: '竞态测试频道',
+        description: '',
+        onlineCount: 0,
+        tokenCount: 0,
+        createdAt: '2026-11-25T08:00:00.000Z',
+        updatedAt: '2026-11-25T08:00:00.000Z',
+      }],
+    })
+    vi.spyOn(channelApi, 'get').mockResolvedValue({
+      id: 'ch_race',
+      name: '竞态测试频道',
+      description: '',
+      onlineCount: 0,
+      tokenCount: 0,
+      createdAt: '2026-11-25T08:00:00.000Z',
+      updatedAt: '2026-11-25T08:00:00.000Z',
+    })
+    vi.spyOn(channelApi, 'listTokens').mockResolvedValue({ data: [] })
+    vi.spyOn(channelApi, 'getState').mockResolvedValue({
+      channelId: 'ch_race',
+      latestSeq: 0,
+      presence: [],
+      retained: [],
+    })
+    let resolveTicket!: (value: { ticket: string; expiresInSeconds: number }) => void
+    vi.spyOn(channelApi, 'issueDebugTicket').mockImplementation(
+      () => new Promise((resolve) => { resolveTicket = resolve }),
+    )
+
+    await renderNode(<ChannelsPage />)
+    await flush()
+    await act(async () => findButton('竞态测试频道').click())
+    await flush()
+    await act(async () => findButton('连接调试').click())
+    await flush()
+    expect(document.body.textContent).toContain('连接中')
+    await act(async () => findButton('断开连接').click())
+    await flush()
+    await act(async () => resolveTicket({ ticket: 'sydbg_late', expiresInSeconds: 60 }))
+    await flush()
+    expect(FakeWebSocket.instances).toHaveLength(0)
+    expect(document.body.textContent).toContain('未连接')
+  })
 })

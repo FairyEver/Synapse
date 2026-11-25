@@ -24,6 +24,7 @@ const roleLabels: Record<string, string> = {
 
 export function ChannelDebugger({ channelId }: { channelId: string }) {
   const wsRef = useRef<WebSocket | null>(null)
+  const connectAttemptRef = useRef(0)
   const pausedRef = useRef(false)
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
   const [presence, setPresence] = useState<ChannelPresenceMember[]>([])
@@ -40,6 +41,7 @@ export function ChannelDebugger({ channelId }: { channelId: string }) {
   }, [paused])
 
   useEffect(() => () => {
+    connectAttemptRef.current += 1
     wsRef.current?.close(1000, 'debugger unmount')
     wsRef.current = null
   }, [channelId])
@@ -56,9 +58,12 @@ export function ChannelDebugger({ channelId }: { channelId: string }) {
 
   async function connect() {
     if (status !== 'disconnected') return
+    const attemptId = connectAttemptRef.current + 1
+    connectAttemptRef.current = attemptId
     setStatus('connecting')
     try {
       const { ticket } = await channelApi.issueDebugTicket(channelId)
+      if (connectAttemptRef.current !== attemptId) return
       const ws = new WebSocket(buildChannelWsUrl(channelId))
       wsRef.current = ws
 
@@ -133,12 +138,14 @@ export function ChannelDebugger({ channelId }: { channelId: string }) {
         toast.danger('调试台 WebSocket 连接异常')
       }
     } catch (error) {
+      if (connectAttemptRef.current !== attemptId) return
       setStatus('disconnected')
       toast.danger(error instanceof Error ? error.message : '获取调试票据失败')
     }
   }
 
   function disconnect() {
+    connectAttemptRef.current += 1
     wsRef.current?.close(1000, 'manual disconnect')
     wsRef.current = null
     setStatus('disconnected')
@@ -219,6 +226,11 @@ export function ChannelDebugger({ channelId }: { channelId: string }) {
                   <Chip size='sm' variant='soft'>{roleLabels[member.role] ?? member.role}</Chip>
                 </div>
                 <div className='mt-1 truncate font-mono text-xs text-muted'>{member.clientId}</div>
+                {Object.keys(member.meta).length > 0 && (
+                  <div className='mt-1 truncate font-mono text-xs text-muted' title={JSON.stringify(member.meta)}>
+                    {JSON.stringify(member.meta)}
+                  </div>
+                )}
               </div>
             ))}
           </Card.Content>

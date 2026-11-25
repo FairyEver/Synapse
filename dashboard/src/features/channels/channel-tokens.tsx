@@ -29,26 +29,42 @@ export function ChannelTokens({ model, channelId }: { model: ChannelsModel; chan
   const [revealed, setRevealed] = useState<{ name: string; role: ChannelRole; secret: string } | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<ChannelTokenItem | null>(null)
 
-  async function handleCreate() {
-    const trimmed = tokenName.trim()
-    if (!trimmed) return
-    const result = await model.createToken.mutateAsync({ id: channelId, body: { name: trimmed, role: tokenRole } })
+  function closeCreate() {
     setCreateOpen(false)
     setTokenName('')
     setTokenRole('subscribe')
-    setRevealed({ name: result.token.name, role: result.token.role, secret: result.secret })
+  }
+
+  async function handleCreate() {
+    const trimmed = tokenName.trim()
+    if (!trimmed) return
+    try {
+      const result = await model.createToken.mutateAsync({ id: channelId, body: { name: trimmed, role: tokenRole } })
+      closeCreate()
+      setRevealed({ name: result.token.name, role: result.token.role, secret: result.secret })
+    } catch {
+      // Error toast is already surfaced by useChannels mutation onError.
+    }
   }
 
   async function handleRevoke() {
     if (!revokeTarget) return
-    await model.revokeToken.mutateAsync({ id: channelId, tokenId: revokeTarget.id })
-    setRevokeTarget(null)
+    try {
+      await model.revokeToken.mutateAsync({ id: channelId, tokenId: revokeTarget.id })
+      setRevokeTarget(null)
+    } catch {
+      // Error toast is already surfaced by useChannels mutation onError.
+    }
   }
 
   async function copySecret() {
     if (!revealed) return
-    await navigator.clipboard.writeText(revealed.secret)
-    toast.success('凭证已复制')
+    try {
+      await navigator.clipboard.writeText(revealed.secret)
+      toast.success('凭证已复制')
+    } catch {
+      toast.danger('复制失败，请手动复制凭证')
+    }
   }
 
   const columns: ColumnDef<ChannelTokenItem>[] = [
@@ -96,7 +112,7 @@ export function ChannelTokens({ model, channelId }: { model: ChannelsModel; chan
           title='签发频道凭证'
           saveLabel='签发'
           pending={model.createToken.isPending}
-          onClose={() => setCreateOpen(false)}
+          onClose={closeCreate}
           onSave={() => void handleCreate()}
         >
           <CloudInput label='凭证名称' value={tokenName} onChange={setTokenName} required />

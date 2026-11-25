@@ -15,8 +15,12 @@ export function ChannelRetained({ model, channelId }: { model: ChannelsModel; ch
 
   async function confirmClear() {
     if (!clearTarget) return
-    await model.clearRetained.mutateAsync({ id: channelId, event: clearTarget.event })
-    setClearTarget(null)
+    try {
+      await model.clearRetained.mutateAsync({ id: channelId, event: clearTarget.event })
+      setClearTarget(null)
+    } catch {
+      // Error toast is already surfaced by useChannels mutation onError.
+    }
   }
 
   const columns: ColumnDef<ChannelRetainedItem>[] = [

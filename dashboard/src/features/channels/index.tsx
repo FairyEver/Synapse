@@ -17,6 +17,15 @@ import { useChannels, type ChannelsModel } from './use-channels'
 
 const noPageChange = () => undefined
 
+async function copyChannelId(id: string) {
+  try {
+    await navigator.clipboard.writeText(id)
+    toast.success('已复制频道 ID')
+  } catch {
+    toast.danger('复制失败，请手动复制')
+  }
+}
+
 export default function ChannelsPage() {
   const session = useAuthStore((s) => s.auth.user?.sessionId ?? 'anonymous')
   return <ChannelsWorkspace key={session} />
@@ -57,12 +66,8 @@ function ChannelsWorkspace() {
                   <div className='flex flex-wrap items-center gap-2 text-sm text-muted'>
                     <span className='font-mono'>{channel.id}</span>
                     <Button
-                      size='sm'
                       variant='ghost'
-                      onPress={() => {
-                        void navigator.clipboard.writeText(channel.id)
-                        toast.success('已复制频道 ID')
-                      }}
+                      onPress={() => void copyChannelId(channel.id)}
                     >
                       <Copy />
                       复制 ID
@@ -129,10 +134,7 @@ function ChannelList({ model: m }: { model: ChannelsModel }) {
             variant='ghost'
             isIconOnly
             aria-label='复制频道 ID'
-            onPress={() => {
-              void navigator.clipboard.writeText(row.original.id)
-              toast.success('已复制频道 ID')
-            }}
+            onPress={() => void copyChannelId(row.original.id)}
           >
             <Copy className='size-3.5' />
           </Button>

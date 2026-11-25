@@ -54,8 +54,12 @@ ws.on("message", (raw) => {
   -d '{"event":"slide.next","payload":{"step":1},"retain":false}'`
 
   async function copy(text: string, label: string) {
-    await navigator.clipboard.writeText(text)
-    toast.success(`已复制${label}`)
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`已复制${label}`)
+    } catch {
+      toast.danger('复制失败，请手动复制')
+    }
   }
 
   return (
@@ -88,7 +92,7 @@ ws.on("message", (raw) => {
         <Card key={block.title} className='shadow-none'>
           <Card.Header className='flex flex-row items-center justify-between gap-2'>
             <Card.Title className='text-base'>{block.title}</Card.Title>
-            <Button size='sm' variant='secondary' onPress={() => void copy(block.code, block.title)}>
+            <Button variant='secondary' onPress={() => void copy(block.code, block.title)}>
               <Copy />
               复制
             </Button>

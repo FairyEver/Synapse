@@ -26,10 +26,20 @@ export function ChannelKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboa
     return items.filter((item) => `${item.name} ${item.id}`.toLowerCase().includes(q))
   }, [channels.data?.data, query])
 
+  const existingIds = useMemo(
+    () => new Set((channels.data?.data ?? []).map((item) => item.id)),
+    [channels.data?.data],
+  )
+  const effectiveSelected = useMemo(
+    () => (channels.data ? selected.filter((id) => existingIds.has(id)) : selected),
+    [channels.data, existingIds, selected],
+  )
+  const staleCount = channels.data ? selected.length - effectiveSelected.length : 0
+
   const mutation = useMutation({
     mutationFn: () => channelApi.updateKeyResources(apiKey.id, {
       mode,
-      channelIds: mode === 'all_owned' ? [] : selected,
+      channelIds: mode === 'all_owned' ? [] : effectiveSelected,
     }),
     onSuccess: () => {
       void cache.invalidateQueries({ queryKey: ['dashboard-api-keys'] })
@@ -52,7 +62,7 @@ export function ChannelKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboa
       saveLabel='保存更改'
       onClose={onClose}
       onSave={() => mutation.mutate()}
-      pending={mutation.isPending}
+      pending={mutation.isPending || (mode === 'selected' && channels.isLoading)}
     >
       <div className='space-y-4'>
         <section className='space-y-3' aria-labelledby='channel-resource-scope-heading'>
@@ -61,6 +71,7 @@ export function ChannelKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboa
             <span className='text-sm text-muted'>当前密钥：{apiKey.name}</span>
           </div>
           <RadioGroup
+            variant='secondary'
             aria-label='频道资源范围'
             value={mode}
             onChange={(value) => setMode(value as ChannelKeyResources['mode'])}
@@ -103,12 +114,17 @@ export function ChannelKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboa
               disabled={mutation.isPending}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {staleCount > 0 && (
+              <p className='text-xs text-muted'>
+                已自动排除 {staleCount} 个已删除的失效频道 ID，保存后生效。
+              </p>
+            )}
             {channels.isLoading ? (
               <p className='text-sm text-muted'>加载中...</p>
             ) : channels.error ? (
               <div className='flex items-center justify-between gap-2 text-sm text-danger'>
                 <span>{channels.error instanceof Error ? channels.error.message : '加载失败'}</span>
-                <Button size='sm' variant='secondary' onPress={() => void channels.refetch()}>重试</Button>
+                <Button variant='secondary' onPress={() => void channels.refetch()}>重试</Button>
               </div>
             ) : visibleChannels.length === 0 ? (
               <p className='text-sm text-muted'>暂无可选频道</p>
