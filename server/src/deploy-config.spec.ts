@@ -823,6 +823,25 @@ describe("server deployment configuration", () => {
       expect(block, marker).toContain('add_header X-Content-Type-Options "nosniff" always;')
     }
   })
+
+  it("builds, copies, syncs, and health-checks the @synapse/sdk static bundle in Docker and deploy.sh", () => {
+    const dockerfile = readRepoFile("server/Dockerfile")
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(dockerfile).toContain("COPY sdk/package.json sdk/package.json")
+    expect(dockerfile).toContain("--filter @synapse/sdk...")
+    expect(dockerfile).toContain("COPY --from=deps /app/sdk/node_modules ./sdk/node_modules")
+    expect(dockerfile).toContain("COPY sdk/ sdk/")
+    expect(dockerfile).toContain("RUN pnpm --filter @synapse/sdk build")
+    expect(dockerfile).toContain("COPY --from=build /app/sdk/dist ./sdk")
+
+    expect(deployScript).toContain("--exclude='sdk/node_modules'")
+    expect(deployScript).toContain("--exclude='sdk/dist'")
+    expect(deployScript).toContain("--include='/sdk/***'")
+    expect(deployScript).toContain(
+      'check_body_contains "sdk manifest" "http://127.0.0.1:3000/sdk/manifest.json" \'"state-sync"\'',
+    )
+  })
 })
 
 function extractPgDumpCommands(source: string): string[] {

@@ -774,6 +774,27 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@25.6.0)(@vitest/browser-playwright@4.1.5)(@vitest/coverage-v8@4.1.5)(jsdom@27.4.0(@noble/hashes@1.8.0)(supports-color@8.1.1))(msw@2.13.4(@types/node@25.6.0)(typescript@6.0.2))(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(less@4.6.4)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
 
+  sdk:
+    devDependencies:
+      '@types/node':
+        specifier: 25.6.0
+        version: 25.6.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(@vitest/browser-playwright@4.1.5)(@vitest/coverage-v8@4.1.5)(jsdom@27.4.0(@noble/hashes@1.8.0)(supports-color@8.1.1))(msw@2.13.4(@types/node@25.6.0)(typescript@6.0.2))(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(less@4.6.4)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
+      ws:
+        specifier: ^8.20.0
+        version: 8.20.0
+
   server:
     dependencies:
       '@nestjs/common':
@@ -8281,6 +8302,7 @@ packages:
   image-size@0.5.5:
     resolution: {integrity: sha512-6TDAlDPZxUFCv+fuOkIoXT/V/f3Qbq8e37p+YOiYrUv3v9cc3/6x78VdfPgFVaB9dZYeLUfKgHRebpkm/oP2VQ==}
     engines: {node: '>=0.10.0'}
+    deprecated: Please migrate to image-size@2.x
     hasBin: true
 
   imapflow@2.9.1:

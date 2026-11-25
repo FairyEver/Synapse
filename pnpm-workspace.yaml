@@ -1,5 +1,6 @@
 packages:
   - shared
+  - sdk
   - ui
   - desktop
   - document

@@ -325,6 +325,8 @@ sync_remote_code() {
     --exclude='dashboard/coverage' \
     --exclude='shared/node_modules' \
     --exclude='shared/dist' \
+    --exclude='sdk/node_modules' \
+    --exclude='sdk/dist' \
     --exclude='document/node_modules' \
     --exclude='document/.vitepress/cache' \
     --exclude='document/.vitepress/dist' \
@@ -336,6 +338,7 @@ sync_remote_code() {
     --include='/server/***' \
     --include='/dashboard/***' \
     --include='/shared/***' \
+    --include='/sdk/***' \
     --include='/document/***' \
     --include='/pdf-renderer/***' \
     --include='/patches/***' \
@@ -873,6 +876,7 @@ run_checks_once() {
   check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" '<title>更新 Synapse</title>'
   if [ "$CHECK_DOCUMENT" = "true" ]; then
     check_body_contains "document" "http://127.0.0.1:3000/document/" '<title>Synapse</title>'
+    check_body_contains "sdk manifest" "http://127.0.0.1:3000/sdk/manifest.json" '"state-sync"'
   fi
   # Expected redirect header: Location: /console/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
