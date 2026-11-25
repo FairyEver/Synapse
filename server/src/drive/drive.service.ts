@@ -99,7 +99,6 @@ import {
   DRIVE_FILE_VERSION_SOURCE,
   driveVersionStorageKey,
   ensureCurrentDriveFileVersion,
-  listCleanupCandidateVersions,
   toDriveFileVersionDto,
 } from "./drive-version-history"
 import {
@@ -586,7 +585,6 @@ export class DriveService implements OnApplicationBootstrap {
         detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: result.restored.id },
         ipAddress: auditContext.ipAddress,
       })
-      await this.cleanupFileVersionsAfterChange(userId, result.restored.id)
       return toDriveItemDto(result.restored)
     } catch (error) {
       if (copied && !committed) await this.deleteTemporaryUploadObject(nextStorageKey)
@@ -1500,7 +1498,6 @@ export class DriveService implements OnApplicationBootstrap {
     }
     if (result.completedNow && session.storageKey !== result.item.storageKey) {
       await this.deleteTemporaryUploadObject(session.storageKey)
-      await this.cleanupFileVersionsAfterChange(userId, result.item.id)
     }
     if (result.completedNow) {
       await this.recordDriveAudit({
@@ -3464,7 +3461,6 @@ export class DriveService implements OnApplicationBootstrap {
         },
         ipAddress: input.auditContext.ipAddress,
       })
-      await this.cleanupFileVersionsAfterChange(input.ownerId, result.item.id)
       return {
         item: toDriveItemDto(result.item),
         version: toDriveFileVersionDto(result.version, result.item.storageKey),
@@ -4585,65 +4581,6 @@ export class DriveService implements OnApplicationBootstrap {
         errorName: error instanceof Error ? error.name : typeof error,
         errorMessage: formatAuditError(error),
       }, "Drive temporary upload object delete failed")
-    }
-  }
-
-  private async cleanupFileVersionsAfterChange(userId: string, itemId: string): Promise<void> {
-    try {
-      const item = await this.prisma.driveItem.findFirst({
-        where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
-        select: { id: true, storageKey: true },
-      })
-      if (!item) return
-      const candidates = await this.prisma.$transaction((tx) =>
-        listCleanupCandidateVersions(tx, {
-          itemId: item.id,
-          currentStorageKey: item.storageKey,
-          now: new Date(),
-        }))
-      for (const version of candidates) {
-        const claimed = await this.prisma.$transaction(async (tx) => {
-          await lockDriveItemMutation(tx, item.id)
-          return tx.driveFileVersion.updateMany({
-          where: {
-            id: version.id,
-            itemId: item.id,
-            userId,
-            deletedAt: null,
-            deletePending: false,
-            isPinned: false,
-            openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date() } } } },
-            agentReadLeases: { none: { expiresAt: { gt: new Date() } } },
-          },
-          data: { deletePending: true },
-          })
-        })
-        if (claimed.count === 0) continue
-        try {
-          await this.storage.deleteObject(version.storageKey)
-          await this.finalizeFileVersionDelete({
-            userId,
-            itemId: item.id,
-            versionId: version.id,
-            size: version.size,
-          })
-        } catch (error) {
-          this.logger.warn({
-            itemId,
-            versionId: version.id,
-            storageKeyLength: version.storageKey.length,
-            errorName: error instanceof Error ? error.name : typeof error,
-            errorMessage: formatAuditError(error),
-          }, "Drive file version cleanup delete failed")
-        }
-      }
-    } catch (error) {
-      this.logger.warn({
-        userId,
-        itemId,
-        errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: formatAuditError(error),
-      }, "Drive file version cleanup failed")
     }
   }
 

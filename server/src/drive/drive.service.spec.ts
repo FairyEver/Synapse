@@ -988,7 +988,7 @@ describe("DriveService", () => {
     expect(version.isPinned).toBe(false)
   })
 
-  it("cleanup skips current and pinned versions when count exceeds the limit", async () => {
+  it("keeps every historical version instead of automatically cleaning up", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -1021,56 +1021,11 @@ describe("DriveService", () => {
     }
 
     const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 200 })
-    expect(versions.total).toBeLessThanOrEqual(100)
-    expect(versions.items.some((version) => version.id === v1.id && version.isPinned)).toBe(true)
+    expect(versions.total).toBe(103)
+    const pinnedRow = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: v1.id } })
+    expect(pinnedRow).toMatchObject({ isPinned: true, deletedAt: null, deletePending: false })
     expect(versions.items[0]!.isCurrent).toBe(true)
-  })
-
-  it("does not cleanup a version pinned after candidate selection", async () => {
-    const prisma = createPrismaMemory()
-    const deleteObject = vi.fn(async () => undefined)
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      deleteObject,
-      headObject: vi.fn(async (key) => ({ key, size: 11n, etag: "etag" })),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const oldVersion = await prisma.driveFileVersion.create({
-      data: {
-        id: "old-version",
-        itemId: item.id,
-        userId: "user-1",
-        versionNumber: 0,
-        storageKey: "drive/item-1/versions/old-version",
-        size: 5n,
-        mimeType: "text/plain",
-        source: "upload",
-        createdAt: new Date("2025-01-01T00:00:00.000Z"),
-      },
-    })
-    const originalUpdateMany = prisma.driveFileVersion.updateMany.bind(prisma.driveFileVersion)
-    let pinnedDuringClaim = false
-    const updateManyWithConcurrentPin = vi.fn(async (args: { readonly where?: { readonly id?: string } }) => {
-      if (!pinnedDuringClaim && args?.where?.id === oldVersion.id) {
-        pinnedDuringClaim = true
-        await prisma.driveFileVersion.update({
-          where: { id: oldVersion.id },
-          data: { isPinned: true },
-        })
-      }
-      return originalUpdateMany(args as Parameters<typeof originalUpdateMany>[0])
-    })
-    prisma.driveFileVersion.updateMany = updateManyWithConcurrentPin as typeof prisma.driveFileVersion.updateMany
-
-    await (service as unknown as {
-      cleanupFileVersionsAfterChange: (userId: string, itemId: string) => Promise<void>
-    }).cleanupFileVersionsAfterChange("user-1", item.id)
-
-    expect(deleteObject).not.toHaveBeenCalledWith(oldVersion.storageKey)
-    const version = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: oldVersion.id } })
-    expect(version).toMatchObject({ isPinned: true, deletePending: false, deletedAt: null })
+    expect(versions.items.every((version) => !version.deletePending)).toBe(true)
   })
 
   it("keeps quota and visible state when historical object deletion fails", async () => {
@@ -1097,20 +1052,6 @@ describe("DriveService", () => {
     const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
     expect(versions.total).toBe(2)
     expect(versions.items.find((version) => version.id === historical.id)?.deletePending).toBe(true)
-  })
-
-  it("keeps post-commit version cleanup best effort when candidate lookup fails", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    const findFirst = vi.fn(async () => {
-      throw new Error("db unavailable")
-    })
-    ;(prisma.driveItem as unknown as { findFirst: typeof findFirst }).findFirst = findFirst
-
-    await expect((service as unknown as {
-      cleanupFileVersionsAfterChange: (userId: string, itemId: string) => Promise<void>
-    }).cleanupFileVersionsAfterChange("user-1", "item-1")).resolves.toBeUndefined()
-    expect(findFirst).toHaveBeenCalled()
   })
 
   it("rejects actions for file versions pending cleanup", async () => {

@@ -454,10 +454,10 @@ model OpenApiDownloadGrantEntry {
 
 ### DriveFileVersion 临时租约
 
-现有历史版本清理只保护当前 storageKey 和手动 pinned 版本。grant 固定的 current version 在文档随后更新后会变成历史版本，因此必须扩展实际清理规则：
+（2026-11-25 前）历史版本清理只保护当前 storageKey 和手动 pinned 版本。grant 固定的 current version 在文档随后更新后会变成历史版本；自动清理取消后，以下租约规则仍用于保护手动删除与并发写入口：
 
 - POST 创建 grant 与 entries 时，要求 DriveFileVersion `deletedAt = null`、`deletePending = false`，并设置 `grant.leaseUntil = expiresAt`；
-- `listCleanupCandidateVersions` 排除任何被 `leaseUntil > now` 的 grant entry 引用的 version；
+- 自动版本清理已于 2026-11-25 取消，历史版本不再自动删除；grant 租约仍需阻止手动删除正在进行中的下载所引用的 version；
 - `deleteFileVersion` 先返回“版本正在被临时下载使用”，最终 claim 条件也必须排除有效租约，防止检查后的竞态；
 - grant entry 创建与清理的 deletePending claim 必须使用数据库条件避免竞态，不能先查后无条件更新；
 - GET 开始后把 grant leaseUntil 延长到短期安全窗口，并在 ZIP 流期间定时续租；只更新 grant 一行，不逐 entry 心跳；
@@ -854,7 +854,7 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 - grant entries 按 ordinal 固定单文件、目录和 ZIP 内容；不在 target JSON 保存大 manifest。
 - Drive entry 绑定 POST 时的 current DriveFileVersion；Site 和公开素材 entry 绑定各自不可变对象，并校验 size 与 etag/sha256。
 - snapshotId 不暴露内部 id，且能稳定标识同一规范化 grant 内容。
-- active grant lease 会阻止 `listCleanupCandidateVersions` 和手动历史版本删除选中所引用的 DriveFileVersion。
+- active grant lease 会阻止手动历史版本删除选中所引用的 DriveFileVersion（自动版本清理已取消）。
 - GET 期间 grant lease 心跳保护惰性打开的 ZIP entries；停止心跳后自动释放，不永久 pin 历史版本。
 - 服务重启后 grant 仍有效。
 - 十分钟内可下载，过期返回 410。
