@@ -181,16 +181,41 @@ function connectScreen() {
 connectScreen();
 ```
 
-手机遥控器使用 `publish` 凭证，通过 `presence` 显示大屏在线状态并发送控制信号：
+手机遥控器使用 `publish` 凭证，通过 `ready.presence` 与 `presence.join`/`presence.leave` 实时显示大屏在线状态并发送控制信号：
 
 ```js
 const ws = new WebSocket("wss://YOUR_HOST/api/open/v1/channels/CHANNEL_ID/ws");
+const onlineMembers = new Map();
+
+function renderOnlineScreens() {
+  const screens = [...onlineMembers.values()].filter((m) => m.meta?.kind === "screen");
+  document.getElementById("screen-status").textContent = screens.length > 0
+    ? `大屏在线（${screens.length}）`
+    : "大屏离线";
+}
+
 ws.onopen = () => ws.send(JSON.stringify({
   type: "auth",
   token: "syc_PUBLISH_TOKEN",
   clientId: "phone-remote",
   clientName: "手机遥控器",
 }));
+
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === "ready") {
+    onlineMembers.clear();
+    for (const m of msg.presence || []) onlineMembers.set(m.connectionId, m);
+    renderOnlineScreens();
+  } else if (msg.type === "presence.join" || msg.type === "presence.update") {
+    onlineMembers.set(msg.member.connectionId, msg.member);
+    renderOnlineScreens();
+  } else if (msg.type === "presence.leave") {
+    onlineMembers.delete(msg.member.connectionId);
+    renderOnlineScreens();
+  }
+};
+
 function switchScene(scene) {
   ws.send(JSON.stringify({
     type: "publish",
@@ -232,6 +257,38 @@ ws.on("message", async (raw) => {
     targetClientId: msg.sender?.clientId || undefined,
   }));
 });
+```
+
+配套的手机控制网页使用 `pubsub` 频道凭证，确认后端在线后发送 `command.run` 并只接收定向回传给本页的 `command.result`：
+
+```js
+const myClientId = `phone-${crypto.randomUUID().slice(0, 8)}`;
+const ws = new WebSocket("wss://YOUR_HOST/api/open/v1/channels/CHANNEL_ID/ws");
+
+ws.onopen = () => ws.send(JSON.stringify({
+  type: "auth",
+  token: "syc_PUBSUB_TOKEN",
+  clientId: myClientId,
+  clientName: "手机控制页",
+  events: ["command.result"],
+}));
+
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === "event" && msg.event === "command.result") {
+    document.getElementById("result").textContent = JSON.stringify(msg.payload);
+  }
+};
+
+function runBackendAction(action) {
+  ws.send(JSON.stringify({
+    type: "publish",
+    id: crypto.randomUUID(),
+    event: "command.run",
+    payload: { action },
+    targetClientId: "home-worker",
+  }));
+}
 ```
 
 ---

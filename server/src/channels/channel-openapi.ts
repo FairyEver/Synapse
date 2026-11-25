@@ -1,6 +1,8 @@
 import {
   channelCreateSchema,
+  channelPresenceMemberSchema,
   channelPublishHttpSchema,
+  channelRetainedItemSchema,
   channelTokenCreateSchema,
   channelUpdateSchema,
   channelZod as z,
@@ -40,10 +42,44 @@ const commonHeaders = {
   "Cache-Control": { $ref: "#/components/headers/NoStore" },
 } as const
 
+const channelErrorSchema = {
+  type: "object",
+  required: ["requestId", "error"],
+  additionalProperties: false,
+  properties: {
+    requestId: { type: "string" },
+    error: {
+      type: "object",
+      required: ["code", "message"],
+      additionalProperties: false,
+      properties: {
+        code: {
+          type: "string",
+          enum: [
+            "INVALID_REQUEST",
+            "INVALID_CREDENTIAL",
+            "INSUFFICIENT_SCOPE",
+            "CHANNEL_ACCESS_DENIED",
+            "CHANNEL_NOT_FOUND",
+            "TOKEN_LIMIT_EXCEEDED",
+            "TOKEN_NOT_FOUND",
+            "FORBIDDEN_ROLE",
+            "REQUEST_TOO_LARGE",
+            "RETAIN_LIMIT_EXCEEDED",
+            "RATE_LIMITED",
+            "INTERNAL_ERROR",
+          ],
+        },
+        message: { type: "string" },
+      },
+    },
+  },
+} as const
+
 const errorRes = (description: string) => ({
   description,
   headers: commonHeaders,
-  content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+  content: { "application/json": { schema: channelErrorSchema } },
 })
 
 const jsonRes = (description: string, schema: Record<string, unknown>) => ({
@@ -95,6 +131,8 @@ export function channelOpenApiPaths() {
   const updateBody = toSchema(channelUpdateSchema)
   const tokenCreateBody = toSchema(channelTokenCreateSchema)
   const publishBody = toSchema(channelPublishHttpSchema)
+  const presenceMemberSchema = toSchema(channelPresenceMemberSchema)
+  const retainedItemSchema = toSchema(channelRetainedItemSchema)
 
   return {
     "/channels": {
@@ -215,6 +253,7 @@ export function channelOpenApiPaths() {
           "400": errorRes("请求体无效（INVALID_REQUEST）。"),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
           "403": errorRes("权限不足（INSUFFICIENT_SCOPE / CHANNEL_ACCESS_DENIED）。"),
+          "404": errorRes("频道不存在（CHANNEL_NOT_FOUND）。"),
           "422": errorRes("超出单频道 20 个有效凭证上限（TOKEN_LIMIT_EXCEEDED）。"),
         },
       },
@@ -264,6 +303,7 @@ export function channelOpenApiPaths() {
           "400": errorRes("事件参数无效或同时启用了 retain 与 targetClientId（INVALID_REQUEST）。"),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
           "403": errorRes("角色或权限不足（FORBIDDEN_ROLE / INSUFFICIENT_SCOPE）。"),
+          "404": errorRes("频道不存在（CHANNEL_NOT_FOUND）。"),
           "413": errorRes("请求体超过 128 KiB（REQUEST_TOO_LARGE）。"),
           "422": errorRes("超出单频道 20 个 Retain 事件上限（RETAIN_LIMIT_EXCEEDED）。"),
           "429": errorRes("发布过于频繁（RATE_LIMITED，响应头含 Retry-After）。"),
@@ -284,11 +324,12 @@ export function channelOpenApiPaths() {
             properties: {
               channelId: { type: "string" },
               count: { type: "integer", minimum: 0 },
-              members: { type: "array", items: { type: "object" } },
+              members: { type: "array", items: presenceMemberSchema },
             },
           }),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
           "403": errorRes("无权访问（CHANNEL_ACCESS_DENIED / INSUFFICIENT_SCOPE）。"),
+          "404": errorRes("频道不存在（CHANNEL_NOT_FOUND）。"),
         },
       },
     },
@@ -306,11 +347,12 @@ export function channelOpenApiPaths() {
             required: ["channelId", "items"],
             properties: {
               channelId: { type: "string" },
-              items: { type: "array", items: { type: "object" } },
+              items: { type: "array", items: retainedItemSchema },
             },
           }),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
           "403": errorRes("仅发布角色不可读取 Retain（FORBIDDEN_ROLE / INSUFFICIENT_SCOPE）。"),
+          "404": errorRes("频道不存在（CHANNEL_NOT_FOUND）。"),
         },
       },
     },
@@ -333,6 +375,7 @@ export function channelOpenApiPaths() {
           }),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
           "403": errorRes("仅订阅角色不可清除 Retain（FORBIDDEN_ROLE / INSUFFICIENT_SCOPE）。"),
+          "404": errorRes("频道不存在（CHANNEL_NOT_FOUND）。"),
         },
       },
     },

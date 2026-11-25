@@ -40,6 +40,16 @@ describe("Channels OpenAPI contract", () => {
       operationId: "clearChannelRetained",
       "x-required-scope": "channels.publish",
     })
+    expect(paths["/channels/{channelId}"]?.patch).toMatchObject({ operationId: "updateChannel", "x-required-scope": "channels.manage" })
+    expect(paths["/channels/{channelId}"]?.delete).toMatchObject({ operationId: "deleteChannel", "x-required-scope": "channels.manage" })
+    expect(paths["/channels/{channelId}/tokens"]?.post).toMatchObject({ operationId: "createChannelToken", "x-required-scope": "channels.manage" })
+    expect(paths["/channels/{channelId}/tokens/{tokenId}"]?.delete).toMatchObject({ operationId: "revokeChannelToken", "x-required-scope": "channels.manage" })
+    expect(doc.components.schemas.ChannelJsonValue).toBeDefined()
+
+    const publishErrors = JSON.stringify(paths["/channels/{channelId}/events"]?.post?.responses)
+    expect(publishErrors).toContain("INVALID_CREDENTIAL")
+    expect(publishErrors).toContain("RETAIN_LIMIT_EXCEEDED")
+    expect(publishErrors).toContain("CHANNEL_NOT_FOUND")
 
     // Must not declare Idempotency-Key parameter on channel routes
     expect(JSON.stringify(channelOpenApiPaths())).not.toContain("Idempotency-Key")
