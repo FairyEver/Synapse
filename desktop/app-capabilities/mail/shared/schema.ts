@@ -9,6 +9,7 @@ export const assetIdSchema = opaque("mas")
 export const draftIdSchema = opaque("md")
 export const jobIdSchema = opaque("mj")
 export const operationIdSchema = opaque("mo")
+export const scheduledIdSchema = opaque("ms")
 export const messageIdSchema = z.string().regex(MAIL_MESSAGE_ID_PATTERN)
 export const revisionSchema = z.number().int().positive()
 const line = z.string().max(1000).regex(/^[^\r\n\x00]*$/u)
@@ -71,13 +72,15 @@ const draftPatchSchema = z.object({
   assetIds: draftFields.assetIds.removeDefault().optional(), inlineImages: draftFields.inlineImages.removeDefault().optional(),
 }).strict().refine((p) => Object.keys(p).length > 0)
 export const sendStateSchema = z.enum(["prepared", "submitting", "accepted", "partial", "failed", "unknown"])
+export const scheduledStateSchema = z.enum(["pending", "sending", "sent", "missed", "failed", "unknown", "cancelled"])
+export const scheduledSendAtSchema = z.iso.datetime({ offset: true }).describe("Future send timestamp in ISO 8601 format with timezone offset or Z (e.g. 2026-12-15T14:30:00+08:00 or 2026-12-15T06:30:00Z).")
 export const MAIL_INPUT_SCHEMAS = {
   "account.list": z.object(pageInput).strict(),
   "account.get": z.object(account).strict(),
   "account.open": z.object({ accountId: accountIdSchema.optional() }).strict(),
   "account.update": z.object({ ...account, expectedRevision: revisionSchema, patch: accountPatchSchema }).strict(),
   "account.inspect": z.object(account).strict(), "account.pause": z.object(account).strict(), "account.resume": z.object(account).strict(),
-  "account.delete": z.object({ ...account, expectedRevision: revisionSchema, discardLocalDrafts: z.boolean().default(false), acknowledgeUnknownOperations: z.boolean().default(false) }).strict(),
+  "account.delete": z.object({ ...account, expectedRevision: revisionSchema, discardLocalDrafts: z.boolean().default(false), acknowledgeUnknownOperations: z.boolean().default(false), discardScheduledSends: z.boolean().default(false) }).strict(),
   "folder.list": z.object({ ...account, ...pageInput }).strict(),
   "folder.create": z.object({ ...account, name: line.min(1).max(255), parentFolderId: folderIdSchema.optional() }).strict(),
   "folder.rename": z.object({ ...account, folderId: folderIdSchema, name: line.min(1).max(255) }).strict(),
@@ -110,6 +113,12 @@ export const MAIL_INPUT_SCHEMAS = {
   "body.read_chunk": z.object({ messageId: messageIdSchema, bodyRef: assetIdSchema.optional(), cursor: z.string().max(4096).optional() }).strict(),
   "send.preview": z.object({ draftId: draftIdSchema, expectedRevision: revisionSchema }).strict(),
   "message.send": z.object({ previewId: opaque("mp"), clientRequestId: z.uuid(), confirmed: z.literal(true) }).strict(),
+  "scheduled.create": z.object({ previewId: opaque("mp"), sendAt: scheduledSendAtSchema, clientRequestId: z.uuid(), confirmed: z.literal(true) }).strict(),
+  "scheduled.list": z.object({ ...account, state: scheduledStateSchema.optional(), ...pageInput }).strict(),
+  "scheduled.get": z.object({ scheduledId: scheduledIdSchema }).strict(),
+  "scheduled.update": z.object({ scheduledId: scheduledIdSchema, expectedRevision: revisionSchema, sendAt: scheduledSendAtSchema }).strict(),
+  "scheduled.cancel": z.object({ scheduledId: scheduledIdSchema, expectedRevision: revisionSchema, restoreDraft: z.boolean().default(true) }).strict(),
+  "scheduled.send": z.object({ scheduledId: scheduledIdSchema, expectedRevision: revisionSchema, confirmed: z.literal(true) }).strict(),
   "operation.list": z.object({ ...account, ...pageInput, state: sendStateSchema.optional() }).strict(),
   "operation.get": z.object({ operationId: operationIdSchema }).strict(), "cache.clear": z.object(account).strict(),
 } as const
@@ -118,8 +127,21 @@ export const accountSummarySchema = accountConfigSchema.extend({ id: accountIdSc
 export const folderSchema = z.object({ id: folderIdSchema, accountId: accountIdSchema, path: z.string(), name: z.string(), role: roleSchema, uidValidity: z.string().nullable(), serverCount: z.number().nullable(), metadataComplete: z.boolean(), selectable: z.boolean() }).strict()
 export const assetSchema = z.object({ id: assetIdSchema, accountId: accountIdSchema, name: z.string(), mime: z.string(), size: z.number().int().nonnegative(), sha256: z.string().nullable(), cid: z.string().nullable(), state: z.enum(["remote", "staged", "ready", "delete-pending"]), attachmentId: z.string().nullable(), messageId: messageIdSchema.nullable() }).strict()
 export const summarySchema = z.object({ id: messageIdSchema, accountId: accountIdSchema, locator: locatorSchema, from: z.array(addressSchema), to: z.array(addressSchema), cc: z.array(addressSchema), subject: z.string(), snippet: z.string(), date: z.string().nullable(), receivedAt: z.iso.datetime().nullable().optional().describe("Server INTERNALDATE, not the sender header date; null/absent means unknown."), read: z.boolean(), star: z.boolean(), attachmentCount: z.number().int().nonnegative(), bodyState: z.enum(["remote", "cached", "unavailable"]), revision: revisionSchema, metadataTruncated: z.boolean().optional(), stale: z.boolean() }).strict()
-export const draftSchema = draftInputSchema.extend({ id: draftIdSchema, revision: revisionSchema, state: z.enum(["editing", "consumed", "conflict"]), sourceMessageId: messageIdSchema.nullable(), mode: z.enum(["new", "reply", "reply_all", "forward"]), remoteLocator: locatorSchema.nullable(), localSaved: z.boolean(), syncState: z.enum(["pending", "synced", "failed", "unknown", "conflict"]), updatedAt: z.string() }).strict()
+export const draftSchema = draftInputSchema.extend({ id: draftIdSchema, revision: revisionSchema, state: z.enum(["editing", "scheduled", "consumed", "conflict"]), sourceMessageId: messageIdSchema.nullable(), mode: z.enum(["new", "reply", "reply_all", "forward"]), remoteLocator: locatorSchema.nullable(), localSaved: z.boolean(), syncState: z.enum(["pending", "synced", "failed", "unknown", "conflict"]), updatedAt: z.string() }).strict()
 export const receiptSchema = z.object({ operationId: operationIdSchema, accountId: accountIdSchema, state: sendStateSchema, accepted: z.array(z.string()), rejected: z.array(z.string()), messageId: z.string(), sentCopyState: z.enum(["pending", "saved", "unknown", "failed"]), retryStage: z.enum(["none", "sent-copy", "reconcile"]), errorCode: z.string().nullable() }).strict()
+export const scheduledSummarySchema = z.object({
+  id: scheduledIdSchema, accountId: accountIdSchema, draftId: draftIdSchema, revision: revisionSchema,
+  state: scheduledStateSchema, sendAt: z.iso.datetime(), graceMs: z.number().int().nonnegative(),
+  from: addressSchema, to: z.array(addressSchema), cc: z.array(addressSchema), bcc: z.array(addressSchema),
+  subject: z.string(), attachmentCount: z.number().int().nonnegative(), messageId: z.string(),
+  operationId: operationIdSchema.nullable(), errorCode: z.string().nullable(),
+  createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(), sentAt: z.iso.datetime().nullable(),
+}).strict()
+export const scheduledDetailSchema = scheduledSummarySchema.extend({
+  attachments: z.array(assetSchema),
+  bodyRef: assetIdSchema,
+  receipt: receiptSchema.nullable(),
+}).strict()
 export const batchSchema = z.object({ items: z.array(z.object({ id: messageIdSchema, status: z.enum(["succeeded", "failed", "unknown"]), code: z.string().optional(), newRevision: revisionSchema.optional() }).strict()) }).strict()
 const ok = z.object({ success: z.boolean() }).strict()
 const job = z.object({ jobId: jobIdSchema }).strict()
@@ -142,6 +164,9 @@ export const MAIL_RESULT_SCHEMAS = {
   "attachment.import_local": assetSchema, "attachment.list": page(assetSchema), "attachment.get": assetSchema, "attachment.download_file": download, "attachment.delete": ok,
   "message.extract_to_file": download,
   "body.read_chunk": z.object({ bodyRef: assetIdSchema, html: z.string(), text: z.string(), nextCursor: z.string().nullable(), complete: z.boolean(), truncated: z.boolean() }).strict(),
-  "send.preview": previewSchema, "message.send": receiptSchema, "operation.list": page(receiptSchema), "operation.get": receiptSchema,
+  "send.preview": previewSchema, "message.send": receiptSchema,
+  "scheduled.create": scheduledDetailSchema, "scheduled.list": page(scheduledSummarySchema), "scheduled.get": scheduledDetailSchema,
+  "scheduled.update": scheduledDetailSchema, "scheduled.cancel": scheduledDetailSchema, "scheduled.send": receiptSchema,
+  "operation.list": page(receiptSchema), "operation.get": receiptSchema,
   "cache.clear": z.object({ removed: z.number().int().nonnegative(), bytes: z.number().int().nonnegative() }).strict(),
 } as const

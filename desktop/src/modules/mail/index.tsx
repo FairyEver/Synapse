@@ -26,7 +26,10 @@ export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { ope
     if (openRequest.accountId && mail.accountId !== openRequest.accountId) { mail.selectAccount(openRequest.accountId); return }
     handled.current = openRequest.requestId
     if (openRequest.configure) settings()
-    if (openRequest.messageId) void mail.selectMessage(openRequest.messageId)
+    if (openRequest.view === "scheduled" || openRequest.scheduledId) {
+      mail.selectView({ scheduled: true })
+      if (openRequest.scheduledId) void mail.selectScheduled(openRequest.scheduledId)
+    } else if (openRequest.messageId) void mail.selectMessage(openRequest.messageId)
     else if (!openRequest.configure) mail.clearDetail()
     onOpenRequestConsumed?.(openRequest.requestId)
   }, [openRequest, mail.accountId, mail.owner, mail.scope, mail.authenticated, onOpenRequestConsumed])

@@ -43,7 +43,11 @@ export function mailSearchIntent(query: string): MailSearchIntent | null {
     return route(/取消/u.test(text) ? "search_cancel" : /继续|恢复/u.test(text) ? "search_resume" : "search_get")
   }
   if (!internal) {
-    if (/(?:定时|预约).*(?:发送|发信|发邮件)|(?:明天|后天|今晚|下周)(?:上午|下午|晚上|早上)?[零一二三四五六七八九十两\d:：点分半 ]{0,15}(?:再)?(?:发送|发这封|发邮件|发信)|\bschedule.*(?:email|mail)\b/u.test(text)) return { domain, actions: [], guidance: "邮箱不支持定时发送；可以按用户要求起草，但不能通过自动化绕过该边界。" }
+    if (/(?:取消|撤掉|停止).*(?:定时|预约).*(?:发送|邮件|发信)|(?:定时|预约).*(?:邮件|发送).*(?:取消|撤掉)|cancel.*scheduled.*(?:email|mail)/u.test(text)) return route("scheduled_list", "scheduled_cancel")
+    if (/(?:改期|修改|调整|推迟|提前).*(?:定时|预约|发送时间)|(?:定时|预约).*(?:改期|修改时间|改时间)|reschedule.*(?:email|mail)/u.test(text)) return route("scheduled_list", "scheduled_update")
+    if (/(?:立即|马上|现在).*(?:发送|发).*(?:定时|预约|已错过)|(?:定时|预约|已错过).*(?:立即|马上)发|send.*scheduled.*now/u.test(text)) return route("scheduled_list", "scheduled_send")
+    if (/(?:查看|列出|有哪些|哪些).*(?:定时|预约|待发送).*(?:邮件|发信)|(?:定时|预约)邮件(?:列表|状态|详情)|list.*scheduled.*(?:email|mail)/u.test(text)) return route("scheduled_list", "scheduled_get")
+    if (/(?:定时|预约).*(?:发送|发信|发邮件)|(?:明天|后天|今晚|下周|下个月|\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)(?:上午|下午|晚上|早上)?[零一二三四五六七八九十两\d:：点分半 ]{0,15}(?:再)?(?:发送|发这封|发邮件|发信)|\bschedule.*(?:email|mail)\b/u.test(text)) return route("draft_create", "account_list", "send_preview", "scheduled_create")
     if (/撤回|recall/u.test(text)) return { domain, actions: [], guidance: "邮箱不支持已发送撤回；不能删除副本来冒充撤回。" }
     if (/(?:同步|sync).*(?:通讯录|联系人|contacts)/u.test(text)) return { domain, actions: [], guidance: "邮箱不支持通讯录同步；可按姓名或地址查询已有往来邮件。" }
     if (/(?:添加|接入|配置|连接|add|setup).*(?:邮箱|阿里|account)/u.test(text)) return route("account_open", "account_list")

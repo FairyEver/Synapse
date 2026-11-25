@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import { MAIL_ENTITIES } from "../../../electron/runtime/data-repo/schemas/mail"
 import { accountConfigSchema, accountSummarySchema, MAIL_INPUT_SCHEMAS } from "../shared/schema"
-import { MailError, type AccountAction, type AccountConfig, type AccountSummary, type MailContext, type MailInputs, type MailResults } from "../shared/types"
+import { MailError, type AccountAction, type AccountConfig, type AccountSummary, type MailArguments, type MailContext, type MailInputs, type MailResults } from "../shared/types"
 import { MailRepository } from "./repository"
 import { MailContextProvider } from "./context"
 import type { MailAccess } from "./assets"
@@ -166,23 +166,25 @@ export class MailAccounts {
     })
   }
 
-  async remove(ctx: MailContext, input: MailInputs["account.delete"]): Promise<{ success: boolean }> {
+  async remove(ctx: MailContext, rawInput: MailArguments["account.delete"]): Promise<{ success: boolean }> {
+    const input = MAIL_INPUT_SCHEMAS["account.delete"].parse(rawInput)
     return this.exclusive(ctx, input.accountId, async () => {
       const row = await this.repo.get<StoredAccount>(ctx, "accounts", input.accountId)
       if (row.revision !== input.expectedRevision) throw new MailError("VERSION_CONFLICT", "邮箱配置已变化")
-      let drafts = 0, unknown = 0
-      for (const entity of ["drafts", "operations"] as const) {
+      let drafts = 0, unknown = 0, scheduled = 0
+      for (const entity of ["drafts", "operations", "scheduled"] as const) {
         let cursor: string | undefined
         do {
           const page = await this.repo.page(ctx, entity, { accountId: row.id, cursor, limit: 100 })
           for (const record of page.items) {
-            if (entity === "drafts" && record.data.state !== "consumed") drafts++
+            if (entity === "drafts" && record.data.state !== "consumed" && record.data.state !== "scheduled") drafts++
             if (entity === "operations" && ["submitting", "unknown"].includes(String(record.data.state))) unknown++
+            if (entity === "scheduled" && record.data.kind === "scheduled" && ["pending", "sending", "missed"].includes(String(record.data.state))) scheduled++
           }
           cursor = page.nextCursor ?? undefined
         } while (cursor)
       }
-      if ((drafts && !input.discardLocalDrafts) || (unknown && !input.acknowledgeUnknownOperations)) throw new MailError("REMOVAL_REVIEW_REQUIRED", "此邮箱仍有草稿或发送结果待核验", { drafts, unknown })
+      if ((drafts && !input.discardLocalDrafts) || (unknown && !input.acknowledgeUnknownOperations) || (scheduled && !input.discardScheduledSends)) throw new MailError("REMOVAL_REVIEW_REQUIRED", "此邮箱仍有草稿、定时邮件或发送结果待核验", { drafts, unknown, scheduled })
       await this.access(ctx, "secret.read", row.id)
       await this.access(ctx, "secret.write", row.id)
       await this.lifecycle.stop(ctx, row.id)

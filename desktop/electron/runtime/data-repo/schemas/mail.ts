@@ -12,7 +12,7 @@ export interface MailRecord<T = Record<string, unknown>> extends Record<string, 
   receiptSource?: string
   receiptUid?: number
 }
-export const MAIL_ENTITIES = ["accounts", "credentials", "folders", "messages", "drafts", "operations", "sync-state", "assets", "search-tasks", "search-results", "previews"] as const
+export const MAIL_ENTITIES = ["accounts", "credentials", "folders", "messages", "drafts", "operations", "sync-state", "assets", "search-tasks", "search-results", "previews", "scheduled"] as const
 export type MailEntity = typeof MAIL_ENTITIES[number]
 export const mailSchemas: readonly NamespaceSchema<MailRecord>[] = MAIL_ENTITIES.map((entity) => ({
   name: `app.mail.${entity}`, backend: entity === "credentials" ? "encrypted-json" : "sqlite",

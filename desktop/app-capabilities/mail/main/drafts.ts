@@ -224,6 +224,7 @@ export class MailDrafts {
         const row = await this.stored(ctx, params.draftId)
         if (row.data.contentRevision !== params.expectedRevision) throw new MailError("VERSION_CONFLICT", "草稿已被修改，请重新读取")
         if (action === "draft.delete") {
+          if (row.data.state === "scheduled") throw new MailError("DRAFT_SCHEDULED", "此草稿已设为定时发送，请先取消定时后再删除")
           if (row.data.remoteLocator || row.data.pendingAppend && row.data.pendingAppend.state !== "prepared") {
             if (!this.hooks.removeRemote) throw new MailError("UNAVAILABLE", "远端草稿删除暂不可用")
             await this.hooks.removeRemote(ctx, row)
@@ -233,6 +234,7 @@ export class MailDrafts {
           this.notify(ctx, row.id)
           return { success: true }
         }
+        if (row.data.state === "scheduled") throw new MailError("DRAFT_SCHEDULED", "此草稿已设为定时发送，请先取消定时后再编辑")
         if (row.data.state !== "editing") throw new MailError(row.data.state === "consumed" ? "DRAFT_CONSUMED" : "DRAFT_CONFLICT", "请从所选内容新建草稿副本")
         const patch = MAIL_INPUT_SCHEMAS["draft.update"].parse(params).patch
         return this.persist(ctx, row.id, draftInputSchema.parse({ accountId: current.accountId, to: current.to, cc: current.cc, bcc: current.bcc, subject: current.subject, html: current.html, text: current.text, assetIds: current.assetIds, inlineImages: current.inlineImages, ...patch }), {}, row)

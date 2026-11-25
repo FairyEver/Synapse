@@ -15,10 +15,10 @@ describe("external mail contracts", () => {
     expect(schema.safeParse({}).success).toBe(false)
     expect(schema.safeParse({ accountId, jobId }).success).toBe(false)
   })
-  it("defines 44 unique, strictly validated actions with explicit permission metadata", () => {
-    expect(MAIL_ACTIONS).toHaveLength(44)
-    expect(new Set(MAIL_ACTIONS).size).toBe(44)
-    expect(buildMailTools()).toHaveLength(44)
+  it("defines 50 unique, strictly validated actions with explicit permission metadata", () => {
+    expect(MAIL_ACTIONS).toHaveLength(50)
+    expect(new Set(MAIL_ACTIONS).size).toBe(50)
+    expect(buildMailTools()).toHaveLength(50)
     for (const action of MAIL_ACTIONS) {
       expect(MAIL_DEFINITIONS[action].permission).toBeTruthy()
       expect(MAIL_INPUT_SCHEMAS[action].safeParse({ ownerId: "fake", credential: "secret" }).success).toBe(false)

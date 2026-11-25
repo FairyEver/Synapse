@@ -2,7 +2,7 @@
 
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, search and invoke. Search first, then invoke the exact returned name and inputSchema; never guess arguments.
 
-此文件由 `node desktop/scripts/docs/generate-mail-reference.mjs` 从当前工具定义生成；修改 schema 后运行并核对回归测试。运行时始终先用 search 发现、再按返回的 inputSchema invoke，不凭本文猜参数。公开入口只有 search / invoke，以下 44 项是索引名。
+此文件由 `node desktop/scripts/docs/generate-mail-reference.mjs` 从当前工具定义生成；修改 schema 后运行并核对回归测试。运行时始终先用 search 发现、再按返回的 inputSchema invoke，不凭本文猜参数。公开入口只有 search / invoke，以下 50 项是索引名。
 
 ## 通用契约
 
@@ -10,15 +10,16 @@
 - ownerId 由已登录 SY 服务端身份决定，调用者不能传；所有数据、密码和缓存仅在此电脑。密码只由用户在本机界面配置，account.open 只打开向导。
 - 列表默认 limit=50、最大100；持续使用 nextCursor，换账号或过滤条件清空 cursor。body.read_chunk 使用其专用 cursor / bodyRef。搜索、正文和所有列表必须如实报告 completeness / coverage，不把零结果说成没有历史邮件。
 - 读取 get / list / body 不自动已读；明确标记才用 message.update。message.update / move / delete / restore 每批1–100个不同 ID，返回逐项 succeeded / failed / unknown；不得把批量请求成功当成所有项成功。
-- 公开 ID 是带前缀 UUID：ma_账号、mf_文件夹、em_邮件、md_草稿、mas_资产、mj_任务、mp_预览、mo_发送操作。链接 synapse://mail/em_<uuid> 只定位外部邮件；mail-internal 属站内信且没有兼容别名。
-- expectedRevision 是先读到的修订，冲突时保留内容并重新核对，不覆盖。preview 冻结快照10分钟，发送使用稳定 UUID clientRequestId；同一 draft revision 只消费一次。
+- 公开 ID 是带前缀 UUID：ma_账号、mf_文件夹、em_邮件、md_草稿、mas_资产、mj_任务、mp_预览、ms_定时发送、mo_发送操作。链接 synapse://mail/em_<uuid> 只定位外部邮件；mail-internal 属站内信且没有兼容别名。
+- expectedRevision 是先读到的修订，冲突时保留内容并重新核对，不覆盖。preview 冻结快照10分钟，发送和定时预约均使用稳定 UUID clientRequestId；同一 draft revision 只消费一次。
 - 仅用户明确授权发送且内容无歧义时 confirmed:true；草稿不授权发送。accepted 是 SMTP 接受，非最终送达；partial 按 accepted/rejected 报告，unknown 先 operation.get，不能换 key 或改草稿规避未知结果去重。
+- 定时发送（scheduled.create/list/get/update/cancel/send）为本机调度，支持预约未来具体 ISO 8601 时间（最多 10 年）；到点时需保持 Synapse 运行、登录同一账号并联网。超过预定时间 30 分钟宽限期内恢复后自动补发，超时转 missed 待人工确认；unknown 禁止自动或手动重发。
 - 初期发件人仅认证主地址；aliases 只用于 reply_all 排除自己。阿里企业邮箱由服务器保存 Sent，个人邮箱按账号的已发送副本设置处理。正文总上限5MiB，单附件/EML100MiB，图片10MiB，最多100附件；资源超限明确失败。路径必须本机绝对路径且不可覆盖已有目标文件。
-- 暂停停止该账号后台连接；sync.cancel 只停当前历史索引，继续监测新 Inbox；account.delete 只移除本机数据，草稿和 unknown 操作须显式确认影响。cache.clear 保留草稿、凭据及待核验发送资产。
+- 暂停停止该账号后台连接；sync.cancel 只停当前历史索引，继续监测新 Inbox；account.delete 只移除本机数据，草稿、定时邮件和 unknown 操作须显式确认影响。cache.clear 保留草稿、定时发送、凭据及待核验发送资产。
 
 ## 返回值
 
-列表为 items / nextCursor，按服务器 INTERNALDATE（receivedAt）倒序，未知时退到邮件头 date；receivedAt 不等于本机首次发现时间。旧索引通过既有同步批次补齐，不改变邮件 ID。message.list/count/search.start 支持 sender/recipient（地址精确或显示名子串）、subject、附件条件及 receivedAfter/receivedBefore（含下界、不含上界）；from/to 仍是邮件头时间，不是邮箱地址。未知收件时间/附件结构在 coverage.reason 中返回 received_time_unavailable / attachment_metadata_unavailable；不下载附件来完成筛选，组合附件条件必须命中同一附件。带业务过滤的 count.serverReported 为 null。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode；同步任务附带 syncProgress（phase 为 indexing 或 reconciling，completed 为该阶段已确认完成数，total 未知时为 null），阶段和数量来自账号全部可选文件夹的批次检查点，不能用已索引数量相等推断校对完成。旧任务可无该字段。已停止的任务不显示 running；首次或手动同步完成后的自动校对保留 completed，手动刷新和真实失败后的恢复重试仍报告运行状态。后台校对期间保留已完成任务的进度，当前 coverage 通过 message.count / message.list 读取；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state；成功或 partial 发送后 consumed，只读保留。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
+列表为 items / nextCursor，按服务器 INTERNALDATE（receivedAt）倒序，未知时退到邮件头 date；receivedAt 不等于本机首次发现时间。旧索引通过既有同步批次补齐，不改变邮件 ID。message.list/count/search.start 支持 sender/recipient（地址精确或显示名子串）、subject、附件条件及 receivedAfter/receivedBefore（含下界、不含上界）；from/to 仍是邮件头时间，不是邮箱地址。未知收件时间/附件结构在 coverage.reason 中返回 received_time_unavailable / attachment_metadata_unavailable；不下载附件来完成筛选，组合附件条件必须命中同一附件。带业务过滤的 count.serverReported 为 null。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode；同步任务附带 syncProgress（phase 为 indexing 或 reconciling，completed 为该阶段已确认完成数，total 未知时为 null），阶段和数量来自账号全部可选文件夹的批次检查点，不能用已索引数量相等推断校对完成。旧任务可无该字段。已停止的任务不显示 running；首次或手动同步完成后的自动校对保留 completed，手动刷新和真实失败后的恢复重试仍报告运行状态。后台校对期间保留已完成任务的进度，当前 coverage 通过 message.count / message.list 读取；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state（editing/scheduled/consumed/conflict）；预约定时后为 scheduled，成功或 partial 发送后为 consumed。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。scheduled.* 返回 id / accountId / draftId / revision / state（pending/sending/sent/missed/failed/unknown/cancelled）/ sendAt / graceMs / from / to / cc / bcc / subject / attachments / messageId / operationId / receipt / errorCode / sentAt。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
 
 ## 输入定义
 
@@ -307,7 +308,7 @@
 
 ### app_mail_account_delete
 
-从当前电脑移除邮箱账号。Remove only this computer's email account and data. Acknowledge local draft and unknown-send impacts explicitly; never deletes server mail.
+从当前电脑移除邮箱账号。Remove only this computer's email account and data. Acknowledge local draft, scheduled-send and unknown-send impacts explicitly; never deletes server mail.
 
 权限：content.mutate；风险：high。
 
@@ -330,6 +331,10 @@
       "type": "boolean"
     },
     "acknowledgeUnknownOperations": {
+      "default": false,
+      "type": "boolean"
+    },
+    "discardScheduledSends": {
       "default": false,
       "type": "boolean"
     }
@@ -1855,6 +1860,218 @@
 }
 ```
 
+### app_mail_scheduled_create
+
+预约定时发送邮件、设置未来发送时间。Schedule a frozen email preview for local delivery at a specific future ISO 8601 timestamp (up to 10 years ahead) with a stable request ID. confirmed declares checked authorization. Requires Synapse desktop running, signed in as the same user, and online at send time; delays within the 30-minute grace window auto-send on recovery, while longer delays enter missed state for manual action. Locks the source draft as scheduled and pins body/attachment assets against cache eviction.
+
+权限：content.mutate；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "previewId": {
+      "type": "string",
+      "pattern": "^mp_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sendAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+      "description": "Future send timestamp in ISO 8601 format with timezone offset or Z (e.g. 2026-12-15T14:30:00+08:00 or 2026-12-15T06:30:00Z)."
+    },
+    "clientRequestId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "previewId",
+    "sendAt",
+    "clientRequestId",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}
+```
+
+### app_mail_scheduled_list
+
+列出定时发送邮件。List scheduled external emails for one account ordered by scheduled send time, optionally filtered by state. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
+
+权限：content.read；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "accountId": {
+      "type": "string",
+      "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "sending",
+        "sent",
+        "missed",
+        "failed",
+        "unknown",
+        "cancelled"
+      ]
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "limit": {
+      "default": 50,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    }
+  },
+  "required": [
+    "accountId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### app_mail_scheduled_get
+
+查看定时发送邮件详情和状态。Read one scheduled email's metadata, state, scheduled timestamp, grace window, attachment metadata, error code and send receipt when submitted.
+
+权限：content.read；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scheduledId": {
+      "type": "string",
+      "pattern": "^ms_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  },
+  "required": [
+    "scheduledId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### app_mail_scheduled_update
+
+修改定时邮件的发送时间。Change the future sendAt timestamp of a pending, missed or failed scheduled email with expectedRevision, returning it to pending state. Rejects sending, sent, unknown and cancelled records.
+
+权限：content.mutate；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scheduledId": {
+      "type": "string",
+      "pattern": "^ms_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "expectedRevision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "sendAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+      "description": "Future send timestamp in ISO 8601 format with timezone offset or Z (e.g. 2026-12-15T14:30:00+08:00 or 2026-12-15T06:30:00Z)."
+    }
+  },
+  "required": [
+    "scheduledId",
+    "expectedRevision",
+    "sendAt"
+  ],
+  "additionalProperties": false
+}
+```
+
+### app_mail_scheduled_cancel
+
+取消定时发送邮件并退回草稿。Cancel a pending, missed or failed scheduled email with expectedRevision. Restores the source draft back to editing by default (restoreDraft=true) and releases scheduled asset pins.
+
+权限：content.mutate；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scheduledId": {
+      "type": "string",
+      "pattern": "^ms_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "expectedRevision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "restoreDraft": {
+      "default": true,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "scheduledId",
+    "expectedRevision"
+  ],
+  "additionalProperties": false
+}
+```
+
+### app_mail_scheduled_send
+
+立即发送已预约或已错过的定时邮件。Immediately submit a pending, missed or failed scheduled email with expectedRevision and confirmed=true, returning its SendReceipt. Never resends unknown outcomes; reconcile via operation.get instead.
+
+权限：content.mutate；风险：normal。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scheduledId": {
+      "type": "string",
+      "pattern": "^ms_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "expectedRevision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "scheduledId",
+    "expectedRevision",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### app_mail_operation_list
 
 列出邮件发送回执。List durable email send receipts, including partial rejection and unknown outcomes. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
@@ -1924,7 +2141,7 @@
 
 ### app_mail_cache_clear
 
-清理可重新下载的邮箱缓存。Clear only re-downloadable email body/attachment cache; preserves credentials, drafts and pending or unknown sends.
+清理可重新下载的邮箱缓存。Clear only re-downloadable email body/attachment cache; preserves credentials, drafts, scheduled sends and pending or unknown sends.
 
 权限：content.mutate；风险：normal。
 

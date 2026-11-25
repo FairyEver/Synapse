@@ -8,7 +8,7 @@ import type { IpcInvocationSender } from "../../../electron/runtime/ipc/types"
 import { MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS } from "../shared/schema"
 import { MAIL_DEFINITIONS } from "../shared/capability"
 import { parseMailReference } from "../shared/manifest"
-import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS, MAIL_MAX_BODY_BYTES } from "../shared/limits"
+import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS, MAIL_MAX_BODY_BYTES, MAIL_SCHEDULED_RESUME_DELAY_MS } from "../shared/limits"
 import { configureAccountSchema, type ConfigureAccount, type MailChanged, type MailOpenRequest, type MailScope } from "../shared/private-schema"
 import { MailError, type MailAction, type MailContext, type MailInputs, type MailResults } from "../shared/types"
 import { MailContextProvider, createMailAccess } from "./context"
@@ -27,6 +27,7 @@ import { MailDrafts, type StoredDraft } from "./drafts"
 import { MailDraftSync } from "./draft-sync"
 import { MailSend } from "./send"
 import { MailSendOperations } from "./send-reconcile"
+import { MailScheduler } from "./scheduled"
 import { MailBodyResources, rasterMime } from "./body-resources"
 import { MailNotifications } from "./notifications"
 import type { MailNotificationAdapter } from "./notification-adapter"
@@ -71,6 +72,7 @@ export class MailService {
   private readonly draftSync: MailDraftSync
   private readonly send: MailSend
   private readonly operations: MailSendOperations
+  private readonly scheduler: MailScheduler
   private readonly resources: MailBodyResources
   private readonly notifications: MailNotifications
   constructor(private readonly deps: MailServiceDeps) {
@@ -96,7 +98,15 @@ export class MailService {
     this.draftSync = new MailDraftSync(this.repo, this.accounts, this.assets, this.drafts, deps.diagnostic)
     this.operations = new MailSendOperations(this.repo, this.accounts, this.assets, this.drafts)
     this.send = new MailSend(this.repo, this.accounts, this.assets, this.drafts, this.operations)
-    this.notifications = new MailNotifications(this.repo, this.accounts, deps.notifications, (ctx, target) => this.open(ctx, { accountId: target.accountId, messageId: target.messageId ?? undefined }), (code, id) => { this.notificationError = code; deps.diagnostic(code, id) }, access)
+    this.notifications = new MailNotifications(this.repo, this.accounts, deps.notifications, (ctx, target) => this.open(ctx, { accountId: target.accountId, messageId: target.messageId ?? undefined, scheduledId: target.scheduledId ?? undefined, view: target.view }), (code, id) => { this.notificationError = code; deps.diagnostic(code, id) }, access)
+    this.scheduler = new MailScheduler(this.repo, this.accounts, this.assets, this.drafts, this.send, {
+      changed: e => this.changed(e),
+      draftRestored: (ctx, draftId) => this.draftSync.enqueue({ ...ctx, actor: "sync" }, draftId),
+      notify: (ctx, input) => this.notifications.notifyScheduled(ctx, input),
+      diagnostic: deps.diagnostic,
+      context: actor => this.context(actor),
+      scoped: (ctx, accountId) => this.scoped(ctx, accountId),
+    })
     this.sync = new MailSync(this.repo, this.accounts, { changed: e => this.changed(e), inbox: (ctx, delta) => this.notifications.accept(ctx, delta), error: deps.diagnostic, draft: async (ctx, id) => { await this.drafts.indexRemote(ctx, id) } })
     this.automationReceipts = new MailAutomationReceipts(this.repo, this.accounts, this.sync)
   }
@@ -169,7 +179,7 @@ export class MailService {
   }
   private async actionContext(ctx: MailContext, input: Record<string, unknown>): Promise<MailContext> {
     let accountId = typeof input.accountId === "string" ? input.accountId : undefined
-    for (const [key, entity] of [["draftId", "drafts"], ["messageId", "messages"], ["assetId", "assets"], ["operationId", "operations"], ["previewId", "previews"], ["jobId", "sync-state"]] as const) {
+    for (const [key, entity] of [["draftId", "drafts"], ["messageId", "messages"], ["assetId", "assets"], ["operationId", "operations"], ["previewId", "previews"], ["scheduledId", "scheduled"], ["jobId", "sync-state"]] as const) {
       if (!accountId && typeof input[key] === "string") {
         let row = await this.repo.find(ctx, entity, input[key])
         if (!row && key === "jobId") row = await this.repo.find(ctx, "search-tasks", input[key])
@@ -179,7 +189,7 @@ export class MailService {
     if (!accountId && typeof input.reference === "string") accountId = (await resolveMessage(this.repo, ctx, parseMailReference(input.reference)!)).accountId
     return accountId ? this.scoped(ctx, accountId) : ctx
   }
-  private async open(ctx: MailContext, target: { accountId?: string; messageId?: string; configure?: boolean }): Promise<void> {
+  private async open(ctx: MailContext, target: { accountId?: string; messageId?: string; scheduledId?: string; view?: "scheduled"; configure?: boolean }): Promise<void> {
     if (target.accountId) await this.accounts.get(ctx, target.accountId)
     if (target.messageId) await resolveMessage(this.repo, ctx, target.messageId)
     this.contexts.assertCurrent(ctx)
@@ -197,7 +207,7 @@ export class MailService {
     for (const s of this.subscribers.values()) s.detach()
     this.subscribers.clear()
     this.stopMaintenance()
-    await Promise.all([this.sync.dispose(), this.search.dispose(), this.draftSync.dispose(), this.maintenanceTask])
+    await Promise.all([this.sync.dispose(), this.search.dispose(), this.draftSync.dispose(), this.scheduler.dispose(), this.maintenanceTask])
     this.maintenanceCursors = {}
   }
   identityChanged(): void { this.identityChanging = false; this.contexts.refreshIdentity(); if (this.enabled) this.initializeBackground() }
@@ -208,9 +218,9 @@ export class MailService {
     const ctx = this.context("sync")
     this.initialization = this.initialization.catch(() => undefined).then(async () => {
       this.contexts.assertCurrent(ctx)
-      await this.accounts.recover(ctx); await this.mutations.recover(ctx); await this.operations.recover(ctx); await this.drafts.recover(ctx)
+      await this.accounts.recover(ctx); await this.mutations.recover(ctx); await this.operations.recover(ctx); await this.drafts.recover(ctx); await this.scheduler.recover(ctx)
       await this.accounts.recoverCredentials(ctx); await this.assets.recover(ctx); await this.send.expire(ctx)
-      if (!this.suspended) { await this.sync.resume(ctx); await this.resumeDraftSync(ctx); this.startMaintenance(ctx) }
+      if (!this.suspended) { await this.sync.resume(ctx); await this.resumeDraftSync(ctx); await this.scheduler.start(ctx); this.startMaintenance(ctx) }
     }).catch(() => { if (!ctx.signal.aborted) this.deps.diagnostic("MAIL_RECOVERY_FAILED", "mail") })
   }
   private async resumeDraftSync(ctx: MailContext): Promise<void> {
@@ -232,13 +242,14 @@ export class MailService {
         this.maintenanceCursors.previews = previews.nextCursor ?? undefined
         const assets = await this.assets.recover(ctx, this.maintenanceCursors.assets)
         this.maintenanceCursors.assets = assets.nextCursor ?? undefined
+        await this.scheduler.tick(ctx)
       })().catch(() => { if (!ctx.signal.aborted) this.deps.diagnostic("MAIL_MAINTENANCE_FAILED", "mail") }).finally(() => { this.maintenanceTask = null })
     }, MAIL_POLL_INTERVAL_MS)
     this.maintenanceTimer.unref?.()
   }
   startBackground(): void { this.enabled = true; this.initializeBackground() }
-  async suspend(): Promise<void> { this.suspended = true; this.stopMaintenance(); await Promise.all([this.sync.suspend(), this.draftSync.dispose(), this.maintenanceTask]) }
-  async resume(): Promise<void> { this.suspended = false; if (this.contexts.status().ownerId) { const ctx = this.context("sync"); await this.sync.resume(ctx); await this.resumeDraftSync(ctx); this.startMaintenance(ctx) } }
+  async suspend(): Promise<void> { this.suspended = true; this.stopMaintenance(); await Promise.all([this.sync.suspend(), this.draftSync.dispose(), this.scheduler.suspend(), this.maintenanceTask]) }
+  async resume(): Promise<void> { this.suspended = false; if (this.contexts.status().ownerId) { const ctx = this.context("sync"); await this.sync.resume(ctx); await this.resumeDraftSync(ctx); this.scheduler.resume(ctx, MAIL_SCHEDULED_RESUME_DELAY_MS); this.startMaintenance(ctx) } }
   async dispose(): Promise<void> { this.enabled = false; await this.beforeIdentityChange(); await this.initialization; this.notifications.dispose(); this.contexts.dispose() }
   async imageGrant(messageId: string, assetId: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }), message = await resolveMessage(this.repo, ctx, messageId), asset = await this.assets.info(ctx, assetId); if (asset.messageId !== messageId || asset.accountId !== message.accountId) throw new MailError("UNAVAILABLE", "图片不属于当前邮件"); await this.content.ensureAsset(ctx, assetId, MAIL_MAX_IMAGE_BYTES); return { token: await this.resources.issue(ctx, messageId, assetId) } }
   async imageRead(messageId: string, token: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }); return this.resources.read(ctx, messageId, token) }
@@ -302,6 +313,10 @@ export class MailService {
     const outputPath = await this.deps.saveFile?.(asset.name, sender)
     return outputPath ? this.execute(ctx, "attachment.download_file", { assetId, outputPath }) : null
   }
+  async scheduledBody(scheduledId: string) {
+    const ctx = await this.actionContext(this.context("ui"), { scheduledId })
+    return this.scheduler.readBody(ctx, scheduledId)
+  }
   async execute<K extends MailAction>(context: MailContext, action: K, input: MailInputs[K]): Promise<MailResults[K]> {
     this.contexts.assertCurrent(context)
     const parsed = MAIL_INPUT_SCHEMAS[action].parse(input)
@@ -349,6 +364,12 @@ export class MailService {
       case "body.read_chunk": result = await this.content.readChunk(ctx, parsed as MailInputs["body.read_chunk"]); break
       case "send.preview": result = await this.send.preview(ctx, parsed as MailInputs["send.preview"]); break
       case "message.send": result = await this.send.submit(ctx, parsed as MailInputs["message.send"]); break
+      case "scheduled.create": result = await this.scheduler.execute(ctx, "scheduled.create", parsed as MailInputs["scheduled.create"]); break
+      case "scheduled.list": result = await this.scheduler.execute(ctx, "scheduled.list", parsed as MailInputs["scheduled.list"]); break
+      case "scheduled.get": result = await this.scheduler.execute(ctx, "scheduled.get", parsed as MailInputs["scheduled.get"]); break
+      case "scheduled.update": result = await this.scheduler.execute(ctx, "scheduled.update", parsed as MailInputs["scheduled.update"]); break
+      case "scheduled.cancel": result = await this.scheduler.execute(ctx, "scheduled.cancel", parsed as MailInputs["scheduled.cancel"]); break
+      case "scheduled.send": result = await this.scheduler.execute(ctx, "scheduled.send", parsed as MailInputs["scheduled.send"]); break
       case "operation.list": result = await this.operations.list(ctx, parsed as MailInputs["operation.list"]); break
       case "operation.get": result = await this.operations.get(ctx, parsed as MailInputs["operation.get"]); break
       case "cache.clear": result = await this.assets.clearCache(ctx, (parsed as MailInputs["cache.clear"]).accountId); break

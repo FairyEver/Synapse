@@ -4,7 +4,7 @@ import type { IpcModule, IpcMethodDescriptor, IpcHandlerContext } from "../../..
 import { MAIL_SERVICE_ID } from "../shared/manifest"
 import { MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
 import { draftCommitSchema, configureAccountSchema, type ConfigureAccount } from "../shared/private-schema"
-import { MAIL_INPUT_SCHEMAS, accountIdSchema, messageIdSchema, assetIdSchema, draftIdSchema } from "../shared/schema"
+import { MAIL_INPUT_SCHEMAS, accountIdSchema, messageIdSchema, assetIdSchema, draftIdSchema, scheduledIdSchema } from "../shared/schema"
 import type { MailAction, MailInputs } from "../shared/types"
 import { mailFailure } from "./dispatcher"
 import type { MailService } from "./service"
@@ -63,6 +63,12 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   bodyReadChunk: { ...method("body.read_chunk"), operationId: "app.mail.body.read_chunk" },
   sendPreview: { ...method("send.preview"), operationId: "app.mail.send.preview" },
   messageSend: { ...method("message.send"), operationId: "app.mail.message.send" },
+  scheduledCreate: { ...method("scheduled.create"), operationId: "app.mail.scheduled.create" },
+  scheduledList: { ...method("scheduled.list"), operationId: "app.mail.scheduled.list" },
+  scheduledGet: { ...method("scheduled.get"), operationId: "app.mail.scheduled.get" },
+  scheduledUpdate: { ...method("scheduled.update"), operationId: "app.mail.scheduled.update" },
+  scheduledCancel: { ...method("scheduled.cancel"), operationId: "app.mail.scheduled.cancel" },
+  scheduledSend: { ...method("scheduled.send"), operationId: "app.mail.scheduled.send" },
   operationList: { ...method("operation.list"), operationId: "app.mail.operation.list" },
   operationGet: { ...method("operation.get"), operationId: "app.mail.operation.get" },
   cacheClear: { ...method("cache.clear"), operationId: "app.mail.cache.clear" },
@@ -83,4 +89,5 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   imageImport: { ...privateMethod(z.object({ accountId: accountIdSchema, base64: z.string().max(Math.ceil(MAIL_MAX_IMAGE_BYTES / 3) * 4) }).strict(), (s, i) => s.importImage(i.accountId, i.base64)), operationId: "app.mail.image.import" },
   pickAttachments: { ...privateMethod(z.object({ accountId: accountIdSchema }).strict(), (s, i, c) => s.pickAttachments(i.accountId, c.sender)), operationId: "app.mail.attachment.pick" },
   saveAttachment: { ...privateMethod(z.object({ assetId: assetIdSchema }).strict(), (s, i, c) => s.saveAttachment(i.assetId, c.sender)), operationId: "app.mail.attachment.save" },
+  scheduledBody: { ...privateMethod(z.object({ scheduledId: scheduledIdSchema }).strict(), (s, i) => s.scheduledBody(i.scheduledId)), operationId: "app.mail.scheduled.body" },
 }, events: {} }

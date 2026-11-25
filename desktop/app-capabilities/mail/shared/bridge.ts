@@ -44,6 +44,12 @@ export interface MailBridge {
   bodyReadChunk(input: MailArguments["body.read_chunk"]): Promise<MailResults["body.read_chunk"]>
   sendPreview(input: MailArguments["send.preview"]): Promise<MailResults["send.preview"]>
   messageSend(input: MailArguments["message.send"]): Promise<MailResults["message.send"]>
+  scheduledCreate(input: MailArguments["scheduled.create"]): Promise<MailResults["scheduled.create"]>
+  scheduledList(input: MailArguments["scheduled.list"]): Promise<MailResults["scheduled.list"]>
+  scheduledGet(input: MailArguments["scheduled.get"]): Promise<MailResults["scheduled.get"]>
+  scheduledUpdate(input: MailArguments["scheduled.update"]): Promise<MailResults["scheduled.update"]>
+  scheduledCancel(input: MailArguments["scheduled.cancel"]): Promise<MailResults["scheduled.cancel"]>
+  scheduledSend(input: MailArguments["scheduled.send"]): Promise<MailResults["scheduled.send"]>
   operationList(input: MailArguments["operation.list"]): Promise<MailResults["operation.list"]>
   operationGet(input: MailArguments["operation.get"]): Promise<MailResults["operation.get"]>
   cacheClear(input: MailArguments["cache.clear"]): Promise<MailResults["cache.clear"]>
@@ -60,6 +66,7 @@ export interface MailBridge {
   imageImport(input: { accountId: string; base64: string }): Promise<MailAsset>
   pickAttachments(input: { accountId: string }): Promise<MailAsset[]>
   saveAttachment(input: { assetId: string }): Promise<MailResults["attachment.download_file"] | null>
+  scheduledBody(input: { scheduledId: string }): Promise<{ html: string; text: string }>
   onChanged(listener: (event: MailChanged) => void): () => void
 }
 export function createMailBridge(invoke: <T>(channel: string, input: unknown) => Promise<T>, subscribe: MailBridge["onChanged"]): MailBridge {
@@ -110,6 +117,12 @@ export function createMailBridge(invoke: <T>(channel: string, input: unknown) =>
     bodyReadChunk: input => call("body.read_chunk", input),
     sendPreview: input => call("send.preview", input),
     messageSend: input => call("message.send", input),
+    scheduledCreate: input => call("scheduled.create", input),
+    scheduledList: input => call("scheduled.list", input),
+    scheduledGet: input => call("scheduled.get", input),
+    scheduledUpdate: input => call("scheduled.update", input),
+    scheduledCancel: input => call("scheduled.cancel", input),
+    scheduledSend: input => call("scheduled.send", input),
     operationList: input => call("operation.list", input),
     operationGet: input => call("operation.get", input),
     cacheClear: input => call("cache.clear", input),
@@ -126,6 +139,7 @@ export function createMailBridge(invoke: <T>(channel: string, input: unknown) =>
     imageImport: input => call("image.import", input),
     pickAttachments: input => call("attachment.pick", input),
     saveAttachment: input => call("attachment.save", input),
+    scheduledBody: input => call("scheduled.body", input),
     onChanged: subscribe,
   }
 }

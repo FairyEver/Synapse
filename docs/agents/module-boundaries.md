@@ -478,3 +478,11 @@ Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；�
 - 平台 Cookie 会话写操作、网页登录及退出始终精确校验 `APP_PUBLIC_URL` 的 Origin；不接受父域、其他同站点子域、缺失或 `null` Origin。桌面与 iOS 的 Bearer 认证语义不变，不依赖 CORS 或 SameSite 代替服务端校验。
 - 生产网页用户/管理员会话使用 `__Host-synapse_user_session` / `__Host-synapse_admin_session`，固定 Secure、HttpOnly、Path=/，不设置 Domain，不接受旧未加前缀 Cookie 作为兼容认证。开发 HTTP 环境保留普通名称。
 - 多个原始 Cookie 字段按分号合并，避免错误解析或重复值绕过。上述是通用认证安全边界，不随某个应用退役而撤销。
+
+## 外部邮箱本机定时发送（2026-11-25）
+
+- 外部邮箱定时发送属于本机调度能力，存储于 `app.mail.scheduled`（SQLite、`local-only`、按 `ownerId` 隔离），不托管 SMTP 凭据到云端，也不新增系统常驻守护进程或拦截应用正常退出。
+- 定时创建（`scheduled.create`）必须基于有效 `send.preview` 与稳定 `clientRequestId`；在同一原子事务中锁定源草稿为 `state: "scheduled"` 并对正文与全部附件资产执行持久 pin，`MailAssets.rebuildPins` 必须包含 `scheduled`，确保缓存清理与 LRU 永不淘汰定时资产。
+- 预约时间支持未来任意具体日期与时间（ISO 8601 带时区偏移或 UTC，至少提前 30 秒、最多 10 年）；主进程定时器按单次最多 1 小时分段推进（`MAIL_SCHEDULED_TIMER_MAX_MS`），避免超过 24.8 天触发 32-bit `setTimeout` 溢出。
+- 实际到点发送时，以真实发送时刻重新编译 MIME（确保 `Date` 头为实际发出时间）并复用 `MailSend` 共享提交与 Sent 对账管线；休眠或离线延迟 30 分钟宽限期内恢复后自动补发（宽限期内确定未触网的网络错误每 60 秒重试），超时转为 `missed` 并发送本机通知待人工处理。账号暂停转 `missed`（`ACCOUNT_PAUSED`），SMTP/地址配置变更拦截为 `failed`（`ACCOUNT_CHANGED`）；触网后结果不明进入 `unknown`，崩溃恢复和 `scheduled.send` 均严禁自动或手动重发。
+- 取消定时默认将源草稿恢复为 `editing` 回到草稿箱并释放定时资产 pin；`account.delete` 必须检查待发/已错过定时邮件并在未传 `discardScheduledSends: true` 时拒绝移除。

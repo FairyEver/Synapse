@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { Draft, DraftInput, MailPreview, SendReceipt, MailAsset } from "../../../app-capabilities/mail/shared/types"
+import type { Draft, DraftInput, MailPreview, SendReceipt, MailAsset, ScheduledSendDetail } from "../../../app-capabilities/mail/shared/types"
 import { addressSchema } from "../../../app-capabilities/mail/shared/schema"
 import { MAIL_MAX_IMAGE_BYTES } from "../../../app-capabilities/mail/shared/limits"
 import { sanitizeComposeDocument } from "../../../app-capabilities/mail/renderer/compose-document"
@@ -56,14 +56,15 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const [closeRequested, setCloseRequested] = useState(false)
   const [focusBodyOnOpen, setFocusBodyOnOpen] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "" })
-  const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false), [reconciling, setReconciling] = useState(false)
+  const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [scheduling, setScheduling] = useState(false), [loading, setLoading] = useState(false), [reconciling, setReconciling] = useState(false)
   const [addressError, setAddressError] = useState<ComposeAddressError | null>(null)
-  const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null)
+  const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null), [scheduled, setScheduled] = useState<ScheduledSendDetail | null>(null)
   const value = useRef<Draft | null>(null), addressRef = useRef(addresses), changed = useRef(0), saved = useRef(0), epoch = useRef(0), active = useRef(true), ownerRef = useRef(owner)
   const baseline = useRef(""), unsavedContent = useRef(false)
   ownerRef.current = owner
   const savingTask = useRef<Promise<void> | null>(null), sendLock = useRef(false), opening = useRef(false)
   const request = useRef<{ previewId: string; key: string } | null>(null)
+  const scheduleRequest = useRef<{ previewId: string; key: string } | null>(null)
   const reconciliation = useRef<string | null>(null)
   const replace = (next: Draft | null) => { value.current = next; setDraft(next) }
   const reportError = (cause: unknown) => { if (cause instanceof ComposeAddressError) setAddressError(cause); setError(mailError(cause)) }
@@ -75,12 +76,12 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   }
   const initialize = (next: Draft) => {
     setAddressError(null)
-    replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
+    replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); setScheduled(null); request.current = null; scheduleRequest.current = null
     baseline.current = composeContent(next, a).key; unsavedContent.current = false
   }
   useEffect(() => {
-    active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
-    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false); setAddressError(null)
+    active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); setScheduled(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setScheduling(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
+    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false); setAddressError(null); scheduleRequest.current = null
     return () => { active.current = false; epoch.current++ }
   }, [owner])
   const open = useCallback(async (intent: ComposeIntent) => {
@@ -96,11 +97,11 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   }, [owner])
   const edit = useCallback((patch: Partial<Omit<DraftInput, "accountId">>) => {
     if (!value.current || value.current.state !== "editing" || sendLock.current) return
-    changed.current++; replace({ ...value.current, ...patch }); refreshDirty(); setPreview(null); request.current = null; setEditVersion(changed.current)
+    changed.current++; replace({ ...value.current, ...patch }); refreshDirty(); setPreview(null); request.current = null; scheduleRequest.current = null; setEditVersion(changed.current)
   }, [])
   const changeAddress = (key: keyof typeof addresses, text: string) => {
     if (sendLock.current || value.current?.state !== "editing") return
-    addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; refreshDirty(); setPreview(null); request.current = null; setError(null); setEditVersion(changed.current)
+    addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; refreshDirty(); setPreview(null); request.current = null; scheduleRequest.current = null; setError(null); setEditVersion(changed.current)
     setAddressError(current => current?.field === key ? null : current)
   }
   const addDepartmentRecipients = (field: "to" | "cc", members: DepartmentMember[], excludeMissing: boolean) => {
@@ -181,6 +182,54 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     } catch (cause) { if (epoch.current === e) setError(mailError(cause)) }
     finally { if (epoch.current === e) { sendLock.current = false; setSending(false) } }
   }
+  const scheduleSend = async (sendAtIso: string) => {
+    if (sendLock.current || value.current?.state !== "editing" || receipt?.state === "unknown" || receipt?.state === "failed") return
+    sendLock.current = true; setScheduling(true); setError(null); const e = epoch.current
+    try {
+      const frozen = preview && Date.parse(preview.expiresAt) > Date.now() && !dirty ? preview : await preparePreview()
+      if (!scheduleRequest.current || scheduleRequest.current.previewId !== frozen.previewId) scheduleRequest.current = { previewId: frozen.previewId, key: crypto.randomUUID() }
+      const result = await runMailUiOperation("send", () => mailApi().scheduledCreate({ previewId: frozen.previewId, sendAt: sendAtIso, clientRequestId: scheduleRequest.current!.key, confirmed: true }))
+      if (epoch.current !== e || !active.current) return
+      setScheduled(result)
+      replace({ ...value.current!, state: "scheduled" })
+      unsavedContent.current = false
+      setDirty(false)
+    } catch (cause) {
+      if (epoch.current === e) setError(mailError(cause))
+      throw cause
+    } finally {
+      if (epoch.current === e) { sendLock.current = false; setScheduling(false) }
+    }
+  }
+  const rescheduleScheduled = async (sendAtIso: string) => {
+    if (!scheduled || sendLock.current) return
+    sendLock.current = true; setScheduling(true); setError(null); const e = epoch.current
+    try {
+      const result = await runMailUiOperation("mutate", () => mailApi().scheduledUpdate({ scheduledId: scheduled.id, expectedRevision: scheduled.revision, sendAt: sendAtIso }))
+      if (epoch.current === e && active.current) setScheduled(result)
+    } catch (cause) {
+      if (epoch.current === e) setError(mailError(cause))
+      throw cause
+    } finally {
+      if (epoch.current === e) { sendLock.current = false; setScheduling(false) }
+    }
+  }
+  const cancelScheduledAndEdit = async () => {
+    if (!scheduled || sendLock.current) return
+    sendLock.current = true; setScheduling(true); setError(null); const e = epoch.current
+    try {
+      await runMailUiOperation("mutate", () => mailApi().scheduledCancel({ scheduledId: scheduled.id, expectedRevision: scheduled.revision, restoreDraft: true }))
+      const restored = await mailApi().draftGet({ draftId: scheduled.draftId })
+      if (epoch.current === e && active.current) {
+        persisted.current = true
+        initialize(restored)
+      }
+    } catch (cause) {
+      if (epoch.current === e) setError(mailError(cause))
+    } finally {
+      if (epoch.current === e) { sendLock.current = false; setScheduling(false) }
+    }
+  }
   const reconcile = async () => {
     if (!receipt || reconciliation.current) return
     const e = epoch.current, operationId = receipt.operationId
@@ -233,6 +282,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, canRetrySentCopy, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, retrySentCopy, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, scheduling, loading, reconciling, canRetrySentCopy, dirty, preview, receipt, scheduled, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, scheduleSend, rescheduleScheduled, cancelScheduledAndEdit, reconcile, retrySentCopy, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

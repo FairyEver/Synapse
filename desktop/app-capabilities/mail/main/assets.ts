@@ -139,7 +139,7 @@ export class MailAssets {
   /** Call under the account queue before cache maintenance or resuming jobs. */
   async rebuildPins(ctx: MailContext, accountId: string): Promise<void> {
     const counts = new Map<string, number>()
-    for (const entity of ["drafts", "previews", "operations"] as const) {
+    for (const entity of ["drafts", "previews", "operations", "scheduled"] as const) {
       let cursor: string | undefined
       do {
         const page = await this.repo.page(ctx, entity, { accountId, cursor, limit: 100 })

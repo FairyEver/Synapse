@@ -10,11 +10,29 @@ describe("mail natural-language routing", () => {
     const result = await searchSynapseTools({ query: context ? `邮件 ${prompt}` : prompt, limit: 5 })
     if (expected === null) {
       expect(result.tools).toEqual([])
-      expect(result.guidance).toContain("不支持定时发送")
+      expect(result.guidance).toContain("不支持")
     } else {
       expect(result.tools[0]?.name).toBe(expected)
       expect(result.tools.every(tool => tool.domain === (prompt.includes("站内信") ? "mail_internal" : "mail"))).toBe(true)
     }
+  })
+
+  it("routes scheduled external email workflows to scheduled tools", async () => {
+    const createResult = await searchSynapseTools({ query: "预约在 2026年12月15日 下午2点半定时发送邮件给 alice@example.com", limit: 5 })
+    expect(createResult.tools.map(t => t.name)).toContain("app_mail_scheduled_create")
+    expect(createResult.tools[0]?.name).toBe("app_mail_draft_create")
+
+    const listResult = await searchSynapseTools({ query: "查看我有哪些定时发送邮件", limit: 5 })
+    expect(listResult.tools[0]?.name).toBe("app_mail_scheduled_list")
+
+    const rescheduleResult = await searchSynapseTools({ query: "修改定时邮件的发送时间", limit: 5 })
+    expect(rescheduleResult.tools.map(t => t.name)).toContain("app_mail_scheduled_update")
+
+    const cancelResult = await searchSynapseTools({ query: "取消定时发送这封邮件", limit: 5 })
+    expect(cancelResult.tools.map(t => t.name)).toContain("app_mail_scheduled_cancel")
+
+    const sendNowResult = await searchSynapseTools({ query: "立即发送这封已错过的定时邮件", limit: 5 })
+    expect(sendNowResult.tools.map(t => t.name)).toContain("app_mail_scheduled_send")
   })
 
   it.each(["给王总发邮件", "看我的邮件", "Synapse 邮件", "邮箱", "收件箱", "send email to alice@example.com", "read my inbox"])("defaults to external mail: %s", async query => {
@@ -116,7 +134,7 @@ describe("mail natural-language routing", () => {
     expect(guide).toContain("不要询问")
     expect(guide).toContain("sourceMessage")
     expect(guide).toContain("receivedAfter")
-    expect(guide).toContain("不支持定时发送")
+    expect(guide).toContain("scheduled.create")
     expect(guide).toContain("scenarios.md")
   })
 })

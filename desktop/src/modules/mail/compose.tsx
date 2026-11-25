@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState, type ComponentProps } from "react"
 import { EditorContent } from "@tiptap/react"
-import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, Link2, ImagePlus, Paperclip, X, Send, Save } from "lucide-react"
+import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, Link2, ImagePlus, Paperclip, X, Send, Save, Clock } from "lucide-react"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog"
@@ -14,11 +14,13 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { formatDateTime } from "@/lib/date-time"
 import { cn } from "@/lib/utils"
 import { track } from "@/lib/ui-tracking"
 import type { AccountSummary } from "../../../app-capabilities/mail/shared/types"
 import type { ComposeModel } from "./use-compose"
 import { DepartmentPicker } from "./department-picker"
+import { MailSchedulePickerDialog } from "./schedule-picker-dialog"
 import { useComposeEditor } from "./use-compose-editor"
 import { useComposeAssets } from "./use-compose-assets"
 const toolGroups = [
@@ -52,17 +54,20 @@ function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled:
 const receiptStates = { prepared: "待发送", submitting: "发送中", accepted: "服务器已接受", partial: "部分收件人被拒绝", failed: "发送失败", unknown: "发送结果待核验" }
 export function MailCompose({ model, accounts, onRetry, unavailable }: { model: ComposeModel; accounts: AccountSummary[]; onRetry?(): void; unavailable?: string | null }) {
   const composer = useComposeEditor(model), attachments = useComposeAssets(model.draft), imageInput = useRef<HTMLInputElement>(null), closeReturnFocus = useRef<HTMLElement | null>(null)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const draft = model.draft, account = accounts.find(a => a.id === draft?.accountId)
-  const disabled = !draft || draft.state !== "editing" || model.sending || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
+  const disabled = !draft || draft.state !== "editing" || model.sending || model.scheduling || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
   const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim()
   const operationError = model.error === model.addressError?.message ? null : model.error
   const contentError = operationError ?? composer.error ?? attachments.error
   const save = () => { void model.save().catch(() => undefined) }
   return <><SystemAppWindowShell left={<div className="flex items-center">
     <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => void model.send()} data-track="mail.send"><Send />{model.sending ? "发送中…" : "发送"}</SystemAppTopBarActionButton>
+    <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => setScheduleOpen(true)} data-track="mail.schedule"><Clock />{model.scheduling ? "预约中…" : "定时发送"}</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled || model.saving} onClick={save} data-track="mail.draft.save"><Save />保存草稿</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled} onClick={() => void model.pickAttachments()}><Paperclip />附件</SystemAppTopBarActionButton>
-  </div>} actions={<div className="flex min-w-0 items-center gap-3"><span title={account?.email} className="max-w-32 truncate text-sm text-muted-foreground sm:max-w-48 lg:max-w-72">{account?.email}</span><span role="status" className="w-14 shrink-0 text-right text-xs text-muted-foreground">{model.saving ? "保存中…" : draft?.state === "consumed" ? "已发送" : model.dirty ? "未保存" : draft?.localSaved ? "已保存" : ""}</span></div>}>
+  </div>} actions={<div className="flex min-w-0 items-center gap-3"><span title={account?.email} className="max-w-32 truncate text-sm text-muted-foreground sm:max-w-48 lg:max-w-72">{account?.email}</span><span role="status" className="w-14 shrink-0 text-right text-xs text-muted-foreground">{model.saving ? "保存中…" : draft?.state === "consumed" ? "已发送" : draft?.state === "scheduled" ? "已定时" : model.dirty ? "未保存" : draft?.localSaved ? "已保存" : ""}</span></div>}>
     <div className="flex h-full min-h-0 flex-col bg-background">
       {model.loading && <div role="status" className="flex items-center gap-3 p-4"><Skeleton className="h-4 w-32" /><span className="text-sm text-muted-foreground">正在准备邮件…</span></div>}
       {unavailable && <p role="alert" className="p-4 text-sm text-destructive">{unavailable}</p>}
@@ -87,10 +92,22 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
       </div></TooltipProvider>
       <EditorContent className="min-h-0 flex-1 overflow-auto [&>.tiptap]:min-h-full" editor={composer.editor} />
       {draft?.state === "conflict" && <p role="alert" className="px-4 py-3 text-sm text-destructive">草稿存在冲突，内容已保留，可另存为新草稿。</p>}
+      {model.scheduled && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-t p-4 text-sm">
+        <div className="space-y-0.5">
+          <p className="font-medium">已设置定时发送</p>
+          <p className="tabular-nums text-muted-foreground">预定时间：{formatDateTime(model.scheduled.sendAt)}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={model.scheduling} onClick={() => setRescheduleOpen(true)}>修改时间</Button>
+          <Button variant="outline" disabled={model.scheduling} onClick={() => void model.cancelScheduledAndEdit()}>取消定时并继续编辑</Button>
+        </div>
+      </div>}
       {model.receipt && <div role="status" className="space-y-1 border-t p-4 text-sm"><p className="font-medium">{receiptStates[model.receipt.state]}</p>{model.receipt.accepted.length > 0 && <p className="break-all">已接受：{model.receipt.accepted.join(", ")}</p>}{model.receipt.rejected.length > 0 && <p className="break-all">已拒绝：{model.receipt.rejected.join(", ")}</p>}<p className="text-muted-foreground">已发送副本：{model.receipt.sentCopyState === "saved" ? "已保存" : model.receipt.sentCopyState === "pending" ? "待核验" : "未确认"}</p>{model.canRetrySentCopy ? <Button variant="outline" disabled={model.reconciling} onClick={() => void model.retrySentCopy()}>{model.reconciling ? "保存中…" : "重试保存已发送副本"}</Button> : (model.receipt.state === "unknown" || ["accepted", "partial"].includes(model.receipt.state) && model.receipt.sentCopyState !== "saved") && <Button variant="outline" disabled={model.reconciling} onClick={() => void model.reconcile()}>{model.reconciling ? "核验中…" : model.receipt.state === "unknown" ? "核验发送结果" : "核验已发送副本"}</Button>}</div>}
-      {draft && (draft.state !== "editing" || model.receipt) && <div className="p-3"><Button variant="outline" onClick={() => void model.copyDraft()} disabled={model.sending}>另存为新草稿</Button></div>}
+      {draft && (draft.state === "consumed" || draft.state === "conflict" || model.receipt) && <div className="p-3"><Button variant="outline" onClick={() => void model.copyDraft()} disabled={model.sending || model.scheduling}>另存为新草稿</Button></div>}
     </div></div>
   </SystemAppWindowShell>
+  <MailSchedulePickerDialog open={scheduleOpen} busy={model.scheduling} onOpenChange={setScheduleOpen} onConfirm={sendAt => model.scheduleSend(sendAt)} />
+  {model.scheduled && <MailSchedulePickerDialog open={rescheduleOpen} title="修改发送时间" confirmLabel="保存新时间" initialSendAt={model.scheduled.sendAt} busy={model.scheduling} onOpenChange={setRescheduleOpen} onConfirm={sendAt => model.rescheduleScheduled(sendAt)} />}
   <AlertDialog open={model.closeRequested} onOpenChange={open => { if (!open) void model.resolveClose("cancel") }}><AlertDialogContent onOpenAutoFocus={() => { closeReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }} onCloseAutoFocus={event => { event.preventDefault(); if (closeReturnFocus.current?.isConnected) closeReturnFocus.current.focus() }}><AlertDialogHeader><AlertDialogTitle>保存修改？</AlertDialogTitle><AlertDialogDescription>邮件包含未保存的修改。</AlertDialogDescription></AlertDialogHeader>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}<AlertDialogFooter><AlertDialogCancel disabled={model.saving}>取消</AlertDialogCancel><Button variant="outline" disabled={model.saving} onClick={() => void model.resolveClose("discard")}>不保存</Button><Button disabled={model.saving} onClick={() => void model.resolveClose("save")}>保存并关闭</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   <Dialog open={composer.linkOpen} onOpenChange={composer.setLinkOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>插入链接</DialogTitle></DialogHeader><Label htmlFor="mail-compose-link">地址</Label><Input id="mail-compose-link" value={composer.link} onChange={event => composer.changeLink(event.target.value)} aria-invalid={!!composer.linkError || undefined} aria-describedby={composer.linkError ? "mail-compose-link-error" : undefined} autoFocus />{composer.linkError && <FieldError id="mail-compose-link-error">{composer.linkError}</FieldError>}<DialogFooter><Button onClick={composer.applyLink}>应用</Button></DialogFooter></DialogContent></Dialog>
   </>

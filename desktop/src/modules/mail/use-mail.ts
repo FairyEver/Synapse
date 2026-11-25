@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useAccount } from "@/app-shell/account"
-import type { AccountSummary, Folder, MailSummary, MailDetail, Coverage, Draft, BatchResult } from "../../../app-capabilities/mail/shared/types"
+import type { AccountSummary, Folder, MailSummary, MailDetail, Coverage, Draft, BatchResult, ScheduledSendSummary, ScheduledSendDetail } from "../../../app-capabilities/mail/shared/types"
 import type { MailScope } from "../../../app-capabilities/mail/shared/private-schema"
 import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/tracking"
 import { MAIL_INPUT_SCHEMAS } from "../../../app-capabilities/mail/shared/schema"
 import { mailApi, mailError } from "./api"
 import { useMailSync } from "./use-mail-sync"
-export type MailView = { folderId?: string; unreadOnly?: boolean; starredOnly?: boolean; drafts?: boolean }
+export type MailView = { folderId?: string; unreadOnly?: boolean; starredOnly?: boolean; drafts?: boolean; scheduled?: boolean }
 type DraftDeleteResult = { items: { id: string; status: "succeeded" | "failed"; error?: string }[] }
 export function useMail() {
   const { state } = useAccount(), owner = state.status === "authenticated" ? state.profile.user.id : null
@@ -15,8 +15,9 @@ export function useMail() {
   const [loadedOwner, setLoadedOwner] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<AccountSummary[]>([]), [accountId, setAccountId] = useState<string | null>(null)
   const [folders, setFolders] = useState<Folder[]>([]), [view, setView] = useState<MailView>({})
-  const [items, setItems] = useState<MailSummary[]>([]), [drafts, setDrafts] = useState<Omit<Draft, "html" | "text">[]>([])
-  const [detail, setDetail] = useState<MailDetail | null>(null), [coverage, setCoverage] = useState<Coverage | null>(null)
+  const [items, setItems] = useState<MailSummary[]>([]), [drafts, setDrafts] = useState<Omit<Draft, "html" | "text">[]>([]), [scheduledItems, setScheduledItems] = useState<ScheduledSendSummary[]>([])
+  const [detail, setDetail] = useState<MailDetail | null>(null), [scheduledDetail, setScheduledDetail] = useState<ScheduledSendDetail | null>(null), [coverage, setCoverage] = useState<Coverage | null>(null)
+  const scheduledDetailRef = useRef<ScheduledSendDetail | null>(null); scheduledDetailRef.current = scheduledDetail
   const [cursor, setCursor] = useState<string | null>(null), [canContinue, setCanContinue] = useState(false)
   const [loading, setLoading] = useState(false), [error, setError] = useState<string | null>(null)
   const scope = useRef<MailScope | null>(null), active = useRef(true), epoch = useRef(0), sequence = useRef(0), selection = useRef(0)
@@ -28,7 +29,7 @@ export function useMail() {
     if (accountRef.current === id) return
     defaultInboxPending.current = true
     epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; accountRef.current = id; viewRef.current = {}; searchJob.current = null; retries.current.clear()
-    setAccountId(id); setView({}); setItems([]); setDrafts([]); setDetail(null); setFolders([]); setCoverage(null); setCursor(null); setCanContinue(false); setError(null)
+    setAccountId(id); setView({}); setItems([]); setDrafts([]); setScheduledItems([]); setDetail(null); setScheduledDetail(null); setFolders([]); setCoverage(null); setCursor(null); setCanContinue(false); setError(null)
   }, [])
   const refresh = useCallback(async (more = false, nextCursor?: string) => {
     const id = accountRef.current
@@ -37,13 +38,23 @@ export function useMail() {
     setLoading(true)
     const valid = () => current(e, id) && sequence.current === seq
     try {
-      if (selected.drafts && !job) {
+      if (selected.scheduled && !job) {
+        const page = await mailApi().scheduledList({ accountId: id, limit: 50, cursor: nextCursor })
+        if (!valid()) return
+        setScheduledItems(previous => more ? [...new Map([...previous, ...page.items].map(item => [item.id, item])).values()] : page.items)
+        setCursor(page.nextCursor); setError(null)
+        const activeScheduledId = scheduledDetailRef.current?.id
+        if (!more && activeScheduledId) {
+          const latest = await mailApi().scheduledGet({ scheduledId: activeScheduledId }).catch(() => null)
+          if (valid() && scheduledDetailRef.current?.id === activeScheduledId) setScheduledDetail(latest)
+        }
+      } else if (selected.drafts && !job) {
         const rows: Omit<Draft, "html" | "text">[] = [], limit = more ? 1 : draftPages.current
         let next = nextCursor, pages = 0
         do {
           const page = await mailApi().draftList({ accountId: id, limit: 50, cursor: next })
           if (!valid()) return
-          rows.push(...page.items); next = page.nextCursor ?? undefined; pages++
+          rows.push(...page.items.filter(item => item.state !== "scheduled")); next = page.nextCursor ?? undefined; pages++
         } while (next && pages < limit)
         if (valid()) { draftPages.current = more ? draftPages.current + pages : pages; setDrafts(previous => more ? [...previous, ...rows] : rows); setCursor(next ?? null); setError(null) }
       } else {
@@ -76,7 +87,7 @@ export function useMail() {
       const api = mailApi(), nextScope = await api.uiScope(), result: AccountSummary[] = []
       if (nextScope.ownerId !== identity) return
       const resetGeneration = scope.current !== null && scope.current.generation !== nextScope.generation
-      if (resetGeneration) { epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; retries.current.clear(); searchJob.current = null; setItems([]); setDrafts([]); setDetail(null); setCoverage(null); setCursor(null); setCanContinue(false) }
+      if (resetGeneration) { epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; retries.current.clear(); searchJob.current = null; setItems([]); setDrafts([]); setScheduledItems([]); setDetail(null); setScheduledDetail(null); setCoverage(null); setCursor(null); setCanContinue(false) }
       let next: string | undefined
       do { const page = await api.accountList({ limit: 100, cursor: next }); result.push(...page.items); next = page.nextCursor ?? undefined } while (next && ownerRef.current === identity)
       if (!active.current || ownerRef.current !== identity) return
@@ -89,7 +100,7 @@ export function useMail() {
     } catch (cause) { if (active.current && ownerRef.current === identity) setError(mailError(cause)) }
   }, [owner, selectAccount, loadFolders])
   useEffect(() => {
-    active.current = true; epoch.current++; draftPages.current = 1; accountRef.current = null; setAccountId(null); setAccounts([]); setLoadedOwner(null); setItems([]); setDetail(null); setFolders([]); setDrafts([])
+    active.current = true; epoch.current++; draftPages.current = 1; accountRef.current = null; setAccountId(null); setAccounts([]); setLoadedOwner(null); setItems([]); setDetail(null); setScheduledDetail(null); setFolders([]); setDrafts([]); setScheduledItems([])
     scope.current = null
     if (owner) void loadAccounts()
     return () => { active.current = false; epoch.current++; sequence.current++; selection.current++ }
@@ -115,7 +126,7 @@ export function useMail() {
   const selectView = useCallback((next: MailView) => {
     defaultInboxPending.current = false
     epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; viewRef.current = next; searchJob.current = null
-    setView(next); setItems([]); setDrafts([]); setDetail(null); setCoverage(null); setCursor(null); setCanContinue(false); void refreshRef.current()
+    setView(next); setItems([]); setDrafts([]); setScheduledItems([]); setDetail(null); setScheduledDetail(null); setCoverage(null); setCursor(null); setCanContinue(false); void refreshRef.current()
   }, [])
   const changeFolder = useCallback(async (action: "rename" | "delete", folderId: string, name?: string) => {
     const id = accountRef.current, e = epoch.current
@@ -178,7 +189,54 @@ export function useMail() {
     if (detail && ids.includes(detail.id) && ["delete", "move", "restore", "permanent"].includes(action)) setDetail(null)
     await refreshRef.current(); return result
   }, [owner, detail])
-  const clearDetail = useCallback(() => { selection.current++; setDetail(null) }, [])
+  const clearDetail = useCallback(() => { selection.current++; setDetail(null); setScheduledDetail(null) }, [])
+  const selectScheduled = useCallback(async (id: string) => {
+    const account = accountRef.current, e = epoch.current, seq = ++selection.current
+    setDetail(null); setScheduledDetail(null)
+    const valid = () => current(e, account) && seq === selection.current
+    try {
+      const next = await runMailUiOperation("select", () => mailApi().scheduledGet({ scheduledId: id }))
+      if (valid() && next.accountId === account) setScheduledDetail(next)
+    } catch (cause) { if (valid()) setError(mailError(cause)) }
+  }, [owner])
+  const rescheduleScheduled = useCallback(async (id: string, expectedRevision: number, sendAt: string) => {
+    const account = accountRef.current, e = epoch.current
+    const updated = await runMailUiOperation("mutate", () => mailApi().scheduledUpdate({ scheduledId: id, expectedRevision, sendAt }))
+    if (current(e, account)) {
+      if (scheduledDetailRef.current?.id === id) setScheduledDetail(updated)
+      await refreshRef.current()
+    }
+    return updated
+  }, [owner])
+  const cancelScheduled = useCallback(async (id: string, expectedRevision: number, restoreDraft = true) => {
+    const account = accountRef.current, e = epoch.current
+    const updated = await runMailUiOperation("mutate", () => mailApi().scheduledCancel({ scheduledId: id, expectedRevision, restoreDraft }))
+    if (current(e, account)) {
+      if (scheduledDetailRef.current?.id === id) setScheduledDetail(updated)
+      await refreshRef.current()
+    }
+    return updated
+  }, [owner])
+  const sendScheduledNow = useCallback(async (id: string, expectedRevision: number) => {
+    const account = accountRef.current, e = epoch.current
+    const receipt = await runMailUiOperation("send", () => mailApi().scheduledSend({ scheduledId: id, expectedRevision, confirmed: true }))
+    if (current(e, account)) {
+      const latest = await mailApi().scheduledGet({ scheduledId: id }).catch(() => null)
+      if (scheduledDetailRef.current?.id === id) setScheduledDetail(latest)
+      await refreshRef.current()
+    }
+    return receipt
+  }, [owner])
+  const reconcileScheduled = useCallback(async (scheduledId: string, operationId: string) => {
+    const account = accountRef.current, e = epoch.current
+    const receipt = await runMailUiOperation("select", () => mailApi().operationGet({ operationId }))
+    if (current(e, account)) {
+      const latest = await mailApi().scheduledGet({ scheduledId }).catch(() => null)
+      if (scheduledDetailRef.current?.id === scheduledId) setScheduledDetail(latest)
+      await refreshRef.current()
+    }
+    return receipt
+  }, [owner])
   const deleteDrafts = useCallback(async (ids: string[], onRemainingChange?: (remaining: number) => void): Promise<DraftDeleteResult> => {
     if (!ids.length || ids.length > 100 || new Set(ids).size !== ids.length) throw new Error("每次请选择 1–100 封不同草稿")
     const id = accountRef.current, e = epoch.current
@@ -208,7 +266,7 @@ export function useMail() {
   const sync = useCallback(async () => { if (accountRef.current) { await mailApi().syncStart({ accountId: accountRef.current, folderId: viewRef.current.folderId }); await refreshRef.current() } }, [])
   const visible = loadedOwner === owner
   const syncStatus = useMailSync(visible ? owner : null, visible ? accounts.find(account => account.id === accountId) : undefined, scope.current?.generation)
-  return { accounts: visible ? accounts : [], accountId: visible ? accountId : null, folders: visible ? folders : [], items: visible ? items : [], drafts: visible ? drafts : [], detail: visible ? detail : null, view, coverage, cursor, canContinue, loading, error, authenticated: !!owner, scope: scope.current, owner,
-    syncStatus, selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, changeFolder, sync }
+  return { accounts: visible ? accounts : [], accountId: visible ? accountId : null, folders: visible ? folders : [], items: visible ? items : [], drafts: visible ? drafts : [], scheduledItems: visible ? scheduledItems : [], detail: visible ? detail : null, scheduledDetail: visible ? scheduledDetail : null, view, coverage, cursor, canContinue, loading, error, authenticated: !!owner, scope: scope.current, owner,
+    syncStatus, selectAccount, selectView, selectMessage, selectScheduled, rescheduleScheduled, cancelScheduled, sendScheduledNow, reconcileScheduled, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, changeFolder, sync }
 }
 export type MailViewModel = ReturnType<typeof useMail>

@@ -16,7 +16,7 @@ import type { MailSendOperations } from "./send-reconcile"
 
 export const mailHash = (value: string | Buffer): string => createHash("sha256").update(value).digest("hex")
 export const connectionFingerprint = (config: AccountConfig): string => mailHash(JSON.stringify([config.provider, config.email, config.imap, config.smtp, config.username ?? config.email, config.smtpUsername ?? config.username ?? config.email, config.sentPolicy]))
-const operationId = (value: string): string => {
+export const sendOperationId = (value: string): string => {
   const hex = mailHash(value)
   return `mo_${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
@@ -25,7 +25,7 @@ export interface SendSnapshot extends Record<string, unknown> {
   sentRawAssetId: string; sentRawHash: string; from: string; messageId: string; createdAt: string; expiresAt: string;
   envelope: string[]; attachments: MailAsset[]; fingerprint: string; accountFingerprint: string; serverSavesSent: boolean; signature: string
 }
-interface StoredPreview extends Record<string, unknown> { snapshot: SendSnapshot; pinnedAssetIds: string[]; expired: boolean }
+export interface StoredPreview extends Record<string, unknown> { snapshot: SendSnapshot; pinnedAssetIds: string[]; expired: boolean }
 export interface StoredSend extends Record<string, unknown> {
   kind: "send"; state: SendReceipt["state"]; receipt: SendReceipt; snapshot: SendSnapshot; pinnedAssetIds: string[];
   sentFolderId: string | null; sentCopyAttempt: "not_attempted" | "submitting" | "unknown" | "saved" | "failed";
@@ -80,7 +80,7 @@ export class MailSend {
       }
     })
   }
-  private async validateSnapshot(ctx: MailContext, snapshot: SendSnapshot): Promise<void> {
+  async validateSnapshot(ctx: MailContext, snapshot: SendSnapshot): Promise<void> {
     if (Date.parse(snapshot.expiresAt) <= Date.now()) throw new MailError("PREVIEW_EXPIRED", "预览已过期，请重新预览")
     const draft = await this.drafts.stored(ctx, snapshot.draft.id)
     if (draft.data.contentRevision !== snapshot.draft.revision || draft.data.state !== "editing") throw new MailError("PREVIEW_STALE", "草稿已变化，请重新预览")
@@ -95,9 +95,10 @@ export class MailSend {
   private async outcome(ctx: MailContext, row: MailRecord<StoredSend>, receipt: SendReceipt): Promise<MailRecord<StoredSend>> {
     const data: StoredSend = { ...row.data, state: receipt.state, receipt }
     if (!["accepted", "partial"].includes(receipt.state)) return this.repo.save(ctx, "operations", row.id, row.accountId, data, row.revision, row.sortKey)
-    const draft = await this.drafts.stored(ctx, row.data.snapshot.draft.id)
+    const draft = await this.repo.find<StoredDraft>(ctx, "drafts", row.data.snapshot.draft.id)
+    if (!draft) return this.repo.save(ctx, "operations", row.id, row.accountId, data, row.revision, row.sortKey)
     if (draft.data.contentRevision !== row.data.snapshot.draft.revision) throw new MailError("VERSION_CONFLICT", "草稿修订已变化")
-    const operation = { ...row, revision: row.revision + 1, data }, consumed = { ...draft, revision: draft.revision + 1, data: { ...draft.data, state: "consumed" } }
+    const operation = { ...row, revision: row.revision + 1, data }, consumed = { ...draft, revision: draft.revision + 1, data: { ...draft.data, state: "consumed" as const } }
     const { id: _oid, ...opPatch } = operation, { id: _did, ...draftPatch } = consumed
     const committed = await this.repo.storage.commitBatch!({ guards: [{ namespace: "app.mail.operations", id: row.id, expected: { ownerId: ctx.ownerId, revision: row.revision } }, { namespace: "app.mail.drafts", id: draft.id, expected: { ownerId: ctx.ownerId, revision: draft.revision } }], operations: [{ kind: "patch", namespace: "app.mail.operations", id: row.id, patch: opPatch }, { kind: "patch", namespace: "app.mail.drafts", id: draft.id, patch: draftPatch }] })
     this.accounts.context.assertCurrent(ctx)
@@ -105,11 +106,56 @@ export class MailSend {
     this.drafts.notify(ctx, draft.id)
     return operation
   }
+  async submitPreparedLocked(ctx: MailContext, input: { accountId: string; operationId: string; snapshot: SendSnapshot; requestKeyId?: string }): Promise<SendReceipt> {
+    let operation = await this.repo.find<StoredSend>(ctx, "operations", input.operationId)
+    if (operation && operation.data.state !== "prepared") {
+      if (operation.data.state === "submitting") operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state: "unknown", errorCode: "INTERRUPTED", retryStage: "reconcile" })
+      return this.operations.finishSentCopyLocked(ctx, operation.id)
+    }
+    const snapshot = operation?.data.snapshot ?? input.snapshot
+    if (!operation) {
+      const refs = [...new Set([snapshot.bodyRef, snapshot.rawAssetId, snapshot.sentRawAssetId, ...snapshot.attachments.map(a => a.id)])]
+      const added: string[] = []
+      try {
+        for (const ref of refs) { await this.assets.pin(ctx, ref, 1); added.push(ref) }
+        const receipt: SendReceipt = { operationId: input.operationId, accountId: input.accountId, state: "prepared", accepted: [], rejected: [], messageId: snapshot.messageId, sentCopyState: "pending", retryStage: "none", errorCode: null }
+        operation = await this.repo.save<StoredSend>(ctx, "operations", input.operationId, input.accountId, { kind: "send", state: "prepared", receipt, snapshot, pinnedAssetIds: refs, sentFolderId: null, sentCopyAttempt: "not_attempted", reconcileBeforeUid: null, reconcileHighUid: null }, 0, snapshot.createdAt)
+      } catch (error) { if (!ctx.signal.aborted) for (const ref of added) await this.assets.pin(ctx, ref, -1); throw error }
+    }
+    if (input.requestKeyId && !await this.repo.find<SendKey>(ctx, "operations", input.requestKeyId)) {
+      await this.repo.save<SendKey>(ctx, "operations", input.requestKeyId, input.accountId, { kind: "send-key", operationId: operation.id, signature: snapshot.signature }, 0)
+    }
+    operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state: "submitting" })
+    let smtp: Awaited<ReturnType<typeof this.accounts.protocols.smtp>> | undefined
+    try {
+      const { config, credential } = await this.accounts.credential(ctx, input.accountId)
+      smtp = await this.accounts.protocols.smtp(ctx, config, credential)
+      const response = await smtp.submit({ raw: await this.assets.read(ctx, snapshot.rawAssetId), from: snapshot.from, to: snapshot.envelope, messageId: snapshot.messageId }, ctx.signal)
+      const unique = (values: string[]) => [...new Map(values.map(value => [value.toLowerCase(), value])).values()]
+      const accepted = unique(response.accepted), rejected = unique(response.rejected), envelope = new Set(snapshot.envelope.map(a => a.toLowerCase()))
+      const a = new Set(accepted.map(value => value.toLowerCase())), r = new Set(rejected.map(value => value.toLowerCase()))
+      const complete = [...a, ...r].every(value => envelope.has(value)) && [...a].every(value => !r.has(value)) && a.size + r.size === envelope.size
+      const state: SendReceipt["state"] = !complete ? "unknown" : accepted.length && rejected.length ? "partial" : accepted.length ? "accepted" : "failed"
+      operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state, accepted, rejected, sentCopyState: state === "failed" ? "failed" : "pending", retryStage: state === "unknown" || state === "accepted" || state === "partial" ? "reconcile" : "none", errorCode: !complete ? "INCOMPLETE_SMTP_RECEIPT" : state === "failed" ? "RECIPIENTS_REJECTED" : null })
+    } catch (error) {
+      if (ctx.signal.aborted) throw error
+      const normalized = normalizeProtocolError(error), code = normalized.code
+      if (code === "AUTH_FAILED") {
+        const account = await this.repo.get<StoredAccount>(ctx, "accounts", input.accountId)
+        await this.repo.save(ctx, "accounts", account.id, account.id, { ...account.data, state: "auth_failed", errorCode: code }, account.revision)
+      }
+      const definitelyNotSubmitted = normalized.details?.definitelyNotSubmitted === true || ["AUTH_FAILED", "PERMISSION_DENIED", "CONNECTION_CHECK_REQUIRED", "ACCOUNT_REINDEX_REQUIRED"].includes(code)
+      const latest = await this.repo.get<StoredSend>(ctx, "operations", operation.id)
+      if (["accepted", "partial"].includes(latest.data.state)) return latest.data.receipt
+      operation = await this.outcome(ctx, latest, { ...latest.data.receipt, state: definitelyNotSubmitted ? "failed" : "unknown", sentCopyState: definitelyNotSubmitted ? "failed" : "unknown", retryStage: definitelyNotSubmitted ? "none" : "reconcile", errorCode: code })
+    } finally { smtp?.close() }
+    return this.operations.finishSentCopyLocked(ctx, operation.id)
+  }
   async submit(ctx: MailContext, input: MailInputs["message.send"]): Promise<SendReceipt> {
     const params = MAIL_INPUT_SCHEMAS["message.send"].parse(input), preview = await this.repo.get<StoredPreview>(ctx, "previews", params.previewId)
     return this.accounts.exclusive(ctx, preview.accountId, async () => {
       let snapshot = preview.data.snapshot
-      const id = operationId(`send:${ctx.ownerId}:${preview.accountId}:${snapshot.draft.id}:${snapshot.draft.revision}`), keyId = `request:${mailHash(`${ctx.ownerId}:${preview.accountId}:${params.clientRequestId}`)}`
+      const id = sendOperationId(`send:${ctx.ownerId}:${preview.accountId}:${snapshot.draft.id}:${snapshot.draft.revision}`), keyId = `request:${mailHash(`${ctx.ownerId}:${preview.accountId}:${params.clientRequestId}`)}`
       const key = await this.repo.find<SendKey>(ctx, "operations", keyId)
       if (key && (key.data.kind !== "send-key" || key.data.signature !== snapshot.signature)) throw new MailError("IDEMPOTENCY_CONFLICT", "此请求标识已用于其他邮件内容")
       let operation = await this.repo.find<StoredSend>(ctx, "operations", key?.data.operationId ?? id)
@@ -126,41 +172,7 @@ export class MailSend {
       // A prepared operation owns its exact MIME, Message-ID and date across previews.
       snapshot = operation?.data.snapshot ?? snapshot
       await this.validateSnapshot(ctx, snapshot)
-      if (!operation) {
-        const refs = [...new Set([snapshot.bodyRef, snapshot.rawAssetId, snapshot.sentRawAssetId, ...snapshot.attachments.map(a => a.id)])]
-        const added: string[] = []
-        try {
-          for (const ref of refs) { await this.assets.pin(ctx, ref, 1); added.push(ref) }
-          const receipt: SendReceipt = { operationId: id, accountId: preview.accountId, state: "prepared", accepted: [], rejected: [], messageId: snapshot.messageId, sentCopyState: "pending", retryStage: "none", errorCode: null }
-          operation = await this.repo.save<StoredSend>(ctx, "operations", id, preview.accountId, { kind: "send", state: "prepared", receipt, snapshot, pinnedAssetIds: refs, sentFolderId: null, sentCopyAttempt: "not_attempted", reconcileBeforeUid: null, reconcileHighUid: null }, 0, snapshot.createdAt)
-        } catch (error) { if (!ctx.signal.aborted) for (const ref of added) await this.assets.pin(ctx, ref, -1); throw error }
-      }
-      if (!key) await this.repo.save<SendKey>(ctx, "operations", keyId, preview.accountId, { kind: "send-key", operationId: operation.id, signature: snapshot.signature }, 0)
-      operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state: "submitting" })
-      let smtp: Awaited<ReturnType<typeof this.accounts.protocols.smtp>> | undefined
-      try {
-        const { config, credential } = await this.accounts.credential(ctx, preview.accountId)
-        smtp = await this.accounts.protocols.smtp(ctx, config, credential)
-        const response = await smtp.submit({ raw: await this.assets.read(ctx, snapshot.rawAssetId), from: snapshot.from, to: snapshot.envelope, messageId: snapshot.messageId }, ctx.signal)
-        const unique = (values: string[]) => [...new Map(values.map(value => [value.toLowerCase(), value])).values()]
-        const accepted = unique(response.accepted), rejected = unique(response.rejected), envelope = new Set(snapshot.envelope.map(a => a.toLowerCase()))
-        const a = new Set(accepted.map(a => a.toLowerCase())), r = new Set(rejected.map(a => a.toLowerCase()))
-        const complete = [...a, ...r].every(value => envelope.has(value)) && [...a].every(value => !r.has(value)) && a.size + r.size === envelope.size
-        const state: SendReceipt["state"] = !complete ? "unknown" : accepted.length && rejected.length ? "partial" : accepted.length ? "accepted" : "failed"
-        operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state, accepted, rejected, sentCopyState: state === "failed" ? "failed" : "pending", retryStage: state === "unknown" || state === "accepted" || state === "partial" ? "reconcile" : "none", errorCode: !complete ? "INCOMPLETE_SMTP_RECEIPT" : state === "failed" ? "RECIPIENTS_REJECTED" : null })
-      } catch (error) {
-        if (ctx.signal.aborted) throw error
-        const normalized = normalizeProtocolError(error), code = normalized.code
-        if (code === "AUTH_FAILED") {
-          const account = await this.repo.get<StoredAccount>(ctx, "accounts", preview.accountId)
-          await this.repo.save(ctx, "accounts", account.id, account.id, { ...account.data, state: "auth_failed", errorCode: code }, account.revision)
-        }
-        const definitelyNotSubmitted = normalized.details?.definitelyNotSubmitted === true || ["AUTH_FAILED", "PERMISSION_DENIED", "CONNECTION_CHECK_REQUIRED", "ACCOUNT_REINDEX_REQUIRED"].includes(code)
-        const latest = await this.repo.get<StoredSend>(ctx, "operations", operation.id)
-        if (["accepted", "partial"].includes(latest.data.state)) return latest.data.receipt
-        operation = await this.outcome(ctx, latest, { ...latest.data.receipt, state: definitelyNotSubmitted ? "failed" : "unknown", sentCopyState: definitelyNotSubmitted ? "failed" : "unknown", retryStage: definitelyNotSubmitted ? "none" : "reconcile", errorCode: code })
-      } finally { smtp?.close() }
-      return this.operations.finishSentCopyLocked(ctx, operation.id)
+      return this.submitPreparedLocked(ctx, { accountId: preview.accountId, operationId: operation?.id ?? id, snapshot, requestKeyId: key ? undefined : keyId })
     })
   }
   async expire(ctx: MailContext, cursor?: string): Promise<{ nextCursor: string | null }> {

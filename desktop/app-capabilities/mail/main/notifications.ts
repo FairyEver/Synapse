@@ -11,7 +11,7 @@ interface PendingNotification { ctx: MailContext; accountId: string; count: numb
 const summary = (value: string, max: number) => value.replace(/[\x00-\x1f\x7f]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, max)
 export class MailNotifications {
   private pending = new Map<string, PendingNotification>()
-  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly adapter: MailNotificationAdapter, private readonly open: (ctx: MailContext, target: { accountId: string; messageId: string | null }) => Promise<void>, private readonly diagnostic: (code: string, accountId: string) => void, private readonly access: MailAccess) {}
+  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly adapter: MailNotificationAdapter, private readonly open: (ctx: MailContext, target: { accountId: string; messageId?: string | null; scheduledId?: string | null; view?: "scheduled" }) => Promise<void>, private readonly diagnostic: (code: string, accountId: string) => void, private readonly access: MailAccess) {}
   async accept(ctx: MailContext, change: InboxDelta): Promise<void> {
     const account = await this.accounts.get(ctx, change.accountId)
     for (const message of change.messages) {
@@ -55,6 +55,34 @@ export class MailNotifications {
         } catch { this.diagnostic("NOTIFICATION_TARGET_UNAVAILABLE", entry.accountId) }
       } })
     } catch { this.diagnostic(entry.ctx.signal.aborted ? "NOTIFICATION_SCOPE_EXPIRED" : "NOTIFICATION_PERMISSION_OR_PRESENTATION_FAILED", entry.accountId) }
+  }
+  async notifyScheduled(ctx: MailContext, input: { accountId: string; scheduledId: string; subject: string; kind: "sent" | "missed" | "failed" | "unknown" }): Promise<void> {
+    try {
+      this.accounts.context.assertCurrent(ctx)
+      const account = await this.accounts.get(ctx, input.accountId)
+      if (input.kind === "sent" && !account.notify) return
+      const labels: Record<typeof input.kind, string> = {
+        sent: "定时邮件已发送",
+        missed: "定时邮件已错过发送时间",
+        failed: "定时邮件发送失败",
+        unknown: "定时邮件发送结果待核验",
+      }
+      const subject = summary(input.subject || "（无主题）", 120)
+      await this.access(ctx, "notification.trigger", input.accountId)
+      this.adapter.show({
+        title: summary(account.name, 100),
+        body: summary(`${labels[input.kind]}：${subject}`, 200),
+        accountId: input.accountId,
+        messageId: null,
+        onClick: async () => {
+          try {
+            this.accounts.context.assertCurrent(ctx)
+            await this.accounts.get(ctx, input.accountId)
+            await this.open(ctx, { accountId: input.accountId, view: "scheduled", scheduledId: input.scheduledId })
+          } catch { this.diagnostic("NOTIFICATION_TARGET_UNAVAILABLE", input.accountId) }
+        },
+      })
+    } catch { this.diagnostic(ctx.signal.aborted ? "NOTIFICATION_SCOPE_EXPIRED" : "NOTIFICATION_PERMISSION_OR_PRESENTATION_FAILED", input.accountId) }
   }
   dispose(): void {
     for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.ctx.signal.removeEventListener("abort", entry.abort) }

@@ -13,10 +13,10 @@ function createMemoryNamespace(name: string) {
 }
 
 describe("mail local-only namespaces", () => {
-  it("declares 11 namespaces that cannot enter backups, even with secrets enabled", async () => {
+  it("declares 12 namespaces that cannot enter backups, even with secrets enabled", async () => {
     const repo = new DataRepositoryImpl()
     for (const schema of mailSchemas.filter(s => s.backend === "sqlite")) repo.register(schema, createMemoryNamespace(schema.name))
-    expect(mailSchemas).toHaveLength(11)
+    expect(mailSchemas).toHaveLength(12)
     expect(mailSchemas.every(s => s.transferPolicy === "local-only")).toBe(true)
     expect((await repo.exportAll({ includeSecrets: true })).namespaces).toEqual([])
   })

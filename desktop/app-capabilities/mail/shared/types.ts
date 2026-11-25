@@ -3,6 +3,7 @@ import type { z } from "zod"
 import type {
   MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS, accountConfigSchema, accountSummarySchema, folderSchema,
   locatorSchema, coverageSchema, assetSchema, summarySchema, draftInputSchema, draftSchema, receiptSchema, batchSchema, previewSchema, jobSchema,
+  scheduledStateSchema, scheduledSummarySchema, scheduledDetailSchema,
 } from "./schema"
 
 export type MailAction = keyof typeof MAIL_INPUT_SCHEMAS
@@ -12,6 +13,7 @@ export type MailResults = { [K in MailAction]: z.output<(typeof MAIL_RESULT_SCHE
 export type AccountAction = Extract<MailAction, `account.${string}`>
 export type SearchAction = Extract<MailAction, `search.${string}`>
 export type DraftAction = Extract<MailAction, `draft.${string}`>
+export type ScheduledAction = Extract<MailAction, `scheduled.${string}`>
 export type FolderMutation = Exclude<Extract<MailAction, `folder.${string}`>, "folder.list">
 export type MessageMutation = "message.update" | "message.move" | "message.delete" | "message.restore"
 export type MailAccountId = string
@@ -20,6 +22,7 @@ export type MailAssetId = string
 export type MailDraftId = string
 export type MailJobId = string
 export type MailOperationId = string
+export type MailScheduledId = string
 export type Page<T> = { items: T[]; nextCursor: string | null }
 export type AccountConfig = z.output<typeof accountConfigSchema>
 export type AccountSummary = z.output<typeof accountSummarySchema>
@@ -32,6 +35,9 @@ export type DraftInput = z.output<typeof draftInputSchema>
 export type Address = DraftInput["to"][number]
 export type Draft = z.output<typeof draftSchema>
 export type SendReceipt = z.output<typeof receiptSchema>
+export type ScheduledSendState = z.output<typeof scheduledStateSchema>
+export type ScheduledSendSummary = z.output<typeof scheduledSummarySchema>
+export type ScheduledSendDetail = z.output<typeof scheduledDetailSchema>
 export type BatchResult = z.output<typeof batchSchema>
 export type MailPreview = z.output<typeof previewSchema>
 export type MailJob = z.output<typeof jobSchema>

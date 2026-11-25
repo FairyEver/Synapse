@@ -364,3 +364,10 @@ export const MAIL_SEARCH_BATCH_BYTES = 20 * 1024 ** 2
 export const MAIL_SEARCH_BATCH_MS = 30_000
 export const MAIL_SEARCH_TTL_MS = 24 * 60 * 60_000
 export const MAIL_NOTIFICATION_WINDOW_MS = 5000
+/** 外部邮箱本机定时发送宽限期、预约范围、定时器分段上限与重试退避，均为毫秒或年。 */
+export const MAIL_SCHEDULED_GRACE_MS = 30 * 60_000
+export const MAIL_SCHEDULED_MIN_LEAD_MS = 30_000
+export const MAIL_SCHEDULED_MAX_AHEAD_YEARS = 10
+export const MAIL_SCHEDULED_TIMER_MAX_MS = 60 * 60_000
+export const MAIL_SCHEDULED_RETRY_MS = 60_000
+export const MAIL_SCHEDULED_RESUME_DELAY_MS = 3_000

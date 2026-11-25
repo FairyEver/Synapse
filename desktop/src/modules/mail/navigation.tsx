@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { Inbox, Send, FilePen, Trash2, Archive, ShieldAlert, Folder as FolderIcon, Star, Settings } from "lucide-react"
+import { Inbox, Send, FilePen, Clock, Trash2, Archive, ShieldAlert, Folder as FolderIcon, Star, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Folder } from "../../../app-capabilities/mail/shared/types"
@@ -14,6 +14,7 @@ export function mailNavigationItems(folders: Folder[]): MailNavigationItem[] {
   const items: MailNavigationItem[] = folders.filter(folder => folder.selectable && folder.role !== "drafts").map(folder => ({ value: folder.id, label: folderName(folder), icon: icons[folder.role], view: { folderId: folder.id }, order: folderOrder[folder.role] }))
   items.push(
     { value: "drafts", label: "草稿箱", icon: FilePen, view: { drafts: true }, order: 1 },
+    { value: "scheduled", label: "定时发送", icon: Clock, view: { scheduled: true }, order: 1.5 },
     { value: "all", label: "全部邮件", icon: Inbox, view: {}, order: 5 },
     { value: "starred", label: "星标邮件", icon: Star, view: { starredOnly: true }, order: 6 },
   )
@@ -22,7 +23,7 @@ export function mailNavigationItems(folders: Folder[]): MailNavigationItem[] {
 export function MailNavigation({ folders, view, onView, onSettings, onFolderChange }: { folders: Folder[]; view: MailView; onView(view: MailView): void; onSettings(): void; onFolderChange: MailFolderChange }) {
   const navigation = useRef<HTMLElement>(null)
   const restoreSelectedFocus = () => navigation.current?.querySelector<HTMLButtonElement>('button[aria-current="page"]')?.focus()
-  const selected = view.drafts ? "drafts" : view.starredOnly ? "starred" : view.folderId ?? "all"
+  const selected = view.drafts ? "drafts" : view.scheduled ? "scheduled" : view.starredOnly ? "starred" : view.folderId ?? "all"
   return <nav ref={navigation} aria-label="邮箱导航" className="flex h-full min-h-0 flex-col gap-3 border-r bg-background py-3">
     <div className="min-h-0 flex-1 space-y-1 overflow-auto px-3">
       {mailNavigationItems(folders).map(item => {

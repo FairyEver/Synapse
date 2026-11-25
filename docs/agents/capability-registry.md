@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-25 外部邮箱本机定时发送：`mail` 域新增 6 项 capability / MCP 索引（`scheduled.create/list/get/update/cancel/send`，对应 `app_mail_scheduled_*`），并新增 1 项 UI 私有正文预览 IPC（`app.mail.scheduled.body`）。邮箱由 44 增至 50 项，全局 capability 由 364 增至 370 项，MCP 索引由 360 增至 366 项；公开路由工具仍仅 `search` / `invoke` 2 项，System App、默认 Dock、Workflow、Automation 与 Deep Link 数量不变。支持设置未来任意具体日期时间（最多 10 年，1 小时分段防溢出定时器），到点时需保持桌面端运行、登录同账号并联网；30 分钟宽限期内恢复自动补发，超时转 `missed` 待人工处理，`unknown` 严禁自动或手动重发。`account.delete` 新增可选 `discardScheduledSends` 影响确认。
+
 2026-11-18 企业微信能力退役：删除连接器、`core.wecom`、内置 CLI、系统 Skill 企业微信目录及两项 capability / MCP 索引。当前全局 capability / MCP 索引由 366 / 362 降至 364 / 360；Connectors 的两项 Portal 凭据工具、两个私有授权回调，以及 System App、Dock、Workflow、Automation、Deep Link 和公开 `search` / `invoke` 数量不变。旧本机凭据与连接状态保留，不再注册、读取或使用。
 
 2026-11-14 内网穿透退役：移除 `tunnel` System App、六项 capability / MCP 索引、六项 typed IPC、运行摘要事件、后台恢复和系统 Skill 领域指南。全局 capability / MCP 索引由 372 / 368 降至 366 / 362，System App 由 23 降至 22；默认 Dock 仍为 9 项，Workflow、Automation、Deep Link 和公开 `search` / `invoke` 两项路由工具不变。旧 Dock 固定项按现有有效 App ID 校验移除，不保留协议或调用别名。退役范围与云端清理证据见[退役记录](../agent-guides/tunnel-retirement.md)。
@@ -128,7 +130,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | — | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、定时发送时间选择与「定时发送」管理视图、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 50 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 18 | `synapse://mail-internal/<id>` |
 | Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | — | — | — |

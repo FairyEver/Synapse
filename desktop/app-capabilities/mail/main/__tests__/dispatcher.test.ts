@@ -13,10 +13,10 @@ it("shares the service and rejects injected identities, credentials and internal
   expect(await dispatcher.dispatch("app.mail.message.send", { formatVersion: 3, toIds: ["internal"], body: "internal" }, {})).toMatchObject({ ok: false, code: "INVALID_INPUT" })
   expect(execute).toHaveBeenCalledTimes(1)
 })
-it("aligns all 44 schema/actions/tools with permissions and pagination descriptions", () => {
+it("aligns all 50 schema/actions/tools with permissions and pagination descriptions", () => {
   const tools = buildMailTools()
-  expect(tools).toHaveLength(44)
+  expect(tools).toHaveLength(50)
   for (const action of MAIL_ACTIONS) expect(MAIL_DEFINITIONS[action].permission).toBeTruthy()
-  for (const name of ["account_list", "folder_list", "message_list", "search_get", "draft_list", "attachment_list", "operation_list"]) expect(tools.find(t => t.name === `app_mail_${name}`)?.description).toContain("Pagination: cursor-based.")
+  for (const name of ["account_list", "folder_list", "message_list", "search_get", "draft_list", "attachment_list", "scheduled_list", "operation_list"]) expect(tools.find(t => t.name === `app_mail_${name}`)?.description).toContain("Pagination: cursor-based.")
   expect(tools.some(t => t.name.includes("configure"))).toBe(false)
 })

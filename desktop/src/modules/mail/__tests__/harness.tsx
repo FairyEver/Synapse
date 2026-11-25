@@ -23,7 +23,7 @@ beforeEach(() => {
     disconnect() {}
   }
   mocks.owner = "user"; mocks.api = {}
-  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "syncGet", "messageCount", "uiScope", "onChanged", "draftList"]) mocks.api[name] = vi.fn()
+  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "syncGet", "messageCount", "uiScope", "onChanged", "draftList", "scheduledList", "scheduledGet", "scheduledCreate", "scheduledUpdate", "scheduledCancel", "scheduledSend", "scheduledBody", "operationGet"]) mocks.api[name] = vi.fn()
   mocks.api.uiScope.mockResolvedValue({ ownerId: "user", generation: 1, notificationsSupported: true, notificationError: null })
   mocks.api.accountList.mockResolvedValue({ items: [account, { ...account, id: "ma_two", name: "个人" }], nextCursor: null })
   mocks.api.folderList.mockResolvedValue({ items: [{ id: "mf_one", accountId: "ma_one", role: "inbox", name: "收件箱", selectable: true }], nextCursor: null })
@@ -37,5 +37,7 @@ beforeEach(() => {
   mocks.changed = event => { for (const listener of listeners) listener(event) }
   mocks.api.onChanged.mockImplementation(listener => { listeners.add(listener); return () => { listeners.delete(listener) } })
   mocks.api.draftList.mockResolvedValue({ items: [], nextCursor: null })
+  mocks.api.scheduledList.mockResolvedValue({ items: [], nextCursor: null })
+  mocks.api.scheduledBody.mockResolvedValue({ html: "<p>定时正文</p>", text: "定时正文" })
 })
 afterEach(() => { if (root) act(() => root!.unmount()); root = null; document.body.innerHTML = "" })

@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils"
 import { MailNavigation, mailNavigationItems } from "./navigation"
 import { MailList } from "./message-list"
 import { MailDetail } from "./message-detail"
+import { MailScheduledList } from "./scheduled-list"
+import { MailScheduledDetail } from "./scheduled-detail"
 import { useMailBody } from "./use-mail-body"
 import { mailApi, mailError, openMailLink } from "./api"
 import type { MailViewModel } from "./use-mail"
@@ -46,19 +48,57 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
   const deletingDrafts = busy && confirmation?.drafts
   const confirmationTitle = deletingDrafts ? "正在删除草稿" : `${confirmation?.drafts ? "删除" : "永久删除"} ${confirmation?.ids.length ?? 0} 封${confirmation?.drafts ? "草稿" : "邮件"}？`
   const confirmationDescription = deletingDrafts ? `剩余 ${draftRemaining} 封${draftRemaining === 0 ? "，正在刷新列表。" : ""}` : confirmation?.drafts ? "将删除所选草稿及其已同步副本，删除后无法恢复。" : "只能删除回收站中的邮件，删除后无法恢复。"
+  const hasDetail = !!(mail.detail || mail.scheduledDetail)
+  const performScheduledAction = async <T,>(task: () => Promise<T>, message?: string): Promise<T | undefined> => {
+    setBusy(true)
+    try { const result = await task(); if (message) toast(message); return result }
+    catch (cause) { toast.error(mailError(cause)); return undefined }
+    finally { setBusy(false) }
+  }
   return <div className="@container/mail-client flex h-full min-h-0 min-w-0 flex-col">
     {(mail.error || body.error) && <div role="alert" className="flex items-center justify-between gap-3 border-b p-3 text-sm text-destructive"><span>{mail.error ?? body.error}</span><Button variant="ghost" onClick={() => void mail.refresh()}>重试</Button></div>}
     {!mail.authenticated ? <p className="p-6 text-sm text-muted-foreground">请先登录 Synapse</p> : !mail.accounts.length ? <div className="flex flex-1 flex-col items-center justify-center gap-4"><p className="text-sm text-muted-foreground">尚未添加邮箱</p><Button onClick={onSettings}>添加邮箱</Button></div> : <div className="flex min-h-0 flex-1">
       <aside className="hidden w-52 shrink-0 @min-[33rem]/mail-client:block"><MailNavigation key={`${mail.owner}:${mail.scope?.generation}:${mail.accountId}`} {...mail} onView={mail.selectView} onSettings={onSettings} onFolderChange={mail.changeFolder} /></aside>
-      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col border-r @min-[53rem]/mail-client:w-80 @min-[53rem]/mail-client:flex-none", mail.detail && "hidden @min-[53rem]/mail-client:flex")}>
+      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col border-r @min-[53rem]/mail-client:w-80 @min-[53rem]/mail-client:flex-none", hasDetail && "hidden @min-[53rem]/mail-client:flex")}>
         <div className="border-b p-3 @min-[33rem]/mail-client:hidden">
-          <NativeSelect aria-label="文件夹" className="w-full" value={mail.view.drafts ? "drafts" : mail.view.starredOnly ? "starred" : mail.view.folderId ?? "all"} onChange={event => { const value = event.target.value; mail.selectView(value === "drafts" ? { drafts: true } : value === "starred" ? { starredOnly: true } : value === "all" ? {} : { folderId: value }) }}>{mailNavigationItems(mail.folders).map(item => <NativeSelectOption key={item.value} value={item.value}>{item.label}</NativeSelectOption>)}</NativeSelect>
+          <NativeSelect aria-label="文件夹" className="w-full" value={mail.view.drafts ? "drafts" : mail.view.scheduled ? "scheduled" : mail.view.starredOnly ? "starred" : mail.view.folderId ?? "all"} onChange={event => { const value = event.target.value; mail.selectView(value === "drafts" ? { drafts: true } : value === "scheduled" ? { scheduled: true } : value === "starred" ? { starredOnly: true } : value === "all" ? {} : { folderId: value }) }}>{mailNavigationItems(mail.folders).map(item => <NativeSelectOption key={item.value} value={item.value}>{item.label}</NativeSelectOption>)}</NativeSelect>
         </div>
-        <div className="min-h-0 flex-1"><MailList key={`${mail.owner}:${mail.scope?.generation}:${mail.accountId}:${JSON.stringify(mail.view)}`} busy={busy} onSearch={query => void mail.search(query, "body")} unreadOnly={mail.view.unreadOnly} onUnreadOnlyChange={unreadOnly => mail.selectView({ ...mail.view, unreadOnly })} coverage={mail.coverage} canContinue={mail.canContinue} onContinue={() => void mail.continueSearch().catch(cause => toast.error(mailError(cause)))} items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} folders={mail.folders} onMove={(ids, target) => void performBatch("move", ids, target)} /></div>
+        <div className="min-h-0 flex-1">
+          {mail.view.scheduled ? (
+            <MailScheduledList
+              items={mail.scheduledItems}
+              selected={mail.scheduledDetail?.id}
+              loading={mail.loading}
+              more={!!mail.cursor}
+              onSelect={id => void mail.selectScheduled(id)}
+              onMore={() => void mail.loadMore()}
+            />
+          ) : (
+            <MailList key={`${mail.owner}:${mail.scope?.generation}:${mail.accountId}:${JSON.stringify(mail.view)}`} busy={busy} onSearch={query => void mail.search(query, "body")} unreadOnly={mail.view.unreadOnly} onUnreadOnlyChange={unreadOnly => mail.selectView({ ...mail.view, unreadOnly })} coverage={mail.coverage} canContinue={mail.canContinue} onContinue={() => void mail.continueSearch().catch(cause => toast.error(mailError(cause)))} items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} folders={mail.folders} onMove={(ids, target) => void performBatch("move", ids, target)} />
+          )}
+        </div>
         <div className="border-t p-3 @min-[33rem]/mail-client:hidden"><Button variant="ghost" className="w-full justify-start" onClick={onSettings} data-track="mail.settings"><Settings />邮箱设置</Button></div>
       </div>
-      <div className={cn("min-h-0 min-w-0 flex-1", !mail.detail && "hidden @min-[53rem]/mail-client:block")}>
-        {mail.detail ? <MailDetail onCompose={recipient => onCompose({ accountId: mail.detail!.accountId, recipient })} detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} onQuickReplySent={mail.refresh} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
+      <div className={cn("min-h-0 min-w-0 flex-1", !hasDetail && "hidden @min-[53rem]/mail-client:block")}>
+        {mail.scheduledDetail ? (
+          <MailScheduledDetail
+            detail={mail.scheduledDetail}
+            busy={busy}
+            onBack={mail.clearDetail}
+            onCompose={recipient => onCompose({ accountId: mail.scheduledDetail!.accountId, recipient })}
+            onDownload={id => void download(id)}
+            onLink={url => void openLink(url)}
+            onReschedule={async sendAt => { await performScheduledAction(() => mail.rescheduleScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, sendAt), "已修改发送时间") }}
+            onCancel={async () => { await performScheduledAction(() => mail.cancelScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, true), "已取消定时发送并退回草稿箱") }}
+            onCancelAndEdit={async () => {
+              const targetDraftId = mail.scheduledDetail!.draftId
+              const result = await performScheduledAction(() => mail.cancelScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, true))
+              if (result) onCompose({ draftId: targetDraftId })
+            }}
+            onSendNow={async () => { await performScheduledAction(() => mail.sendScheduledNow(mail.scheduledDetail!.id, mail.scheduledDetail!.revision), "已提交发送") }}
+            onReconcile={async operationId => { await performScheduledAction(() => mail.reconcileScheduled(mail.scheduledDetail!.id, operationId), "已刷新发送结果") }}
+          />
+        ) : mail.detail ? <MailDetail onCompose={recipient => onCompose({ accountId: mail.detail!.accountId, recipient })} detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} onQuickReplySent={mail.refresh} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
       </div>
     </div>}
     <AlertDialog open={!!confirmation} onOpenChange={open => { if (!open && !busy) setConfirmation(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{confirmationTitle}</AlertDialogTitle><AlertDialogDescription aria-live={deletingDrafts ? "polite" : undefined} aria-atomic="true">{confirmationDescription}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={busy} aria-busy={busy} onClick={() => { if (confirmation) void (confirmation.drafts ? performDraftDelete(confirmation.ids) : performBatch("permanent", confirmation.ids)) }}>{busy && <Spinner aria-hidden="true" data-icon="inline-start" className="motion-reduce:animate-none" />}{busy ? "删除中" : confirmation?.drafts ? "删除草稿" : "永久删除"}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>

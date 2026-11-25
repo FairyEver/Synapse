@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises"
 import { expect, it } from "vitest"
 import { MAIL_DEFINITIONS, buildMailTools } from "../../shared/capability"
 import { MAIL_INPUT_SCHEMAS } from "../../shared/schema"
-it("keeps all 44 generated Skill input schemas and permissions aligned with runtime discovery", async () => {
+it("keeps all 50 generated Skill input schemas and permissions aligned with runtime discovery", async () => {
   const source = await readFile(new URL("../../../synapse-skill/skill-package/mail/api-reference.md", import.meta.url), "utf8")
   const definitions = [...source.matchAll(/### (app_mail_[a-z_]+)\n([\s\S]*?)```json\n([\s\S]*?)\n```/gu)]
-  expect(definitions).toHaveLength(44)
+  expect(definitions).toHaveLength(50)
   for (const tool of buildMailTools()) {
     const entry = definitions.find(match => match[1] === tool.name)
     expect(entry, tool.name).toBeTruthy(); expect(JSON.parse(entry![3])).toEqual(tool.inputSchema)

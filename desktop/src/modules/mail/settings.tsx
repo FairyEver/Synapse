@@ -16,9 +16,9 @@ const roles: { role: Folder["role"]; label: string }[] = [{ role: "inbox", label
 const states = { connected: "已连接", unverified: "需要检查连接", connecting: "连接中", offline: "离线", auth_failed: "认证失败", error: "连接错误", paused: "已暂停" }
 export function MailSettings({ model, mail }: { model: MailAccountsModel; mail: MailViewModel }) {
   const account = mail.accounts.find(item => item.id === mail.accountId)
-  const [name, setName] = useState(""), [aliases, setAliases] = useState(""), [removing, setRemoving] = useState(false), [discard, setDiscard] = useState(false), [ack, setAck] = useState(false)
+  const [name, setName] = useState(""), [aliases, setAliases] = useState(""), [removing, setRemoving] = useState(false), [discard, setDiscard] = useState(false), [ack, setAck] = useState(false), [discardScheduled, setDiscardScheduled] = useState(false)
   const [folderId, setFolderId] = useState(""), [folderLabel, setFolderLabel] = useState("")
-  useEffect(() => { setName(account?.name ?? ""); setAliases(account?.aliases.join(", ") ?? ""); setRemoving(false); setDiscard(false); setAck(false) }, [account?.id, account?.revision])
+  useEffect(() => { setName(account?.name ?? ""); setAliases(account?.aliases.join(", ") ?? ""); setRemoving(false); setDiscard(false); setAck(false); setDiscardScheduled(false) }, [account?.id, account?.revision])
   const saveName = () => { if (account) void model.update(account, { name, aliases: aliases.split(/[,;\n]/u).map(a => a.trim()).filter(Boolean) }) }
   const map = (role: Folder["role"], id: string) => {
     if (!account) return
@@ -26,7 +26,7 @@ export function MailSettings({ model, mail }: { model: MailAccountsModel; mail: 
     if (id) void model.mapFolder(account, id, role)
     else if (previous) void model.mapFolder(account, previous.id, "none")
   }
-  const remove = async () => { if (!account) return; const result = await model.remove(account, discard, ack); if (result) setRemoving(false) }
+  const remove = async () => { if (!account) return; const result = await model.remove(account, discard, ack, discardScheduled); if (result) setRemoving(false) }
   const clear = async () => { if (!account) return; const result = await model.clear(account.id); if (result) toast(`已清理 ${result.removed} 项缓存`) }
   const inspect = async () => { if (!account) return; const result = await model.inspect(account.id); if (result) toast("IMAP 和 SMTP 连接正常") }
   const selectedFolder = mail.folders.find(folder => folder.id === folderId)
@@ -42,6 +42,6 @@ export function MailSettings({ model, mail }: { model: MailAccountsModel; mail: 
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={model.busy} onClick={() => void clear()}>清理下载缓存</Button><Button variant="destructive" disabled={model.busy} onClick={() => setRemoving(true)}>从本机移除</Button></div>
     </>}
   </DialogFrameBody><DialogFrameFooter>{model.error && <p role="alert" className="min-w-0 flex-1 text-sm text-destructive">{model.error}</p>}<Button variant="outline" disabled={model.busy} onClick={() => model.setSettingsOpen(false)}>关闭</Button></DialogFrameFooter></DialogFrame></DialogContent></Dialog>
-  <AlertDialog data-track="mail.account.remove" open={removing} onOpenChange={open => { if (!model.busy) setRemoving(open) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>从本机移除 {account?.name}？</AlertDialogTitle><AlertDialogDescription>清除此电脑的账号、密码和缓存，服务器邮件保留。</AlertDialogDescription></AlertDialogHeader><div className="space-y-3"><Label className="flex items-center gap-2"><Checkbox checked={discard} onCheckedChange={value => setDiscard(value === true)} disabled={model.busy} />丢弃此账号的本机未发送草稿</Label><Label className="flex items-center gap-2"><Checkbox checked={ack} onCheckedChange={value => setAck(value === true)} disabled={model.busy} />已核对发送或整理结果未确认的操作</Label>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}</div><AlertDialogFooter><AlertDialogCancel disabled={model.busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={model.busy} onClick={() => void remove()}>移除</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  <AlertDialog data-track="mail.account.remove" open={removing} onOpenChange={open => { if (!model.busy) setRemoving(open) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>从本机移除 {account?.name}？</AlertDialogTitle><AlertDialogDescription>清除此电脑的账号、密码和缓存，服务器邮件保留。</AlertDialogDescription></AlertDialogHeader><div className="space-y-3"><Label className="flex items-center gap-2"><Checkbox checked={discard} onCheckedChange={value => setDiscard(value === true)} disabled={model.busy} />丢弃此账号的本机未发送草稿</Label><Label className="flex items-center gap-2"><Checkbox checked={discardScheduled} onCheckedChange={value => setDiscardScheduled(value === true)} disabled={model.busy} />取消并删除此账号的定时发送邮件</Label><Label className="flex items-center gap-2"><Checkbox checked={ack} onCheckedChange={value => setAck(value === true)} disabled={model.busy} />已核对发送或整理结果未确认的操作</Label>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}</div><AlertDialogFooter><AlertDialogCancel disabled={model.busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={model.busy} onClick={() => void remove()}>移除</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>
 }

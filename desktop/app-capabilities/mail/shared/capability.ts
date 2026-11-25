@@ -13,7 +13,7 @@ const descriptions: Record<MailAction, string> = {
   "account.inspect": "Check IMAP and SMTP authentication independently without sending a test email.",
   "account.pause": "Pause this email account's background connections and synchronization.",
   "account.resume": "Resume background email synchronization and return its job ID.",
-  "account.delete": "Remove only this computer's email account and data. Acknowledge local draft and unknown-send impacts explicitly; never deletes server mail.",
+  "account.delete": "Remove only this computer's email account and data. Acknowledge local draft, scheduled-send and unknown-send impacts explicitly; never deletes server mail.",
   "folder.list": "List indexed server email folders, special-role mappings and available operations.",
   "folder.create": "Create an ordinary email folder, optionally under a known parent.",
   "folder.rename": "Rename an ordinary email folder while preserving its local identity.",
@@ -47,9 +47,15 @@ const descriptions: Record<MailAction, string> = {
   "body.read_chunk": "Fetch and read a bounded body chunk for one external email; reports completeness and continuation. Never marks it read.",
   "send.preview": "Freeze the exact draft revision, addresses including Bcc, body, references and attachment hashes before sending.",
   "message.send": "Submit a frozen email preview authorized by the user with a stable request ID. confirmed declares checked authorization. Ask only for unresolved ambiguity or requested review; SMTP acceptance is not final delivery. An unknown result must be reconciled, not resent. For accepted/partial with retryStage=sent-copy, reuse the original previewId and clientRequestId to repair only the Sent copy without repeating SMTP.",
+  "scheduled.create": "Schedule a frozen email preview for local delivery at a specific future ISO 8601 timestamp (up to 10 years ahead) with a stable request ID. confirmed declares checked authorization. Requires Synapse desktop running, signed in as the same user, and online at send time; delays within the 30-minute grace window auto-send on recovery, while longer delays enter missed state for manual action. Locks the source draft as scheduled and pins body/attachment assets against cache eviction.",
+  "scheduled.list": "List scheduled external emails for one account ordered by scheduled send time, optionally filtered by state.",
+  "scheduled.get": "Read one scheduled email's metadata, state, scheduled timestamp, grace window, attachment metadata, error code and send receipt when submitted.",
+  "scheduled.update": "Change the future sendAt timestamp of a pending, missed or failed scheduled email with expectedRevision, returning it to pending state. Rejects sending, sent, unknown and cancelled records.",
+  "scheduled.cancel": "Cancel a pending, missed or failed scheduled email with expectedRevision. Restores the source draft back to editing by default (restoreDraft=true) and releases scheduled asset pins.",
+  "scheduled.send": "Immediately submit a pending, missed or failed scheduled email with expectedRevision and confirmed=true, returning its SendReceipt. Never resends unknown outcomes; reconcile via operation.get instead.",
   "operation.list": "List durable email send receipts, including partial rejection and unknown outcomes.",
   "operation.get": "Read a send receipt and perform bounded read-only Sent reconciliation; never repeats SMTP submission.",
-  "cache.clear": "Clear only re-downloadable email body/attachment cache; preserves credentials, drafts and pending or unknown sends.",
+  "cache.clear": "Clear only re-downloadable email body/attachment cache; preserves credentials, drafts, scheduled sends and pending or unknown sends.",
 }
 const labels: Record<MailAction, string> = {
   "account.list": "列出本机邮箱账号、选择邮箱",
@@ -93,12 +99,18 @@ const labels: Record<MailAction, string> = {
   "body.read_chunk": "按块读取邮件正文",
   "send.preview": "预览发件人、收件人、密送、正文和附件",
   "message.send": "发送已授权的邮件预览",
+  "scheduled.create": "预约定时发送邮件、设置未来发送时间",
+  "scheduled.list": "列出定时发送邮件",
+  "scheduled.get": "查看定时发送邮件详情和状态",
+  "scheduled.update": "修改定时邮件的发送时间",
+  "scheduled.cancel": "取消定时发送邮件并退回草稿",
+  "scheduled.send": "立即发送已预约或已错过的定时邮件",
   "operation.list": "列出邮件发送回执",
   "operation.get": "核验邮件发送结果、查询已发送副本",
   "cache.clear": "清理可重新下载的邮箱缓存"
 }
-const reads = new Set<MailAction>(["account.list", "account.get", "folder.list", "sync.get", "message.list", "message.get", "message.count", "search.get", "draft.list", "draft.get", "attachment.list", "attachment.get", "body.read_chunk", "operation.list", "operation.get"])
-const paginated = new Set<MailAction>(["account.list", "folder.list", "message.list", "search.get", "draft.list", "attachment.list", "operation.list"])
+const reads = new Set<MailAction>(["account.list", "account.get", "folder.list", "sync.get", "message.list", "message.get", "message.count", "search.get", "draft.list", "draft.get", "attachment.list", "attachment.get", "body.read_chunk", "scheduled.list", "scheduled.get", "operation.list", "operation.get"])
+const paginated = new Set<MailAction>(["account.list", "folder.list", "message.list", "search.get", "draft.list", "attachment.list", "scheduled.list", "operation.list"])
 export const MAIL_ACTIONS = Object.keys(MAIL_INPUT_SCHEMAS) as MailAction[]
 export const MAIL_DEFINITIONS = Object.fromEntries(MAIL_ACTIONS.map((action) => [action, {
   id: `app.mail.${action}` as CapabilityId,
