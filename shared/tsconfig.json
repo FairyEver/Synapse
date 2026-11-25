@@ -29,6 +29,7 @@
     "src/problem-feedback-fixtures.ts",
     "src/cloud-table-contracts.ts",
     "src/channel-contracts.ts",
+    "src/state-sync-contracts.ts",
     "src/skill-hub-contracts.ts",
     "src/skill-hub-package-node.ts",
     "src/archive-package-node.ts",

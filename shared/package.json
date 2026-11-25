@@ -105,6 +105,17 @@
       },
       "default": "./dist/channel-contracts.js"
     },
+    "./state-sync-contracts": {
+      "import": {
+        "types": "./dist/state-sync-contracts.d.ts",
+        "default": "./dist/state-sync-contracts.js"
+      },
+      "require": {
+        "types": "./dist/state-sync-contracts.d.cts",
+        "default": "./dist/state-sync-contracts.cjs"
+      },
+      "default": "./dist/state-sync-contracts.js"
+    },
     "./skill-hub-contracts": {
       "import": {
         "types": "./dist/skill-hub-contracts.d.ts",
