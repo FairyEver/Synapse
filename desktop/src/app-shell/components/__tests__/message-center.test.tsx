@@ -199,6 +199,31 @@ describe("MessageCenter", () => {
       expect(mockCenter.navigate).toHaveBeenCalledWith(mockCenter.selected)
     } finally { await act(async () => root.unmount()); mockCenter.selected = previous }
   })
+  it("keeps the unread count only in the top bar and uses a single-row flexible filter toolbar", async () => {
+    mockCenter.unread = 140
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<MessageCenter />) })
+      const tabs = [...document.querySelectorAll<HTMLElement>('[role="tab"]')]
+      expect(tabs.map((tab) => tab.textContent)).toEqual(["全部", "未读", "待处理"])
+      expect(tabs.every((tab) => tab.className.includes("flex-none"))).toBe(true)
+
+      const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="通知分类"]')!
+      const toolbar = trigger.parentElement!
+      expect(toolbar.className).not.toContain("flex-wrap")
+      expect(trigger.className).toContain("min-w-0")
+      expect(trigger.className).toContain("flex-1")
+
+      const badge = document.querySelector('[data-slot="badge"]')
+      expect(badge?.textContent).toBe("140")
+    } finally {
+      await act(async () => { root.unmount() })
+      mockCenter.unread = 0
+    }
+  })
+
   it("defaults to all sources and offers each existing notification category", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

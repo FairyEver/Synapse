@@ -244,10 +244,16 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
         />
         <div className="flex min-h-0 flex-1">
           <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-84 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
-            <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
-              <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}><TabsList><TabsTrigger value="all">全部</TabsTrigger><TabsTrigger value="unread">未读{center.unread > 0 && ` ${center.unread}`}</TabsTrigger><TabsTrigger value="pending">待处理</TabsTrigger></TabsList></Tabs>
+            <div className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b px-3 py-3">
+              <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)} className="shrink-0">
+                <TabsList>
+                  <TabsTrigger value="all" className="flex-none px-2">全部</TabsTrigger>
+                  <TabsTrigger value="unread" className="flex-none px-2">未读</TabsTrigger>
+                  <TabsTrigger value="pending" className="flex-none px-2">待处理</TabsTrigger>
+                </TabsList>
+              </Tabs>
               <Select value={center.source} onValueChange={(value) => center.changeSource(value as MessageSourceFilter)} data-track="message-center-source">
-                <SelectTrigger aria-label="通知分类" className="ml-auto w-32"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="通知分类" className="ml-auto w-auto min-w-0 flex-1 max-w-40 *:data-[slot=select-value]:block *:data-[slot=select-value]:truncate"><SelectValue /></SelectTrigger>
                 <SelectContent align="end">
                   <SelectItem value="all">全部</SelectItem>
                   {Object.entries(notificationSourceLabels).map(([source, label]) => <SelectItem key={source} value={source}>{label}</SelectItem>)}
