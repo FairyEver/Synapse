@@ -1268,12 +1268,12 @@ export type SynapseBridge = {
     listWebhooks: () => Promise<DashboardWebhookDto[]>
     notifications: {
       onChanged: (listener: (event: { notificationId: string }) => void) => () => void
-      list: (input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) => Promise<import("./notification-center").NotificationPage>
+      list: (input: { cursor?: string; filter?: "all" | "unread"; source?: NotificationSource }) => Promise<import("./notification-center").NotificationPage>
       count: () => Promise<{ unread: number }>
       read: (input: { id: string; read?: boolean }) => Promise<{ ok: true }>
       readAll: () => Promise<{ ok: true }>
       delete: (input: { id: string }) => Promise<{ ok: true }>
-      deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
+      deleteAll: (input: { filter: "all" }) => Promise<{ ok: true }>
       image: (input: { id: string }) => Promise<{ mimeType: string; bytes: Uint8Array }>
     }
   }

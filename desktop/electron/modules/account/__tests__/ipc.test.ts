@@ -229,8 +229,9 @@ describe("accountIpcModule", () => {
       expect(method.request.parse({ source })).toEqual({ source })
     }
     expect(() => method.request.parse({ source: "unknown" })).toThrow()
-    await method.handler({} as IpcHandlerContext, { source: "terminal-attention", filter: "pending", cursor: "n1" })
-    expect(accountService.listNotifications).toHaveBeenLastCalledWith({ source: "terminal-attention", filter: "pending", cursor: "n1" })
+    expect(() => method.request.parse({ filter: "pending" })).toThrow()
+    await method.handler({} as IpcHandlerContext, { source: "terminal-attention", filter: "unread", cursor: "n1" })
+    expect(accountService.listNotifications).toHaveBeenLastCalledWith({ source: "terminal-attention", filter: "unread", cursor: "n1" })
   })
 
   it("accepts only a local file path when creating a mail attachment", async () => {

@@ -72,13 +72,13 @@ const dashboardWebhookSchema = z.object({
 
 const notificationListRequestSchema = z.object({
   cursor: z.string().optional(),
-  filter: z.enum(["all", "unread", "pending"]).optional(),
+  filter: z.enum(["all", "unread"]).optional(),
   source: z.enum(NOTIFICATION_SOURCES).optional(),
 })
 
 const notificationIdSchema = z.object({ id: z.string().min(1) })
 const notificationReadSchema = notificationIdSchema.extend({ read: z.boolean().optional() })
-const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pending"]) })
+const notificationDeleteAllRequestSchema = z.object({ filter: z.literal("all") })
 
 const mailContentSchema = z.object({ formatVersion: z.literal(3), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)), ccOrganizationIds: z.array(z.string().min(1)), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 const mailIdSchema = z.string().min(1)

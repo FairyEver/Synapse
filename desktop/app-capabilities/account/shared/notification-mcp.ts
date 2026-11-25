@@ -3,13 +3,13 @@ import type { CapabilityDefinition, McpToolDefinition } from "../../../synapse-c
 import type { CapabilityId } from "../../../synapse-capabilities/shared/naming"
 
 const entries = [
-  ["list", "List account notifications by all, unread, or pending filter and optional source (including drive-discussion for document comments, messages, and replies). Both filters apply together. Document interactions may include a read-only event-time snapshot of original/replied-to excerpts and new content; old records may lack it. Pagination: cursor-based. Continue with nextCursor and the same filters; restart without cursor when a filter changes."],
+  ["list", "List account notifications by all or unread filter and optional source (including drive-discussion for document comments, messages, and replies). Both filters apply together. Document interactions may include a read-only event-time snapshot of original/replied-to excerpts and new content; old records may lack it. Pagination: cursor-based. Continue with nextCursor and the same filters; restart without cursor when a filter changes."],
   ["count", "Get the exact unread notification count."],
   ["get", "Read one notification without marking it read. Document interactions may include bounded plain-text event-time context in driveDiscussion.snapshot; it is not current document content. Pass either id or the complete copied synapse:notification:<id> reference."],
   ["read", "Mark one notification read."],
   ["read_all", "Mark every unread notification read."],
   ["delete", "Hide one notification for the current account."],
-  ["delete_all", "Hide all notifications, or all pending notifications, for the current account."],
+  ["delete_all", "Hide all notifications for the current account."],
 ] as const
 
 export const notificationCapabilities: CapabilityDefinition[] = entries.map(([action, description]) => ({
@@ -33,13 +33,13 @@ export function buildNotificationTools(): McpToolDefinition[] {
     name: `app_account_notification_${action}`,
     description,
     inputSchema: action === "list" ? {
-      type: "object", properties: { filter: { type: "string", enum: ["all", "unread", "pending"], description: "Defaults to all." }, source: { type: "string", enum: [...NOTIFICATION_SOURCES], description: "Optional notification source. Omit for all sources; pending only matches terminal-attention." }, cursor: { type: "string", description: "nextCursor from the prior page with the same filter and source." } }, additionalProperties: false,
+      type: "object", properties: { filter: { type: "string", enum: ["all", "unread"], description: "Defaults to all." }, source: { type: "string", enum: [...NOTIFICATION_SOURCES], description: "Optional notification source. Omit for all sources." }, cursor: { type: "string", description: "nextCursor from the prior page with the same filter and source." } }, additionalProperties: false,
     } : action === "get" ? {
       type: "object", properties: { id: { ...id, description: "Notification ID. Use this or reference, not both." }, reference: { type: "string", description: "Complete copied synapse:notification:<id> reference. Pass unchanged; use this or id, not both." } }, additionalProperties: false,
     } : action === "read" || action === "delete" ? {
       type: "object", properties: { id }, required: ["id"], additionalProperties: false,
     } : action === "delete_all" ? {
-      type: "object", properties: { filter: { type: "string", enum: ["all", "pending"] } }, required: ["filter"], additionalProperties: false,
+      type: "object", properties: { filter: { type: "string", enum: ["all"] } }, required: ["filter"], additionalProperties: false,
     } : empty,
   }))
 }

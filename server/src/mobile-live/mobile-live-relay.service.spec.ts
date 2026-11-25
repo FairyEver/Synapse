@@ -475,11 +475,11 @@ describe("MobileLiveRelayService attention", () => {
     expect(sendTerminalApproval).not.toHaveBeenCalled()
   })
 
-  it("persists only safe attention metadata and resolves the pending item", () => {
+  it("persists only safe attention metadata without updating it when the session stops waiting", () => {
     const { service, sendTerminalApproval } = createHarness()
     const create = vi.fn(async () => undefined)
-    const resolveAttention = vi.fn(async () => undefined)
-    service.setNotificationSink({ create, resolveAttention } as never)
+    const invalidateTerminalTarget = vi.fn(async () => undefined)
+    service.setNotificationSink({ create, invalidateTerminalTarget } as never)
     service.handleSummary("user-1", summary("desktop-1", [session("session-1", "waiting")]))
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       source: "terminal-attention", targetId: "session-1", deviceId: "desktop-1",
@@ -487,25 +487,18 @@ describe("MobileLiveRelayService attention", () => {
     }))
     expect(sendTerminalApproval).not.toHaveBeenCalled()
     service.handleSummary("user-1", summary("desktop-1", [session("session-1", "not_waiting")]))
-    expect(resolveAttention).toHaveBeenCalledWith("user-1", "desktop-1", "session-1")
+    expect(invalidateTerminalTarget).not.toHaveBeenCalled()
   })
-  it("withdraws a departed session's open-terminal handle, not just its pending flag", () => {
-    // 会话走了之后，那些「打开终端」指向的地方就不存在了。只把待处理标记放下是不够的：
-    // `terminal-complete` 那一种从不看那个标记，而手机是按 `targetId` **有没有**来画那个
-    // 按钮的 —— 只 resolve，按钮照旧画得出来，点下去只会得到一句「该终端已结束。」
+  it("withdraws a departed session's open-terminal handle", () => {
     const { service } = createHarness()
     const create = vi.fn(async () => undefined)
-    const resolveAttention = vi.fn(async () => undefined)
     const invalidateTerminalTarget = vi.fn(async () => undefined)
-    service.setNotificationSink({ create, resolveAttention, invalidateTerminalTarget } as never)
+    service.setNotificationSink({ create, invalidateTerminalTarget } as never)
 
     service.handleSummary("user-1", summary("desktop-1", [session("session-1", "not_waiting")]))
     service.handleSummary("user-1", summary("desktop-1"))
 
     expect(invalidateTerminalTarget).toHaveBeenCalledWith("user-1", "desktop-1", "session-1")
-    // 退出待处理与句柄作废是两件事，走的也必须是两条路：前者在会话还活着时发生
-    // （见上一条用例），后者发生在它没了之后。
-    expect(resolveAttention).not.toHaveBeenCalled()
   })
 
   it("notifies on a transition into waiting, and only on the transition", () => {

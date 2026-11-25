@@ -192,13 +192,14 @@ describe("notification throttle key", () => {
 })
 
 describe("NotificationController", () => {
-  it("limits bulk deletion to all or pending messages for the signed-in user", async () => {
+  it("limits bulk deletion to all messages for the signed-in user", async () => {
     const service = { deleteAll: vi.fn(async () => undefined) }
     const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "user-1" } }
 
-    await expect(endpoint.deleteAll(request as never, { filter: "pending" })).resolves.toEqual({ ok: true })
-    expect(service.deleteAll).toHaveBeenCalledWith("user-1", "pending")
+    await expect(endpoint.deleteAll(request as never, { filter: "all" })).resolves.toEqual({ ok: true })
+    expect(service.deleteAll).toHaveBeenCalledWith("user-1", "all")
+    await expect(endpoint.deleteAll(request as never, { filter: "pending" })).rejects.toMatchObject({ status: 400 })
     await expect(endpoint.deleteAll(request as never, { filter: "unread" })).rejects.toMatchObject({ status: 400 })
     expect(service.deleteAll).toHaveBeenCalledOnce()
   })

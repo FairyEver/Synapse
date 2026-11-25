@@ -43,11 +43,11 @@ const notificationThrottle = {
 
 const listSchema = z.object({
   cursor: z.string().min(1).max(120).optional(),
-  filter: z.enum(["all", "unread", "pending"]).optional(),
+  filter: z.enum(["all", "unread"]).optional(),
   source: z.enum(NOTIFICATION_SOURCES).optional(),
 })
 
-const deleteAllSchema = z.object({ filter: z.enum(["all", "pending"]) })
+const deleteAllSchema = z.object({ filter: z.literal("all") })
 const readSchema = z.object({ read: z.boolean().optional() }).strict()
 
 const desktopWriteSchema = z.object({

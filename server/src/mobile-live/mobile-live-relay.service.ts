@@ -68,7 +68,7 @@ export class MobileLiveRelayService implements OnModuleInit {
   private fanout: MobileLiveFanout | null = null
   private notifications: Pick<
     NotificationService,
-    "create" | "resolveAttention" | "invalidateTerminalTarget"
+    "create" | "invalidateTerminalTarget"
   > | null = null
 
   constructor(
@@ -86,7 +86,7 @@ export class MobileLiveRelayService implements OnModuleInit {
   }
 
   setNotificationSink(
-    sink: Pick<NotificationService, "create" | "resolveAttention" | "invalidateTerminalTarget">,
+    sink: Pick<NotificationService, "create" | "invalidateTerminalTarget">,
   ): void {
     this.notifications = sink
   }
@@ -149,13 +149,7 @@ export class MobileLiveRelayService implements OnModuleInit {
     for (const sessionId of sessions.keys()) {
       if (!present.has(sessionId)) {
         sessions.delete(sessionId)
-        // 这条会话不只是「不再等待」—— 它不存在了。所以清掉的是那个句柄，而不是只把
-        // 待处理标记放下：`targetId` 指的地方已经没了，而手机那一边「打开终端」正是按
-        // `targetId` 有没有来画的。只 resolve 的话按钮照旧画得出来，点下去只会得到一句
-        // 「该终端已结束。」
-        //
-        // 这条同时覆盖了原来那次 `resolveAttention`：它置的 `resolvedAt` 这个新方法也置，
-        // 而且顺手把 `terminal-complete` 一起带上 —— 那一种从来不看 `resolvedAt`。
+        // 会话已结束，清掉关联通知上的 `targetId` 句柄，避免「打开终端」指向不存在的会话。
         void this.notifications?.invalidateTerminalTarget(
           userId,
           payload.desktopClientInstanceId,
@@ -179,9 +173,6 @@ export class MobileLiveRelayService implements OnModuleInit {
     for (const session of payload.sessions) {
       const previous = sessions.get(session.id)
       sessions.set(session.id, session.attention.state)
-      if (previous === "waiting" && session.attention.state !== "waiting") {
-        void this.notifications?.resolveAttention(userId, payload.desktopClientInstanceId, session.id)
-      }
       // Only a fresh transition into "waiting" is worth waking someone for.
       // `unknown` is explicitly not `not_waiting`, but it is also not evidence
       // that a person is needed, so it never notifies.

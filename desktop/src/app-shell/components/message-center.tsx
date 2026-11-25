@@ -47,10 +47,6 @@ function sourceName(item: SynapseNotification): string {
   return "Synapse"
 }
 
-function isPending(item: SynapseNotification): boolean {
-  return item.source === "terminal-attention" && !item.resolvedAt
-}
-
 function listSubtitle(item: SynapseNotification): string {
   if (item.source === "mail-internal" && item.mailSubject) return item.mailSubject
   return sourceName(item)
@@ -92,7 +88,6 @@ function primaryAction(item: SynapseNotification): string | null {
   if (item.source === "drive-discussion") return getDriveDiscussionActionLabel(item.driveDiscussion)
   if (item.source === "todo-reminder" && item.targetId) return "查看待办"
   if (item.source === "mail-internal" && item.targetId) return "在站内信中打开"
-  if (isPending(item) && item.targetId) return "前往处理"
   if (item.targetId && item.source.startsWith("terminal-")) return "打开会话"
   if (item.targetId && item.source === "meeting-transcription") return "打开录音"
   if (item.url) return "打开链接"
@@ -146,7 +141,7 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
   return <article className="mx-auto w-full max-w-2xl wrap-anywhere">
     <div className="mb-7 flex items-center justify-between gap-2">
       <Button type="button" variant="ghost" size="sm" className="-ml-2 @3xl/message-center:hidden" onClick={center.closeDetail}><ArrowLeft />返回列表</Button>
-      <span className="text-xs text-muted-foreground">{sourceName(item)}{isPending(item) && " · 待处理"}</span>
+      <span className="text-xs text-muted-foreground">{sourceName(item)}</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -192,7 +187,7 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
   onOpenRequestConsumed?: () => void
 }) {
   const center = useMessageCenter(onOpenTarget, openRequest, onOpenRequestConsumed)
-  const [clearScope, setClearScope] = useState<"all" | "pending" | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
   const imageTrigger = useRef<HTMLButtonElement | null>(null)
   const quickReplyRequest = useRef(0)
@@ -238,7 +233,7 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
           left={<><SheetTitle className="truncate text-sm font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</>}
           actions={<>
             <SystemAppTopBarActionButton type="button" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</SystemAppTopBarActionButton>
-            <DropdownMenu><DropdownMenuTrigger asChild><SystemAppTopBarActionButton type="button" iconOnly aria-label="更多操作"><MoreHorizontal /></SystemAppTopBarActionButton></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem>{center.filter === "pending" && center.items.length > 0 && <DropdownMenuItem onSelect={() => setClearScope("pending")}>忽略全部待处理…</DropdownMenuItem>}<DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            <DropdownMenu><DropdownMenuTrigger asChild><SystemAppTopBarActionButton type="button" iconOnly aria-label="更多操作"><MoreHorizontal /></SystemAppTopBarActionButton></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setConfirmClear(true)}>清空全部通知…</DropdownMenuItem><DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
             <SystemAppTopBarActionButton type="button" iconOnly aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></SystemAppTopBarActionButton>
           </>}
         />
@@ -248,8 +243,7 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
               <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)} className="shrink-0">
                 <TabsList>
                   <TabsTrigger value="all" className="flex-none px-2">全部</TabsTrigger>
-                  <TabsTrigger value="unread" className="flex-none px-2">未读</TabsTrigger>
-                  <TabsTrigger value="pending" className="flex-none px-2">待处理</TabsTrigger>
+                  <TabsTrigger value="unread" className="flex-none px-2">未读{center.unread > 0 && ` ${center.unread}`}</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Select value={center.source} onValueChange={(value) => center.changeSource(value as MessageSourceFilter)} data-track="message-center-source">
@@ -272,7 +266,7 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
                   {showDate && <h3 className="px-5 pb-2 pt-5 text-xs font-medium text-muted-foreground">{date}</h3>}
                   <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : "hover:bg-muted"}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
-                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="truncate text-xs text-muted-foreground">{listSubtitle(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
+                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="truncate text-xs text-muted-foreground">{listSubtitle(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
                   </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item, null, (target) => { void openQuickReply(target) }).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}
@@ -292,7 +286,7 @@ function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
         onClose={center.closeImagePreview}
       />
     )}
-    <AlertDialog open={clearScope !== null} onOpenChange={(open) => { if (!open) setClearScope(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{clearScope === "pending" ? "忽略全部待处理通知？" : "清空全部通知？"}</AlertDialogTitle><AlertDialogDescription>{clearScope === "pending" ? "通知会从列表中移除，终端中的待处理状态不会改变。" : "这些通知会从当前账号的所有设备中移除，包括未加载的通知。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (clearScope) void center.deleteAll(clearScope) }}>{clearScope === "pending" ? "确认忽略" : "确认清空"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>清空全部通知？</AlertDialogTitle><AlertDialogDescription>这些通知会从当前账号的所有设备中移除，包括未加载的通知。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { void center.deleteAll() }}>确认清空</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>
 }
 

@@ -148,26 +148,16 @@ describe("NotificationService", () => {
     }))
   })
 
-  it("preserves all-source reads and restricts pending to unresolved terminal attention", async () => {
+  it("preserves all-source reads and combines unread filter with source", async () => {
     const { service, prisma } = harness()
     await service.list("user-1", {})
     expect(prisma.userNotification.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
       where: { userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) } },
     }))
-    await service.list("user-1", { source: "terminal-attention", filter: "pending" })
+    await service.list("user-1", { source: "terminal-attention", filter: "unread" })
     expect(prisma.userNotification.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
-      where: { userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) }, source: "terminal-attention", resolvedAt: null },
+      where: { userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) }, source: "terminal-attention", readAt: null },
     }))
-  })
-
-  it("returns an empty pending intersection for every other source", async () => {
-    const { service, prisma } = harness()
-    for (const source of NOTIFICATION_SOURCES.filter((source) => source !== "terminal-attention")) {
-      await expect(service.list("user-1", { source, filter: "pending", cursor: "message-1" }))
-        .resolves.toEqual({ items: [], nextCursor: null })
-    }
-    expect(prisma.userNotification.findFirst).not.toHaveBeenCalled()
-    expect(prisma.userNotification.findMany).not.toHaveBeenCalled()
   })
 
   it("keeps a persisted message when APNs fails and publishes its ID", async () => {
@@ -186,13 +176,13 @@ describe("NotificationService", () => {
     expect(desktops.broadcastToUser).not.toHaveBeenCalled()
   })
 
-  it("preserves terminal lock-screen actions while routing a tap through the message ID", async () => {
+  it("delivers terminal attention messages as regular unread notifications without pending deduplication", async () => {
     const { service, prisma, push } = harness()
-    prisma.userNotification.findFirst.mockResolvedValueOnce(null)
     prisma.userNotification.create.mockResolvedValueOnce({ ...record, source: "terminal-attention", targetId: "session-1", deviceId: "desktop-1" })
     await service.create({ userId: "user-1", source: "terminal-attention", title: "等待确认", body: "需要操作", targetId: "session-1", deviceId: "desktop-1" })
-    expect(push.sendTerminalApproval).toHaveBeenCalledWith("user-1", expect.objectContaining({ notificationId: "message-1", sessionId: "session-1" }))
-    expect(push.sendNotification).not.toHaveBeenCalled()
+    expect(prisma.userNotification.findFirst).not.toHaveBeenCalled()
+    expect(push.sendNotification).toHaveBeenCalledWith("user-1", expect.objectContaining({ id: "message-1", title: "部署完成" }))
+    expect(push.sendTerminalApproval).not.toHaveBeenCalled()
   })
 
   it("synchronizes read and delete state and removes records older than 90 days", async () => {
@@ -208,7 +198,7 @@ describe("NotificationService", () => {
     expect(Math.abs(Date.now() - cutoff.getTime() - 90 * 24 * 60 * 60 * 1000)).toBeLessThan(2_000)
   })
 
-  it("lets the owner mark a notification unread again without changing its pending state", async () => {
+  it("lets the owner mark a notification unread again", async () => {
     const { service, prisma, desktops } = harness()
     await service.markRead("user-1", "message-1", false)
     expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
@@ -219,8 +209,6 @@ describe("NotificationService", () => {
   })
 
   it("withdraws the open-terminal handle for a session that is gone", async () => {
-    // 会话结束之后，它留下的那条「打开终端」不再指向任何东西。清的是 `targetId`，不是
-    // 删记录：那条消息说的是「那一轮跑完了」，这件事发生过，历史要留着。
     const { service, prisma, desktops } = harness()
     await service.invalidateTerminalTarget("user-1", "desktop-1", "session-1")
 
@@ -232,51 +220,25 @@ describe("NotificationService", () => {
         source: { in: ["terminal-attention", "terminal-complete"] },
         deletedAt: null,
       },
-      data: { targetId: null, resolvedAt: expect.any(Date) },
+      data: { targetId: null },
     })
     expect(desktops.broadcastToUser).toHaveBeenCalledOnce()
   })
 
-  it("leaves the handle alone when a session merely stops waiting", async () => {
-    // 会话还在、只是不再等人回答 —— 那时「打开终端」照样打得开。所以这一条只放下待处理
-    // 标记，不碰句柄。两件事在这里分岔，分岔的理由是同一个：句柄作不作废，取决于那条
-    // 会话还在不在。
-    const { service, prisma } = harness()
-    await service.resolveAttention("user-1", "desktop-1", "session-1")
-
-    expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
-      where: {
-        userId: "user-1",
-        source: "terminal-attention",
-        deviceId: "desktop-1",
-        targetId: "session-1",
-        resolvedAt: null,
-      },
-      data: { resolvedAt: expect.any(Date) },
-    })
-  })
-
-  it("clears all messages and ignores only unresolved terminal attention", async () => {
+  it("clears all messages for the signed-in user", async () => {
     const { service, prisma, desktops } = harness()
     await service.deleteAll("user-1", "all")
-    await service.deleteAll("user-1", "pending")
 
-    expect(prisma.userNotification.updateMany).toHaveBeenNthCalledWith(1, {
+    expect(prisma.userNotification.updateMany).toHaveBeenCalledOnce()
+    expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
       where: { userId: "user-1", deletedAt: null },
       data: { deletedAt: expect.any(Date) },
     })
-    expect(prisma.userNotification.updateMany).toHaveBeenNthCalledWith(2, {
-      where: { userId: "user-1", deletedAt: null, source: "terminal-attention", resolvedAt: null },
-      data: { deletedAt: expect.any(Date) },
-    })
-    // 两次清空都只把带图的行读回来算对象键，删除条件本身仍是全范围。
-    for (const call of prisma.userNotification.findMany.mock.calls) {
-      expect(call[0]).toEqual(expect.objectContaining({
-        where: expect.objectContaining({ imageId: { not: null } }),
-      }))
-    }
-    expect(prisma.userNotification.findMany).toHaveBeenCalledTimes(2)
-    expect(desktops.broadcastToUser).toHaveBeenCalledTimes(2)
+    expect(prisma.userNotification.findMany).toHaveBeenCalledOnce()
+    expect(prisma.userNotification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ imageId: { not: null } }),
+    }))
+    expect(desktops.broadcastToUser).toHaveBeenCalledOnce()
   })
 
   it("writes copyOnTap through to storage", async () => {

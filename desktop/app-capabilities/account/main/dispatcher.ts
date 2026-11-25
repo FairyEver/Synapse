@@ -22,21 +22,21 @@ export type AccountCapabilityDispatcher = {
 }
 
 type NotificationService = {
-  listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }): Promise<unknown>
+  listNotifications(input: { cursor?: string; filter?: "all" | "unread"; source?: NotificationSource }): Promise<unknown>
   notificationUnreadCount(): Promise<unknown>
   getNotification(id: string): Promise<unknown>
   markNotificationRead(id: string): Promise<unknown>
   markAllNotificationsRead(): Promise<unknown>
   deleteNotification(id: string): Promise<unknown>
-  deleteAllNotifications(filter: "all" | "pending"): Promise<unknown>
+  deleteAllNotifications(filter: "all"): Promise<unknown>
 }
 
 const idInput = z.object({ id: z.string().min(1) }).strict()
 const getInput = z.object({ id: z.string().min(1).optional(), reference: z.string().optional() }).strict()
   .refine((input) => (input.id === undefined) !== (input.reference === undefined), "Provide exactly one notification locator.")
 const emptyInput = z.object({}).strict()
-const listInput = z.object({ filter: z.enum(["all", "unread", "pending"]).optional(), cursor: z.string().min(1).optional(), source: z.enum(NOTIFICATION_SOURCES).optional() }).strict()
-const deleteAllInput = z.object({ filter: z.enum(["all", "pending"]) }).strict()
+const listInput = z.object({ filter: z.enum(["all", "unread"]).optional(), cursor: z.string().min(1).optional(), source: z.enum(NOTIFICATION_SOURCES).optional() }).strict()
+const deleteAllInput = z.object({ filter: z.literal("all") }).strict()
 
 export function createAccountCapabilityDispatcher(deps: {
   readonly service: AccountCapabilityService

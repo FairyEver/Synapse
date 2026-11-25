@@ -131,12 +131,12 @@ describe("useMessageCenter", () => {
     expect(current.source).toBe("terminal-attention")
     expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "terminal-attention" })
 
-    await act(async () => { current.changeFilter("pending"); await flush() })
-    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", source: "terminal-attention" })
     await act(async () => { current.changeSource("system-notifier"); await flush() })
-    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", source: "system-notifier" })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "system-notifier" })
     await act(async () => { current.changeSource("all"); await flush() })
-    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending" })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread" })
+    await act(async () => { current.changeFilter("all"); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "all" })
   })
 
   it("clears the previous selection, list, and cursor while loading another category", async () => {
@@ -189,9 +189,9 @@ describe("useMessageCenter", () => {
 
   it("keeps bulk read and deletion operations scoped to the account across category filters", async () => {
     await act(async () => { current.changeFilter("unread"); current.changeSource("mail-internal"); await flush() })
-    await act(async () => { await current.markAllRead(); await current.deleteAll("all"); await current.deleteAll("pending"); await flush() })
+    await act(async () => { await current.markAllRead(); await current.deleteAll(); await flush() })
     expect(mocks.readAll).toHaveBeenCalledWith()
-    expect(mocks.deleteAll.mock.calls).toEqual([[{ filter: "all" }], [{ filter: "pending" }]])
+    expect(mocks.deleteAll.mock.calls).toEqual([[{ filter: "all" }]])
     expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "mail-internal" })
   })
 

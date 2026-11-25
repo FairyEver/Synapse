@@ -199,7 +199,7 @@ describe("MessageCenter", () => {
       expect(mockCenter.navigate).toHaveBeenCalledWith(mockCenter.selected)
     } finally { await act(async () => root.unmount()); mockCenter.selected = previous }
   })
-  it("keeps the unread count only in the top bar and uses a single-row flexible filter toolbar", async () => {
+  it("shows the unread count on the unread tab without a pending tab and keeps a single-row flexible filter toolbar", async () => {
     mockCenter.unread = 140
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -207,7 +207,7 @@ describe("MessageCenter", () => {
     try {
       await act(async () => { root.render(<MessageCenter />) })
       const tabs = [...document.querySelectorAll<HTMLElement>('[role="tab"]')]
-      expect(tabs.map((tab) => tab.textContent)).toEqual(["全部", "未读", "待处理"])
+      expect(tabs.map((tab) => tab.textContent)).toEqual(["全部", "未读 140"])
       expect(tabs.every((tab) => tab.className.includes("flex-none"))).toBe(true)
 
       const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="通知分类"]')!

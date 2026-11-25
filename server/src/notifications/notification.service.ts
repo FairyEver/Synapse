@@ -84,12 +84,6 @@ export class NotificationService implements OnModuleInit {
   }
 
   async create(input: CreateNotificationInput): Promise<UserNotification> {
-    if (input.source === "terminal-attention" && input.deviceId && input.targetId) {
-      const pending = await this.prisma.userNotification.findFirst({
-        where: { userId: input.userId, source: "terminal-attention", deviceId: input.deviceId, targetId: input.targetId, resolvedAt: null, deletedAt: null },
-      })
-      if (pending) return pending
-    }
     let record: UserNotification
     try {
       record = await this.prisma.$transaction(async (tx) => {
@@ -122,24 +116,14 @@ export class NotificationService implements OnModuleInit {
     }
     this.publish(input.userId, record.id)
     if (record.level !== "passive") {
-      const delivery = record.source === "terminal-attention" && record.deviceId && record.targetId
-        ? this.push.sendTerminalApproval(input.userId, {
-          title: record.title,
-          body: record.body,
-          desktopClientInstanceId: record.deviceId,
-          sessionId: record.targetId,
-          sessionTitle: record.title,
-          detail: "",
-          notificationId: record.id,
-        })
-        : this.push.sendNotification(input.userId, {
-          id: record.id,
-          title: record.title,
-          body: record.body,
-          level: record.level as NotificationLevel,
-          group: record.group,
-          copyOnTap: record.copyOnTap,
-        })
+      const delivery = this.push.sendNotification(input.userId, {
+        id: record.id,
+        title: record.title,
+        body: record.body,
+        level: record.level as NotificationLevel,
+        group: record.group,
+        copyOnTap: record.copyOnTap,
+      })
       void delivery.catch((error: unknown) => {
         this.logger.warn({ reason: error instanceof Error ? error.name : typeof error }, "Notification APNs delivery failed")
       })
@@ -147,10 +131,7 @@ export class NotificationService implements OnModuleInit {
     return record
   }
 
-  async list(userId: string, input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) {
-    if (input.filter === "pending" && input.source && input.source !== "terminal-attention") {
-      return { items: [], nextCursor: null }
-    }
+  async list(userId: string, input: { cursor?: string; filter?: "all" | "unread"; source?: NotificationSource }) {
     const cursor = input.cursor
       ? await this.prisma.userNotification.findFirst({ where: { id: input.cursor, userId }, select: { createdAt: true, id: true } })
       : null
@@ -161,7 +142,6 @@ export class NotificationService implements OnModuleInit {
         createdAt: { gte: new Date(Date.now() - retentionMs) },
         ...(input.source ? { source: input.source } : {}),
         ...(input.filter === "unread" ? { readAt: null } : {}),
-        ...(input.filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
         ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -238,11 +218,10 @@ export class NotificationService implements OnModuleInit {
     this.publish(userId, id)
   }
 
-  async deleteAll(userId: string, filter: "all" | "pending"): Promise<void> {
+  async deleteAll(userId: string, _filter: "all"): Promise<void> {
     const where: Prisma.UserNotificationWhereInput = {
       userId,
       deletedAt: null,
-      ...(filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
     }
     // 与 `delete` 同理：先记下对象键，再让这些行从可删范围里消失。只读带图的行，
     // 免得为了一小组图片把整批通知的 `imageId` 都扫回来。
@@ -252,28 +231,10 @@ export class NotificationService implements OnModuleInit {
     this.publish(userId, "all")
   }
 
-  async resolveAttention(userId: string, deviceId: string, sessionId: string): Promise<void> {
-    const result = await this.prisma.userNotification.updateMany({
-      where: { userId, source: "terminal-attention", deviceId, targetId: sessionId, resolvedAt: null },
-      data: { resolvedAt: new Date() },
-    })
-    if (result.count) this.publish(userId, "all")
-  }
-
   /**
    * 这条会话结束了，它留下的那些「打开终端」就不再指向任何东西。
    *
-   * 与 `resolveAttention` 是两件事，虽然两者都可能因为「这条会话不在了」被调用：
-   *
-   * - `resolveAttention` 说的是**待处理解除了**。会话还活着，只是不再等人回答，而那条通知
-   *   留在原地照样打得到它的终端 —— 所以它只动 `resolvedAt`；
-   * - 这一条说的是**这个句柄作废了**。会话没了，`targetId` 指的地方不存在了。所以要清掉它：
-   *   手机那一边「打开终端」是按 `targetId` **有没有**来画的（`InboxView` 的详情页），清掉
-   *   它，那个按下去只会得到「该终端已结束。」的按钮自己就消失了。只置 `resolvedAt` 不够 ——
-   *   `terminal-complete` 根本不带那个语义，详情页也从不读它，按钮照样画得出来。
-   *
-   * 记录本身留着。它是一条「那一轮跑完了」的消息，这件事发生过；只是它附带的那次跳转已经
-   * 无处可去 —— 按不动的按钮比没有按钮更糟。
+   * 清掉 `targetId` 后，按 `targetId` 有无渲染的「打开终端」按钮会自动消失；记录本身保留。
    */
   async invalidateTerminalTarget(userId: string, deviceId: string, sessionId: string): Promise<void> {
     const result = await this.prisma.userNotification.updateMany({
@@ -284,7 +245,7 @@ export class NotificationService implements OnModuleInit {
         source: { in: ["terminal-attention", "terminal-complete"] },
         deletedAt: null,
       },
-      data: { targetId: null, resolvedAt: new Date() },
+      data: { targetId: null },
     })
     if (result.count) this.publish(userId, "all")
   }

@@ -529,7 +529,7 @@ export class AccountService {
     return result
   }
 
-  async listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) {
+  async listNotifications(input: { cursor?: string; filter?: "all" | "unread"; source?: NotificationSource }) {
     const params = new URLSearchParams()
     if (input.cursor) params.set("cursor", input.cursor)
     if (input.filter) params.set("filter", input.filter)
@@ -710,7 +710,7 @@ export class AccountService {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}`, undefined, "删除消息失败。")
   }
 
-  async deleteAllNotifications(filter: "all" | "pending") {
+  async deleteAllNotifications(filter: "all") {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/notifications?filter=${filter}`, undefined, "删除消息失败。")
   }
 

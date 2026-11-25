@@ -12,7 +12,7 @@ import type { MailMessage } from "@/types/mail"
 import type { SynapseNotification } from "@/types/notification-center"
 
 const logger = createRendererLogger("message-center")
-export type MessageFilter = "pending" | "all" | "unread"
+export type MessageFilter = "all" | "unread"
 export type MessageSourceFilter = "all" | NotificationSource
 
 export type MessageCenterOpenRequest = Extract<MainNavigationInput, { appId: "message-center" }>
@@ -381,9 +381,9 @@ export function useMessageCenter(
     }
   }
 
-  const deleteAll = async (scope: "all" | "pending") => {
+  const deleteAll = async () => {
     try {
-      await requireBridgeDomain("account").notifications.deleteAll({ filter: scope })
+      await requireBridgeDomain("account").notifications.deleteAll({ filter: "all" })
       for (const timer of pendingDeletes.current.values()) window.clearTimeout(timer)
       pendingDeletes.current.clear()
       setHiddenIds(new Set())
@@ -391,7 +391,7 @@ export function useMessageCenter(
       await latestRefresh.current()
     } catch (cause) {
       logger.warn("Messages could not be deleted.", { cause })
-      setError(scope === "pending" ? "忽略失败" : "清空失败")
+      setError("清空失败")
     }
   }
 
