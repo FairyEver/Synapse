@@ -23,13 +23,17 @@ export class StateSyncSubscriptionTrie {
   subscribe(connectionId: string, paths: readonly string[]): void {
     if (paths.length === 0) return
 
-    let connPaths = this.pathsByConnection.get(connectionId)
+    const parsedPaths: Array<{ readonly normalized: string; readonly segments: readonly string[] }> = []
     for (const rawPath of paths) {
       const parsed = parseStateSyncPath(rawPath)
       if (!parsed.ok) {
         throw new Error(parsed.message)
       }
+      parsedPaths.push(parsed)
+    }
 
+    let connPaths = this.pathsByConnection.get(connectionId)
+    for (const parsed of parsedPaths) {
       let node = this.root
       let currentPath = ""
       for (const segment of parsed.segments) {

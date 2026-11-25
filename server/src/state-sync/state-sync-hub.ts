@@ -549,7 +549,7 @@ export class StateSyncHub {
     this.clearIdleEvictTimer(state)
     this.pruneReplayBuffer(state, now)
 
-    if (state.ttlSeconds !== null) {
+    if (!input.isObserver && state.ttlSeconds !== null) {
       state.expiresAt = new Date(now + state.ttlSeconds * 1000)
     }
 
@@ -681,33 +681,13 @@ export class StateSyncHub {
     const connection = state.connections.get(connectionId)
     if (!connection) return
 
-    const pendingActions = connection.onDisconnectActions
-    connection.onDisconnectActions = []
+    const pendingActions = this.detachConnection(state, connection)
 
-    state.connections.delete(connectionId)
-    this.connectionsById.delete(connectionId)
-    state.trie.removeConnection(connectionId)
-
-    if (connection.isObserver) {
-      state.observerCount = Math.max(0, state.observerCount - 1)
-    } else {
-      state.productionCount = Math.max(0, state.productionCount - 1)
-      this.globalProductionCount = Math.max(0, this.globalProductionCount - 1)
-
-      const nextSpaceCount = (this.productionCountBySpace.get(connection.spaceId) ?? 1) - 1
-      if (nextSpaceCount <= 0) this.productionCountBySpace.delete(connection.spaceId)
-      else this.productionCountBySpace.set(connection.spaceId, nextSpaceCount)
-
-      const nextAccountCount = (this.productionCountByAccount.get(connection.ownerId) ?? 1) - 1
-      if (nextAccountCount <= 0) this.productionCountByAccount.delete(connection.ownerId)
-      else this.productionCountByAccount.set(connection.ownerId, nextAccountCount)
-
-      if (reason !== "shutdown" && !state.deleted) {
-        this.broadcastFrame(state, {
-          type: "presence.leave",
-          member: toPresenceMember(connection),
-        })
-      }
+    if (!connection.isObserver && reason !== "shutdown" && !state.deleted) {
+      this.broadcastFrame(state, {
+        type: "presence.leave",
+        member: toPresenceMember(connection),
+      })
     }
 
     const shouldRunOnDisconnect =
@@ -930,21 +910,26 @@ export class StateSyncHub {
     reasonText = "Space deleted",
   ): number {
     const reason = closeCodeToDisconnectReason(closeCode)
-    let disconnected = 0
     const targetDocs = [...this.docs.values()].filter((doc) => doc.spaceId === spaceId)
+    const targets: LiveStateSyncConnection[] = []
 
     for (const doc of targetDocs) {
       if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
         doc.deleted = true
         this.clearAllTimers(doc)
       }
-      const targets = [...doc.connections.values()]
-      for (const conn of targets) {
-        this.forceCloseConnection(conn, closeCode, reasonText, reason)
-        disconnected += 1
+      for (const conn of doc.connections.values()) {
+        targets.push(conn)
       }
-      if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
-        this.docs.delete(doc.key)
+    }
+
+    const disconnected = this.forceCloseConnectionsBatch(targets, closeCode, reasonText, reason)
+
+    if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
+      for (const doc of targetDocs) {
+        if (this.docs.get(doc.key) === doc) {
+          this.docs.delete(doc.key)
+        }
       }
     }
 
@@ -969,14 +954,12 @@ export class StateSyncHub {
     }
 
     const targets = [...doc.connections.values()]
-    for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reasonText, reason)
-    }
+    const disconnected = this.forceCloseConnectionsBatch(targets, closeCode, reasonText, reason)
 
-    if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
+    if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED && this.docs.get(key) === doc) {
       this.docs.delete(key)
     }
-    return targets.length
+    return disconnected
   }
 
   disconnectByToken(
@@ -988,10 +971,7 @@ export class StateSyncHub {
     const targets = [...this.connectionsById.values()].filter(
       (conn) => conn.credentialType === "space_token" && conn.credentialId === tokenId,
     )
-    for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reasonText, reason)
-    }
-    return targets.length
+    return this.forceCloseConnectionsBatch(targets, closeCode, reasonText, reason)
   }
 
   disconnectByOwner(
@@ -1001,10 +981,7 @@ export class StateSyncHub {
   ): number {
     const reason = closeCodeToDisconnectReason(closeCode)
     const targets = [...this.connectionsById.values()].filter((conn) => conn.ownerId === ownerId)
-    for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reasonText, reason)
-    }
-    return targets.length
+    return this.forceCloseConnectionsBatch(targets, closeCode, reasonText, reason)
   }
 
   handleApiKeyChange(event: ApiKeyChangeEvent): number {
@@ -1062,14 +1039,12 @@ export class StateSyncHub {
     }
 
     const allConnections = [...this.connectionsById.values()]
-    for (const conn of allConnections) {
-      this.forceCloseConnection(
-        conn,
-        STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY,
-        "Server shutting down",
-        "shutdown",
-      )
-    }
+    this.forceCloseConnectionsBatch(
+      allConnections,
+      STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY,
+      "Server shutting down",
+      "shutdown",
+    )
 
     const flushAll = Promise.allSettled(
       [...this.docs.values()]
@@ -1186,33 +1161,83 @@ export class StateSyncHub {
           : null
 
     if (input.syncPersist && this.persister) {
-      // Wait for any prior background flush on this doc so an older revision cannot overwrite this one.
-      if (state.flushInFlight) {
-        await state.flushInFlight
+      let persistFailed = false
+      let persistError: unknown
+      let abortedDeleted = false
+
+      const runSyncPersist = async (): Promise<void> => {
+        if (state.deleted) {
+          abortedDeleted = true
+          return
+        }
+        this.clearFlushTimers(state)
+        const persister = this.persister
+        if (!persister) {
+          return
+        }
+        try {
+          await persister({
+            spaceId: state.spaceId,
+            docId: state.docId,
+            data: structuredClone(applied.nextRoot),
+            rev: nextRev,
+            expiresAt: nextExpiresAt ? new Date(nextExpiresAt.getTime()) : null,
+          })
+        } catch (error) {
+          persistFailed = true
+          persistError = error
+          if (state.dirty && !state.deleted && !this.shuttingDown) {
+            this.scheduleFlush(state)
+          }
+          return
+        }
+
+        if (state.deleted) {
+          abortedDeleted = true
+          return
+        }
+
+        state.data = applied.nextRoot
+        state.rev = nextRev
+        state.expiresAt = nextExpiresAt
+        state.persistedRev = nextRev
+        state.dirty = false
+        state.dirtySinceMs = null
       }
+
       this.clearFlushTimers(state)
-      try {
-        await this.persister({
-          spaceId: state.spaceId,
-          docId: state.docId,
-          data: structuredClone(applied.nextRoot),
-          rev: nextRev,
-          expiresAt: nextExpiresAt ? new Date(nextExpiresAt.getTime()) : null,
-        })
-      } catch (error) {
-        this.persistErrorHandler?.(error, state.spaceId, state.docId)
+      const previous = state.flushInFlight ?? Promise.resolve()
+      const tracked: Promise<void> = previous.then(runSyncPersist, runSyncPersist).finally(() => {
+        if (state.flushInFlight === tracked) {
+          state.flushInFlight = null
+        }
+      })
+      state.flushInFlight = tracked
+      await tracked
+
+      if (persistFailed) {
+        this.persistErrorHandler?.(persistError, state.spaceId, state.docId)
+        if (state.deleted) {
+          return {
+            ok: false,
+            code: "DOC_NOT_FOUND",
+            message: "房间不存在。",
+          }
+        }
         return {
           ok: false,
           code: "PERSIST_FAILED",
           message: "持久化文档写入失败。",
         }
       }
-      state.data = applied.nextRoot
-      state.rev = nextRev
-      state.expiresAt = nextExpiresAt
-      state.persistedRev = nextRev
-      state.dirty = false
-      state.dirtySinceMs = null
+
+      if (abortedDeleted || state.deleted) {
+        return {
+          ok: false,
+          code: "DOC_NOT_FOUND",
+          message: "房间不存在。",
+        }
+      }
     } else {
       state.data = applied.nextRoot
       state.rev = nextRev
@@ -1419,6 +1444,10 @@ export class StateSyncHub {
             expiresAt: targetExpiresAt,
           })
 
+          if (state.deleted) {
+            break
+          }
+
           state.persistedRev = targetRev
           if (state.rev === targetRev) {
             state.dirty = false
@@ -1429,7 +1458,7 @@ export class StateSyncHub {
           }
         } catch (error) {
           this.persistErrorHandler?.(error, state.spaceId, state.docId)
-          if (!this.shuttingDown) {
+          if (!this.shuttingDown && !state.deleted) {
             this.scheduleFlush(state)
           }
           break
@@ -1463,7 +1492,9 @@ export class StateSyncHub {
       state.idleEvictTimer = null
       if (state.connections.size === 0 && !state.dirty && !state.flushInFlight && !state.deleted) {
         this.clearAllTimers(state)
-        this.docs.delete(state.key)
+        if (this.docs.get(state.key) === state) {
+          this.docs.delete(state.key)
+        }
       }
     }, this.config.idleEvictMs)
     state.idleEvictTimer.unref?.()
@@ -1563,6 +1594,35 @@ export class StateSyncHub {
     )
   }
 
+  private detachConnection(
+    state: ActiveDocState,
+    connection: LiveStateSyncConnection,
+  ): StateSyncOnDisconnectAction[] {
+    const pendingActions = connection.onDisconnectActions
+    connection.onDisconnectActions = []
+
+    state.connections.delete(connection.connectionId)
+    this.connectionsById.delete(connection.connectionId)
+    state.trie.removeConnection(connection.connectionId)
+
+    if (connection.isObserver) {
+      state.observerCount = Math.max(0, state.observerCount - 1)
+    } else {
+      state.productionCount = Math.max(0, state.productionCount - 1)
+      this.globalProductionCount = Math.max(0, this.globalProductionCount - 1)
+
+      const nextSpaceCount = (this.productionCountBySpace.get(connection.spaceId) ?? 1) - 1
+      if (nextSpaceCount <= 0) this.productionCountBySpace.delete(connection.spaceId)
+      else this.productionCountBySpace.set(connection.spaceId, nextSpaceCount)
+
+      const nextAccountCount = (this.productionCountByAccount.get(connection.ownerId) ?? 1) - 1
+      if (nextAccountCount <= 0) this.productionCountByAccount.delete(connection.ownerId)
+      else this.productionCountByAccount.set(connection.ownerId, nextAccountCount)
+    }
+
+    return pendingActions
+  }
+
   private disconnectByApiKey(
     apiKeyId: string,
     closeCode: number,
@@ -1576,10 +1636,77 @@ export class StateSyncHub {
         && conn.credentialId === apiKeyId
         && (!predicate || predicate(conn)),
     )
+    return this.forceCloseConnectionsBatch(targets, closeCode, reasonText, reason)
+  }
+
+  private forceCloseConnectionsBatch(
+    targets: readonly LiveStateSyncConnection[],
+    closeCode: number,
+    reasonText: string,
+    reason: DisconnectReason,
+  ): number {
+    if (targets.length === 0) return 0
+
+    const detached: Array<{
+      readonly state: ActiveDocState
+      readonly connection: LiveStateSyncConnection
+    }> = []
+    const affectedDocs = new Map<ActiveDocState, { hadProductionDisconnect: boolean }>()
+
     for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reasonText, reason)
+      conn.onDisconnectActions = []
+      if (!this.connectionsById.has(conn.connectionId)) {
+        continue
+      }
+      const state = this.docs.get(makeDocKey(conn.spaceId, conn.docId))
+      if (!state || state.connections.get(conn.connectionId) !== conn) {
+        this.connectionsById.delete(conn.connectionId)
+        continue
+      }
+      this.detachConnection(state, conn)
+      detached.push({ state, connection: conn })
+
+      const docInfo = affectedDocs.get(state)
+      if (docInfo) {
+        if (!conn.isObserver) docInfo.hadProductionDisconnect = true
+      } else {
+        affectedDocs.set(state, { hadProductionDisconnect: !conn.isObserver })
+      }
     }
-    return targets.length
+
+    if (reason !== "shutdown") {
+      for (const { state, connection } of detached) {
+        if (!connection.isObserver && !state.deleted) {
+          this.broadcastFrame(state, {
+            type: "presence.leave",
+            member: toPresenceMember(connection),
+          })
+        }
+      }
+    }
+
+    for (const { connection } of detached) {
+      try {
+        connection.socket.close(closeCode, reasonText)
+      } catch (error) {
+        void error
+      }
+    }
+
+    if (!this.shuttingDown) {
+      for (const [state, info] of affectedDocs) {
+        if (state.deleted) continue
+        if (info.hadProductionDisconnect && state.productionCount === 0 && state.dirty) {
+          void this.flushDoc(state).catch((error: unknown) => {
+            this.persistErrorHandler?.(error, state.spaceId, state.docId)
+          })
+        } else if (state.connections.size === 0 && !state.dirty) {
+          this.scheduleIdleEvict(state)
+        }
+      }
+    }
+
+    return detached.length
   }
 
   private forceCloseConnection(

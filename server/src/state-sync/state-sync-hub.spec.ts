@@ -1460,4 +1460,375 @@ describe("StateSyncHub debounced flush, slow consumer, hidden observers, quotas 
 
     await hub.shutdown()
   })
+
+  it("detaches all batch-revoked connections before presence.leave so slow/broken siblings get 4003/4004 without running onDisconnect", async () => {
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    attachEmptyDoc(hub, "ss_1", "ssd_batch_revoke", {
+      tokenFlag: "must-stay",
+      apiKeyFlag: "must-stay",
+    })
+
+    const sock1 = createFakeSocket()
+    const sock2Slow = createFakeSocket()
+    const sockHealthyOther = createFakeSocket()
+
+    const r1 = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_batch_revoke",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_shared",
+      role: "write",
+      isObserver: false,
+      clientId: "c1",
+      clientName: null,
+      meta: {},
+      socket: sock1.socket,
+    })
+    const r2 = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_batch_revoke",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_shared",
+      role: "write",
+      isObserver: false,
+      clientId: "c2-slow",
+      clientName: null,
+      meta: {},
+      socket: sock2Slow.socket,
+    })
+    const r3 = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_batch_revoke",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_other",
+      role: "read",
+      isObserver: false,
+      clientId: "c3-healthy",
+      clientName: null,
+      meta: {},
+      socket: sockHealthyOther.socket,
+    })
+    if (!r1.ok || !r2.ok || !r3.ok) throw new Error("register failed")
+
+    // Register onDisconnect on sibling connection #2, then make it slow (> 512 KiB buffered)
+    expect(
+      hub.setOnDisconnect("ss_1", "ssd_batch_revoke", r2.connection.connectionId, [
+        { op: "set", path: "/tokenFlag", value: "leaked-by-4008" },
+      ]).ok,
+    ).toBe(true)
+    sock2Slow.setBufferedAmount(600_000)
+    sockHealthyOther.sent.length = 0
+
+    // Revoke shared token: both r1 and r2 must close with 4003 (NOT 4008) and r2 onDisconnect must NOT run
+    expect(hub.disconnectByToken("tok_shared", STATE_SYNC_WS_CLOSE_CODES.REVOKED)).toBe(2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(sock1.closed).toEqual([{ code: STATE_SYNC_WS_CLOSE_CODES.REVOKED, reason: expect.any(String) }])
+    expect(sock2Slow.closed).toEqual([{ code: STATE_SYNC_WS_CLOSE_CODES.REVOKED, reason: expect.any(String) }])
+    expect(hub.readDocPath("ss_1", "ssd_batch_revoke", "/tokenFlag")?.value).toBe("must-stay")
+    // Healthy non-targeted connection still receives presence.leave for both revoked connections
+    const leftClients = sockHealthyOther.sent
+      .filter((f) => f.type === "presence.leave")
+      .map((f) => (f.member as { clientId: string }).clientId)
+      .sort()
+    expect(leftClients).toEqual(["c1", "c2-slow"])
+
+    // Same guarantee for API key scope change (4004) with a sibling whose send() throws
+    const api1 = createFakeSocket()
+    const api2Broken = createFakeSocket()
+    const ra1 = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_batch_revoke",
+      ownerId: "u1",
+      credentialType: "api_key",
+      credentialId: "key_shared",
+      role: "create_write",
+      isObserver: false,
+      clientId: "api-1",
+      clientName: null,
+      meta: {},
+      socket: api1.socket,
+    })
+    const ra2 = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_batch_revoke",
+      ownerId: "u1",
+      credentialType: "api_key",
+      credentialId: "key_shared",
+      role: "create_write",
+      isObserver: false,
+      clientId: "api-2-broken",
+      clientName: null,
+      meta: {},
+      socket: api2Broken.socket,
+    })
+    if (!ra1.ok || !ra2.ok) throw new Error("register failed")
+
+    expect(
+      hub.setOnDisconnect("ss_1", "ssd_batch_revoke", ra2.connection.connectionId, [
+        { op: "set", path: "/apiKeyFlag", value: "leaked-by-4008" },
+      ]).ok,
+    ).toBe(true)
+    api2Broken.setThrowOnSend(true)
+
+    hub.handleApiKeyChange({
+      kind: "updated",
+      userId: "u1",
+      apiKeyId: "key_shared",
+      scopes: [STATE_SYNC_READ_SCOPE],
+      channelAccessMode: "selected",
+      channelIds: [],
+      stateSyncAccessMode: "all_owned",
+      stateSyncSpaceIds: [],
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(api1.closed).toEqual([{ code: STATE_SYNC_WS_CLOSE_CODES.ROLE_CHANGED, reason: expect.any(String) }])
+    expect(api2Broken.closed).toEqual([{ code: STATE_SYNC_WS_CLOSE_CODES.ROLE_CHANGED, reason: expect.any(String) }])
+    expect(hub.readDocPath("ss_1", "ssd_batch_revoke", "/apiKeyFlag")?.value).toBe("must-stay")
+
+    await hub.shutdown()
+  })
+
+  it("serializes concurrent flushDoc with syncPersist so persister calls never overlap or overwrite with an older rev", async () => {
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    let activePersists = 0
+    let maxConcurrentPersists = 0
+    const persistedRevs: bigint[] = []
+    let releaseSyncPersist!: () => void
+
+    hub.configurePersister(async (doc) => {
+      activePersists += 1
+      maxConcurrentPersists = Math.max(maxConcurrentPersists, activePersists)
+      persistedRevs.push(doc.rev)
+      if (doc.rev === 2n) {
+        await new Promise<void>((resolve) => {
+          releaseSyncPersist = resolve
+        })
+      }
+      activePersists -= 1
+    })
+
+    attachEmptyDoc(hub, "ss_1", "ssd_sync_race", { v: 0 }, 0n)
+    // Debounced write leaves doc dirty at rev 1
+    const r1 = await hub.mutate("ss_1", "ssd_sync_race", { op: "set", path: "/v", value: 1 })
+    expect(r1.ok).toBe(true)
+
+    // Start syncPersist for rev 2
+    const syncPromise = hub.mutate("ss_1", "ssd_sync_race", {
+      op: "set",
+      path: "/v",
+      value: 2,
+      syncPersist: true,
+    })
+
+    // Wait a microtask so syncPersist enters persister
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(persistedRevs).toEqual([2n])
+    expect(activePersists).toBe(1)
+
+    // Concurrently trigger flushDocByKey while syncPersist is in flight
+    const concurrentFlush = hub.flushDocByKey("ss_1", "ssd_sync_race")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Must NOT have started a concurrent persister call for older rev 1
+    expect(maxConcurrentPersists).toBe(1)
+    expect(persistedRevs).toEqual([2n])
+
+    releaseSyncPersist()
+    const [syncResult] = await Promise.all([syncPromise, concurrentFlush])
+    expect(syncResult.ok).toBe(true)
+    expect(maxConcurrentPersists).toBe(1)
+    // Older rev 1 must never overwrite rev 2 after syncPersist commits
+    expect(persistedRevs).toEqual([2n])
+    expect(hub.getDocHandle("ss_1", "ssd_sync_race")).toMatchObject({ rev: 2n, dirty: false })
+
+    await hub.shutdown()
+  })
+
+  it("re-arms debounced flush when syncPersist fails with prior dirty writes so earlier data is not stranded", async () => {
+    vi.useFakeTimers()
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    const persisted: PersistDocInput[] = []
+    let failOnce = true
+
+    hub.configurePersister(async (doc) => {
+      if (failOnce && doc.rev === 2n) {
+        failOnce = false
+        throw new Error("Transient DB failure")
+      }
+      persisted.push(doc)
+    })
+
+    attachEmptyDoc(hub, "ss_1", "ssd_stranded", { v: 0 }, 0n)
+    // Prior debounced write makes doc dirty at rev 1
+    const r1 = await hub.mutate("ss_1", "ssd_stranded", { op: "set", path: "/v", value: 1 })
+    expect(r1.ok).toBe(true)
+    expect(hub.getDocHandle("ss_1", "ssd_stranded")?.dirty).toBe(true)
+
+    // syncPersist fails for rev 2
+    const r2 = await hub.mutate("ss_1", "ssd_stranded", {
+      op: "set",
+      path: "/v",
+      value: 2,
+      syncPersist: true,
+    })
+    expect(r2.ok).toBe(false)
+    if (!r2.ok) expect(r2.code).toBe("PERSIST_FAILED")
+    expect(hub.readDocPath("ss_1", "ssd_stranded", "/v")).toMatchObject({ value: 1, rev: 1n })
+    expect(hub.getDocHandle("ss_1", "ssd_stranded")?.dirty).toBe(true)
+    expect(persisted).toHaveLength(0)
+
+    // Advancing past flushDebounceMs must flush the earlier dirty rev 1
+    await vi.advanceTimersByTimeAsync(600)
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]).toMatchObject({ rev: 1n, data: { v: 1 } })
+    expect(hub.getDocHandle("ss_1", "ssd_stranded")?.dirty).toBe(false)
+
+    await hub.shutdown()
+  })
+
+  it("aborts syncPersist cleanly without committing or broadcasting if the doc is deleted while awaiting", async () => {
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    let releaseFirstPersist!: () => void
+    let releasePriorFlush!: () => void
+    const persistedDocs: string[] = []
+
+    hub.configurePersister(async (doc) => {
+      persistedDocs.push(`${doc.docId}@${doc.rev.toString()}`)
+      if (doc.docId === "ssd_del_during_persist") {
+        await new Promise<void>((resolve) => {
+          releaseFirstPersist = resolve
+        })
+      } else if (doc.docId === "ssd_del_during_prior_flush" && doc.rev === 1n) {
+        await new Promise<void>((resolve) => {
+          releasePriorFlush = resolve
+        })
+      }
+    })
+
+    // Case A: Doc deleted while awaiting persister inside syncPersist
+    attachEmptyDoc(hub, "ss_1", "ssd_del_during_persist", { v: 0 }, 0n)
+    const sockA = createFakeSocket()
+    hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_del_during_persist",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "t1",
+      role: "read",
+      isObserver: false,
+      clientId: "c1",
+      clientName: null,
+      meta: {},
+      socket: sockA.socket,
+    })
+    sockA.sent.length = 0
+
+    const mutateA = hub.mutate("ss_1", "ssd_del_during_persist", {
+      op: "set",
+      path: "/v",
+      value: 1,
+      syncPersist: true,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    hub.disconnectByDoc("ss_1", "ssd_del_during_persist", STATE_SYNC_WS_CLOSE_CODES.REVOKED)
+    releaseFirstPersist()
+
+    const resA = await mutateA
+    expect(resA.ok).toBe(false)
+    if (!resA.ok) expect(resA.code).toBe("DOC_NOT_FOUND")
+    expect(hub.getDocHandle("ss_1", "ssd_del_during_persist")).toBeNull()
+    expect(sockA.sent.filter((f) => f.type === "mutation")).toHaveLength(0)
+
+    // Case B: Space deleted while syncPersist is awaiting a prior in-flight flushDoc
+    attachEmptyDoc(hub, "ss_2", "ssd_del_during_prior_flush", { v: 0 }, 0n)
+    await hub.mutate("ss_2", "ssd_del_during_prior_flush", { op: "set", path: "/v", value: 1 })
+    const priorFlush = hub.flushDocByKey("ss_2", "ssd_del_during_prior_flush")
+    await Promise.resolve()
+
+    const mutateB = hub.mutate("ss_2", "ssd_del_during_prior_flush", {
+      op: "set",
+      path: "/v",
+      value: 2,
+      syncPersist: true,
+    })
+    await Promise.resolve()
+
+    hub.disconnectBySpace("ss_2", STATE_SYNC_WS_CLOSE_CODES.REVOKED)
+    releasePriorFlush()
+
+    const [resB] = await Promise.all([mutateB, priorFlush])
+    expect(resB.ok).toBe(false)
+    if (!resB.ok) expect(resB.code).toBe("DOC_NOT_FOUND")
+    expect(hub.getDocHandle("ss_2", "ssd_del_during_prior_flush")).toBeNull()
+    // rev 2 must never have been sent to persister after doc deletion
+    expect(persistedDocs).not.toContain("ssd_del_during_prior_flush@2")
+
+    await hub.shutdown()
+  })
+
+  it("does not extend expiresAt for observer connections and pre-validates trie subscribe paths atomically", async () => {
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    const initialExpiresAt = new Date(1_700_000_100_000)
+    hub.loadOrAttachDoc({
+      spaceId: "ss_1",
+      docId: "ssd_obs_ttl",
+      data: {},
+      rev: 0n,
+      ttlSeconds: 3600,
+      expiresAt: initialExpiresAt,
+    })
+
+    const obsSock = createFakeSocket()
+    const obsReg = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_obs_ttl",
+      ownerId: "u1",
+      credentialType: "console_ticket",
+      credentialId: "dbg_1",
+      role: "create_write",
+      isObserver: true,
+      clientId: "obs-1",
+      clientName: null,
+      meta: {},
+      socket: obsSock.socket,
+      now: 1_700_000_500_000,
+    })
+    expect(obsReg.ok).toBe(true)
+    expect(hub.getDocHandle("ss_1", "ssd_obs_ttl")?.expiresAt?.getTime()).toBe(initialExpiresAt.getTime())
+
+    const prodSock = createFakeSocket()
+    const prodReg = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_obs_ttl",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "t1",
+      role: "read",
+      isObserver: false,
+      clientId: "prod-1",
+      clientName: null,
+      meta: {},
+      socket: prodSock.socket,
+      now: 1_700_000_500_000,
+    })
+    expect(prodReg.ok).toBe(true)
+    expect(hub.getDocHandle("ss_1", "ssd_obs_ttl")?.expiresAt?.getTime()).toBe(1_700_000_500_000 + 3600 * 1000)
+
+    // Trie pre-validation: invalid second path must not mutate trie with the first valid path
+    const trie = new StateSyncSubscriptionTrie()
+    expect(() => trie.subscribe("conn1", ["/valid/path", "not-a-valid-path"])).toThrow()
+    expect(trie.getSubscribedPaths("conn1")).toEqual([])
+    expect(trie.resolveAffected("/valid/path").mutationRecipients.size).toBe(0)
+
+    await hub.shutdown()
+  })
 })
