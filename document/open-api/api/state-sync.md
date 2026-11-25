@@ -6,7 +6,7 @@
   - **云端数据表**：负责多字段结构化数据持久化存储、复杂条件检索（Filter/Sort）、分页查询与基于用户/协作者的细粒度权限控制，适合业务表单与报表。
   - **频道**：负责低延迟实时事件转发（pub/sub）、定向投递、轻量在线感知（Presence）、短窗口重传与少量 Retain 快照，不保存状态树，适合瞬时无状态通信。
   - **状态同步**：负责分布式可变 JSON 文档树的实时维护与双向同步。支持空间与房间模型（Space -> dynamic Doc）、路径级细粒度读写与订阅、CAS 乐观并发控制（rev）、原子事务（`room.transaction`）、客户端离线清理遗愿动作（`onDisconnect`）与在线感知（Presence）。
-- **整页可复制给 AI**：本页包含完整的 WebSocket 线协议、HTTP REST 契约、Close Codes、SDK 快速上手指南与完整可运行场景模板，可直接整页复制给 AI 编写接入代码。
+- **整页可复制给 AI**：本页包含完整的 WebSocket 线协议、HTTP REST 契约、Close Codes、错误码速查、SDK 快速上手指南与完整可运行场景模板，可直接整页复制给 AI 编写接入代码。
 
 [打开 OpenAPI 契约]({{APP_PUBLIC_URL}}/api/open/openapi.json) 查看当前部署版本的完整 REST Schema。所有 REST 路径均挂载在 `{{APP_PUBLIC_URL}}/api/open/v1` 下。
 
@@ -42,17 +42,17 @@
 
 ## 开放 SDK 快速接入（Zero-NPM & 多运行时）
 
-Synapse 官方提供了开箱即用的轻量 SDK，由服务端直接静态托管分发，支持浏览器与 Node.js 22+ 零外部依赖运行。
+Synapse 官方提供了轻量开放 SDK，由服务端直接静态托管分发，支持浏览器与 Node.js 22+ 零外部依赖运行。
 
 ### 1. 浏览器 `<script>` 全局引入
 
 ```html
-<script src="https://synapse.d2.pub/sdk/state-sync/v1/state-sync.global.min.js"></script>
+<script src="{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.global.min.js"></script>
 <script>
-  const { StateSyncClient } = window.SynapseStateSync;
+  const { createClient } = window.SynapseStateSync;
 
-  const client = new StateSyncClient({
-    baseUrl: "https://synapse.d2.pub",
+  const client = createClient({
+    baseUrl: "{{APP_PUBLIC_URL}}",
     spaceId: "SPACE_ID",
     token: "sys_TOKEN",
   });
@@ -63,10 +63,10 @@ Synapse 官方提供了开箱即用的轻量 SDK，由服务端直接静态托�
 
 ```html
 <script type="module">
-  import { StateSyncClient } from "https://synapse.d2.pub/sdk/state-sync/v1/state-sync.esm.min.js";
+  import { createClient } from "{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.esm.min.js";
 
-  const client = new StateSyncClient({
-    baseUrl: "https://synapse.d2.pub",
+  const client = createClient({
+    baseUrl: "{{APP_PUBLIC_URL}}",
     spaceId: "SPACE_ID",
     token: "sys_TOKEN",
   });
@@ -78,16 +78,16 @@ Synapse 官方提供了开箱即用的轻量 SDK，由服务端直接静态托�
 无需 `npm install` 或配置 `package.json`，直接通过 `curl` 下载单文件产物：
 
 ```bash
-curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs
+curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs
 ```
 
 在 Node.js（22 及以上版本内置全局 `WebSocket` 与 `fetch`）中直接导入：
 
 ```javascript
-import { StateSyncClient } from "./synapse-state-sync.mjs";
+import { createClient } from "./synapse-state-sync.mjs";
 
-const client = new StateSyncClient({
-  baseUrl: process.env.SYNAPSE_BASE_URL || "https://synapse.d2.pub",
+const client = createClient({
+  baseUrl: process.env.SYNAPSE_BASE_URL || "{{APP_PUBLIC_URL}}",
   spaceId: process.env.SYNAPSE_SPACE_ID,
   token: process.env.SYNAPSE_SPACE_TOKEN,
 });
@@ -95,10 +95,10 @@ const client = new StateSyncClient({
 
 CommonJS 方式：
 ```bash
-curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/state-sync.cjs -o ./synapse-state-sync.cjs
+curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.cjs -o ./synapse-state-sync.cjs
 ```
 ```javascript
-const { StateSyncClient } = require("./synapse-state-sync.cjs");
+const { createClient } = require("./synapse-state-sync.cjs");
 ```
 
 ---
@@ -108,23 +108,32 @@ const { StateSyncClient } = require("./synapse-state-sync.cjs");
 ### 1. 房间创建与加入
 
 ```javascript
-// 创建新房间（需要 create_write 凭证或 state_sync.write 权限）
+// 创建新房间并自动连入（需要 create_write 凭证或 state_sync.write 权限）
 const { docId, room } = await client.createRoom({
   initialData: { score: 0, status: "idle" },
   ttlSeconds: 3600, // 1 小时后自动过期
+  clientId: "player-1",
+  clientName: "玩家 1",
   paths: ["/"],     // 订阅根节点
 });
 
-// 或者直接加入已有房间
-const room = await client.join({
-  docId: "DOC_ID",
-  paths: ["/score", "/status"],
-  clientId: "player-1",
-  clientName: "玩家 1",
+// 加入已有房间（首参数必须为 docId 字符串）
+const joinedRoom = await client.join(docId, {
+  clientId: "player-2",
+  clientName: "玩家 2",
+  paths: ["/"],
 });
 ```
 
-### 2. 状态读取与响应式订阅
+### 2. HTTP 快照直读（免建立长连接）
+
+```javascript
+// 无需建立 WebSocket 连接，直接发起轻量 HTTP 请求读取指定路径快照
+const snapshot = await client.getSnapshot(docId, "/score");
+console.log("快照版本:", snapshot.rev, "值:", snapshot.value, "节点存在:", snapshot.exists);
+```
+
+### 3. 状态读取与响应式订阅
 
 ```javascript
 // 本地无网络延迟直读当前镜像
@@ -139,7 +148,7 @@ const unsubscribe = room.on("/score", (newScore, meta) => {
 unsubscribe();
 ```
 
-### 3. 基础状态变更（Set / Patch / Delete）
+### 4. 基础状态变更（Set / Patch / Delete）
 
 ```javascript
 // 覆盖路径的值
@@ -152,15 +161,15 @@ await room.patch("/player/info", { level: 2, ready: true });
 await room.delete("/player/temp");
 ```
 
-### 4. 原子事务（`room.transaction`）
+### 5. 原子事务（`room.transaction`）
 
-在多人并发读写的场景（如抢购、下棋、计数、状态转移）下，直接 `set` 容易产生写覆盖。`room.transaction` 提供了基于乐观锁（CAS）的原子更新机制：
+在多人并发读写的场景（如抢购、下棋、计数、状态转移）下，直接 `set` 容易产生写覆盖。`room.transaction` 提供了基于乐观并发版本（CAS）的原子更新机制：
 
 ```javascript
 const result = await room.transaction("/score", (current, { abort, remove }) => {
   const currentVal = typeof current === "number" ? current : 0;
   if (currentVal >= 100) {
-    // 中止事务：不产生网络写入，返回 committed: false
+    // 中止事务：不向服务端发送写入，返回 committed: false
     return abort();
   }
   // 返回新值以原子提交
@@ -174,32 +183,54 @@ if (result.committed) {
 }
 ```
 
-- **返回值规则**：
-  - 返回普通值：将该值提交给服务端；
-  - 返回 `undefined`：保持原值不变提交；
-  - 返回 `abort()`：主动取消本次事务，不向服务端发送请求，返回 `{ committed: false, rev, value }`；
-  - 返回 `remove()`：删除该目标节点。
-- **并发冲突自动重试**：当有其他客户端先一步修改了数据时，服务端将返回 `REV_CONFLICT`，SDK 将自动根据最新的数据镜像重新运行 updater 函数并重试提交（默认最多重试 5 次）。重试耗尽将抛出 `StateSyncError`（`code: "REV_CONFLICT"`）。
-- **约束要求**：事务操作的路径**必须属于当前客户端的订阅集合**（即建连时或 `subscribe` 中包含该路径或其父级路径），否则会抛出 `StateSyncError`（`code: "PATH_NOT_SUBSCRIBED"`）。
+- **返回值语义**：
+  - 返回普通新值（对象、数组、字符串、数字、布尔）：原子提交更新该值；
+  - 返回 `null`：向服务端提交写入 JSON `null`；
+  - 返回 `undefined` 或 `abort()`：**语义完全相同**，主动取消本次事务，不向服务端发送网络请求，方法解析为 `{ committed: false, rev, value }`；
+  - 返回 `remove()`：向服务端发送 delete 操作删除该目标节点。
+- **并发冲突自动重试**：当有其他客户端先一步修改了数据时，服务端返回 `REV_CONFLICT`，SDK 将自动根据最新的数据镜像重新运行 updater 函数并重试提交（默认最多重试 5 次）。重试耗尽将抛出 `StateSyncError`（`code: "REV_CONFLICT"`）。
+- **约束要求**：事务操作的路径**必须属于当前客户端的订阅集合**（即建连时或订阅列表中包含该路径或其父级路径），否则会抛出 `StateSyncError`（`code: "PATH_NOT_SUBSCRIBED"`）。
 
-### 5. 离线遗愿清理（`onDisconnect`）
+### 6. 离线遗愿清理（`onDisconnect`）与连接关闭
 
 在协同与游戏中，如果客户端遭遇异常掉线（如关闭标签页、网络波动、进程崩溃），容易在文档中残留“在线”孤儿状态。通过 `onDisconnect`，客户端可在服务端注册“掉线动作”：
 
 ```javascript
-// 注册当连接非正常中断时由服务端执行的操作
-await room.onDisconnect().set("/players/" + myId + "/online", false);
+// 注册当连接中断时由服务端原子执行的动作（单连接最多 8 项）
+await room.onDisconnect([
+  { op: "set", path: `/players/${myId}/online`, value: false },
+  { op: "delete", path: `/locks/${myId}` },
+]);
 
-// 支持链式设置多个动作（单连接最多 8 项）
-await room.onDisconnect()
-  .set("/players/" + myId + "/status", "offline")
-  .delete("/locks/" + myId);
+// 主动清除已注册的遗愿动作
+await room.clearOnDisconnect();
 
-// 手动取消已注册的遗愿动作
-await room.onDisconnect().cancel();
+// 关闭连接：
+// 注意：room.close() 以 1000 ("正常关闭") 断开连接。在当前服务协议下，1000 关闭仍会触发执行已注册的 onDisconnect 动作。
+// 若希望主动离开且不触发遗愿动作，须在 room.close() 前显式调用 await room.clearOnDisconnect()。
+await room.clearOnDisconnect();
+room.close();
 ```
 
-当客户端连接断开时，服务端会自动原子执行已生效的动作并向房间内其他在线连接广播 `mutation`。如果客户端是主动调用 `room.leave()` 离开，已注册动作不会触发。
+### 7. 在线感知与连接状态（`onPresence` / `updatePresence` / `onStatus`）
+
+```javascript
+// 监听房间在线成员列表（首回调立即下发当前所有成员快照）
+const unsubPresence = room.onPresence((members) => {
+  console.log("在线成员更新:", members.map((m) => m.clientName || m.clientId));
+});
+
+// 更新当前连接在房间中的昵称与自定义元数据（广播给房间内所有在线成员）
+room.updatePresence({
+  clientName: "新昵称",
+  meta: { cursor: { x: 100, y: 200 } },
+});
+
+// 监听底层 WebSocket 连接状态变化 ("connecting" | "connected" | "reconnecting" | "closed")
+const unsubStatus = room.onStatus((status) => {
+  console.log("连接状态变更:", status);
+});
+```
 
 ---
 
@@ -264,6 +295,12 @@ wss://<host>/api/open/v1/state-sync/spaces/<spaceId>/docs/<docId>/ws
   ]
 }
 ```
+```json
+{
+  "type": "onDisconnect.clear",
+  "id": "req-5"
+}
+```
 
 #### 5. `presence.update` / `ping`
 ```json
@@ -283,13 +320,34 @@ wss://<host>/api/open/v1/state-sync/spaces/<spaceId>/docs/<docId>/ws
 ### WebSocket Close Codes
 | Code | 含义 | 客户端建议动作 |
 |---|---|---|
-| `1000` | 正常关闭（主动离开） | 不重连 |
-| `1001` | 服务端重启或更新维护 | 采用指数退避重连，携带持有的最新 `sinceRev` |
-| `4001` | 认证超时（5 秒未发首帧）或凭证无效 | 停止盲目重连，检查 Token 与空间/房间 ID |
-| `4003` | 空间凭证被撤销、房间被删除、空间被删除 | **停止重连**，提示更换凭证 |
-| `4004` | 凭证角色已发生变更 | 重新连接协商新权限 |
-| `4008` | 心跳超时或慢连接队列积压 | 退避重连并重置本地状态镜像 |
-| `4029` | 连接数超限或单连接高频超限 | 退避重连，降低发帧速率 |
+| `1000` | 正常关闭（主动断开连接） | 服务端仍会执行已注册的 `onDisconnect` 动作；若不想触发须在断开前 `clearOnDisconnect`。通常不重连。 |
+| `1001` | 服务端重启或更新维护 | 采用指数退避重连，携带持有的最新 `sinceRev`。服务端不执行 onDisconnect。 |
+| `4001` | 认证超时（5 秒未发首帧）或凭证无效 | 停止盲目重连，检查 Token 与空间/房间 ID。 |
+| `4003` | 空间凭证被撤销、房间被删除、空间被删除 | **停止重连**，提示更换凭证。服务端废弃 onDisconnect。 |
+| `4004` | 凭证角色已发生变更（如写入权限降级） | 重新连接协商新权限。服务端废弃 onDisconnect。 |
+| `4008` | 心跳超时或慢连接队列积压 | 退避重连并重置本地状态镜像。服务端执行已生效的 onDisconnect。 |
+| `4029` | 连接数超限或单连接高频超限 | 退避重连，降低发帧速率。 |
+
+---
+
+## HTTP 与 WebSocket 错误码速查
+
+下表列出状态同步 REST API 与 WebSocket 交互中所有核心错误码及应对策略：
+
+| 错误码 (code) | 交互协议 | HTTP 响应 / WS 帧 | 说明与客户端处理指引 |
+|---|---|---|---|
+| `REV_CONFLICT` | HTTP / WS | `409` / `error` | CAS 乐观锁版本冲突。响应体或帧携带 `currentRev`（服务端当前最新版本）。SDK `room.transaction()` 会自动根据最新版本重试；直接调用者需按 `currentRev` 刷新后重新计算。 |
+| `PATH_NOT_SUBSCRIBED` | SDK 本地 | 本地异常 | 尝试对未被当前连接订阅的路径执行 `transaction`。建连时须在 `paths` 中包含该路径或其祖先路径（如 `/`）。 |
+| `PATH_CONFLICT` | HTTP / WS | `400` / `error` | 写入路径冲突，例如试图在非对象值（字符串或数字）下方追加子路径，或路径深度超过 16 层。 |
+| `DOC_NOT_FOUND` | HTTP / WS | `404` / `4003` Close | 房间不存在或已被销毁。检查空间 ID 与房间 ID 是否匹配，确认房间是否由房主预先创建。 |
+| `DOC_ALREADY_EXISTS` | HTTP | `409` | 使用自定义 `docId` 创建房间时，该 ID 在当前空间下已被占用。 |
+| `DOC_LIMIT_EXCEEDED` | HTTP | `422` | 空间内未过期房间数已达上限（默认 100，硬上限 500）。请清理过期房间或缩短房间 TTL。 |
+| `TTL_POLICY_VIOLATION` | HTTP | `403` | 房间生存时间违反策略（例如非管理密钥尝试将 TTL 设为 `null` 永久保留，或超出空间默认范围）。 |
+| `DOC_TOO_LARGE` | HTTP / WS | `413` / `error` | 更新后文档序列化体积超过单文档 256 KiB 上限。请拆分状态树或清理历史数据。 |
+| `PAYLOAD_TOO_LARGE` | HTTP / WS | `413` / `error` | 单次写入载荷（value）超过 64 KiB 上限。 |
+| `REQUEST_TOO_LARGE` | HTTP | `413` | HTTP 单次请求体或建房 `initialData` 超过 256 KiB 上限。 |
+| `FORBIDDEN_ROLE` | HTTP / WS | `403` / `error` | 凭证角色权限不足（例如使用 `read` 只读凭证执行写入或设置 onDisconnect，或使用 `write` 凭证尝试创建新房间）。 |
+| `RATE_LIMITED` | HTTP / WS | `429` / `error` | 写入或建房频率超限。HTTP 响应头携带 `Retry-After` 秒数；WS 客户端请指数退避降低写入频率。 |
 
 ---
 
@@ -304,10 +362,10 @@ wss://<host>/api/open/v1/state-sync/spaces/<spaceId>/docs/<docId>/ws
 | `mutateStateSyncDoc` | `PATCH` | `/state-sync/spaces/{spaceId}/docs/{docId}` | `write`/`create_write` 或 `state_sync.write` | CAS 原子更新（支持 expectedRev，冲突返 409） |
 | `getStateSyncPresence` | `GET` | `/state-sync/spaces/{spaceId}/docs/{docId}/presence` | 任意有效空间凭证或运行态密钥 | 查询当前房间在线成员列表 |
 | `deleteStateSyncDoc` | `DELETE` | `/state-sync/spaces/{spaceId}/docs/{docId}` | 个人 API 密钥（`state_sync.manage`） | 强制删除房间并踢断连接 |
-| `listStateSyncDocs` | `GET` | `/state-sync/spaces/{spaceId}/docs` | 个人 API 密钥（`state_sync.manage`） | 列出空间下未过期房间 |
+| `listStateSyncDocs` | `GET` | `/state-sync/spaces/{spaceId}/docs` | 个人 API 密钥（`state_sync.manage`） | 列出空间下未过期房间（limit 最大 200） |
 | `listStateSyncSpaces` | `GET` | `/state-sync/spaces` | 个人 API 密钥（`state_sync.manage`） | 列出可见的同步空间 |
 | `createStateSyncSpace` | `POST` | `/state-sync/spaces` | 个人 API 密钥（`state_sync.manage` + 全部自有空间） | 创建新的同步空间 |
-| `getStateSyncSpace` / `updateStateSyncSpace` / `deleteStateSyncSpace` | `GET`/`PATCH`/`DELETE` | `/state-sync/spaces/{spaceId}` | 个人 API 密钥（写删需 `state_sync.manage`） | 读取、修改、删除同步空间 |
+| `getStateSyncSpace` / `updateStateSyncSpace` / `deleteStateSyncSpace` | `GET`/`PATCH`/`DELETE` | `/state-sync/spaces/{spaceId}` | 个人 API 密钥（均需 `state_sync.manage`） | 读取、修改、删除同步空间 |
 | `listStateSyncTokens` / `createStateSyncToken` / `revokeStateSyncToken` | `GET`/`POST`/`DELETE` | `/state-sync/spaces/{spaceId}/tokens[/{tokenId}]` | 个人 API 密钥（`state_sync.manage`） | 管理空间专属凭证 |
 
 ### `curl` HTTP 快速读写示例
@@ -336,7 +394,10 @@ curl --fail-with-body -X PATCH "{{APP_PUBLIC_URL}}/api/open/v1/state-sync/spaces
 
 ### 模板一：纯静态双人井字棋游戏（HTML + SDK 全局引入）
 
-保存为纯静态 HTML 页面即可在浏览器中直接双人联机对战。利用 `room.transaction('/board', ...)` 防止走棋竞态冲突，并通过 `room.onDisconnect()` 标记玩家离线：
+保存为纯静态 HTML 页面即可在浏览器中直接双人联机对战。
+- **房主（黑方 X）**：直接打开页面，调用 `client.createRoom()` 创建新房间，页面自动在 URL 中追加 `?room=<docId>` 并生成对战邀请链接。
+- **对战玩家（白方 O）**：打开带有 `?room=<docId>` 的链接，调用 `client.join(docId, ...)` 直接加入已有房间。
+- **走棋与防冲突**：利用 `room.transaction('/', ...)` 防止并发重子；通过 `room.onDisconnect([...])` 注册离线状态清理。
 
 ```html
 <!DOCTYPE html>
@@ -350,47 +411,71 @@ curl --fail-with-body -X PATCH "{{APP_PUBLIC_URL}}/api/open/v1/state-sync/spaces
     .cell { width: 80px; height: 80px; font-size: 32px; font-weight: bold; background: #f3f4f6; border: 2px solid #d1d5db; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .cell:hover { background: #e5e7eb; }
     .info { margin-bottom: 12px; font-size: 16px; }
+    .share-link { margin-top: 10px; font-size: 14px; background: #f9fafb; padding: 8px 12px; border-radius: 6px; word-break: break-all; max-width: 480px; }
   </style>
-  <script src="https://synapse.d2.pub/sdk/state-sync/v1/state-sync.global.min.js"></script>
+  <script src="{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.global.min.js"></script>
 </head>
 <body>
   <h2>双人井字棋 (State Sync)</h2>
   <div class="info" id="status">正在连接...</div>
   <div class="board" id="board"></div>
   <button id="reset-btn" onclick="resetGame()" style="display:none; padding: 8px 16px;">重新开始</button>
+  <div class="share-link" id="share-link" style="display:none;"></div>
 
   <script>
-    const { StateSyncClient } = window.SynapseStateSync;
+    const { createClient } = window.SynapseStateSync;
 
-    const BASE_URL = "https://synapse.d2.pub";
+    const BASE_URL = "{{APP_PUBLIC_URL}}";
     const SPACE_ID = "YOUR_SPACE_ID";
-    const TOKEN = "sys_YOUR_WRITE_OR_CREATE_TOKEN";
-    const DOC_ID = new URLSearchParams(location.search).get("room") || "tictactoe-demo-room";
+    // 房主需具备 create_write 权限以创建房间；若通过后端预先建房，白方仅需 write 权限
+    const TOKEN = "sys_YOUR_CREATE_WRITE_TOKEN";
 
-    const myPlayer = new URLSearchParams(location.search).get("player") === "2" ? "O" : "X";
+    const urlParams = new URLSearchParams(location.search);
+    const existingDocId = urlParams.get("room");
+    const isPlayerA = !existingDocId;
+    const myPlayer = isPlayerA ? "X" : "O";
+
     let room;
+    let docId = existingDocId;
 
     async function init() {
-      const client = new StateSyncClient({ baseUrl: BASE_URL, spaceId: SPACE_ID, token: TOKEN });
-      
-      room = await client.join({
-        docId: DOC_ID,
-        clientId: "player-" + myPlayer,
-        clientName: "玩家 " + myPlayer,
-        paths: ["/"],
-      });
+      const client = createClient({ baseUrl: BASE_URL, spaceId: SPACE_ID, token: TOKEN });
 
-      // 初始化棋盘数据（如尚未初始化）
-      if (!room.get("/board")) {
-        await room.set("/", {
-          board: Array(9).fill(null),
-          turn: "X",
-          winner: null,
+      if (isPlayerA) {
+        // 黑方（房主）：创建新房间并附带初始棋盘数据
+        const created = await client.createRoom({
+          initialData: {
+            board: Array(9).fill(null),
+            turn: "X",
+            winner: null,
+          },
+          ttlSeconds: 3600,
+          clientId: "player-X",
+          clientName: "黑方 (X)",
+          paths: ["/"],
+        });
+        docId = created.docId;
+        room = created.room;
+
+        // 在 URL 中追加 ?room=<docId>，方便直接复制链接分享给白方
+        const shareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(docId)}`;
+        history.replaceState(null, "", shareUrl);
+        const shareEl = document.getElementById("share-link");
+        shareEl.style.display = "block";
+        shareEl.innerHTML = `对战邀请链接已生成，分享给白方对战：<br><a href="${shareUrl}">${shareUrl}</a>`;
+      } else {
+        // 白方（挑战者）：首参数传入 docId 直接加入已有房间
+        room = await client.join(docId, {
+          clientId: "player-O",
+          clientName: "白方 (O)",
+          paths: ["/"],
         });
       }
 
-      // 注册离线遗愿清理
-      await room.onDisconnect().set("/players/" + myPlayer + "/online", false);
+      // 注册离线遗愿清理动作
+      await room.onDisconnect([
+        { op: "set", path: "/players/" + myPlayer + "/online", value: false },
+      ]);
 
       // 响应式监听棋盘变更
       room.on("/board", render);
@@ -409,7 +494,7 @@ curl --fail-with-body -X PATCH "{{APP_PUBLIC_URL}}/api/open/v1/state-sync/spaces
         statusEl.textContent = winner === "draw" ? "平局！" : "获胜者: " + winner + "！";
         document.getElementById("reset-btn").style.display = "block";
       } else {
-        statusEl.textContent = "当前执棋: " + turn + " | 你是: " + myPlayer + (turn === myPlayer ? " (轮到你)" : "");
+        statusEl.textContent = "当前执棋: " + turn + " | 你是: " + (myPlayer === "X" ? "黑方 (X)" : "白方 (O)") + (turn === myPlayer ? " (轮到你)" : "");
         document.getElementById("reset-btn").style.display = "none";
       }
 
@@ -464,7 +549,10 @@ curl --fail-with-body -X PATCH "{{APP_PUBLIC_URL}}/api/open/v1/state-sync/spaces
       });
     }
 
-    init().catch(console.error);
+    init().catch((err) => {
+      document.getElementById("status").textContent = "初始化失败: " + err.message;
+      console.error(err);
+    });
   </script>
 </body>
 </html>
@@ -477,32 +565,52 @@ curl --fail-with-body -X PATCH "{{APP_PUBLIC_URL}}/api/open/v1/state-sync/spaces
 ```javascript
 // worker.mjs - 运行: node worker.mjs
 import os from "node:os";
-import { StateSyncClient } from "./synapse-state-sync.mjs";
+import { createClient } from "./synapse-state-sync.mjs";
 
-const client = new StateSyncClient({
-  baseUrl: process.env.SYNAPSE_BASE_URL || "https://synapse.d2.pub",
+const client = createClient({
+  baseUrl: process.env.SYNAPSE_BASE_URL || "{{APP_PUBLIC_URL}}",
   spaceId: process.env.SYNAPSE_SPACE_ID,
   token: process.env.SYNAPSE_SPACE_TOKEN, // write 或 create_write 凭证
 });
 
 async function run() {
-  const docId = "cluster-live-status";
+  const docId = process.env.SYNAPSE_DOC_ID || "cluster-live-status";
   const workerId = "worker-" + os.hostname();
 
-  const room = await client.join({
-    docId,
-    clientId: workerId,
-    clientName: "节点 " + os.hostname(),
-    paths: ["/nodes/" + workerId],
-  });
+  // 若房间尚未创建，具备 create_write 权限的节点会自动建房；若已存在则直接加入
+  let room;
+  try {
+    const created = await client.createRoom({
+      docId,
+      initialData: { nodes: {} },
+      ttlSeconds: 86400,
+      clientId: workerId,
+      clientName: "节点 " + os.hostname(),
+      paths: ["/nodes"],
+    });
+    room = created.room;
+  } catch (err) {
+    // 房间已由控制台、MCP 或其他 Worker 预先创建，直接加入
+    room = await client.join(docId, {
+      clientId: workerId,
+      clientName: "节点 " + os.hostname(),
+      paths: ["/nodes"],
+    });
+  }
 
   // 掉线时服务端自动设置 offline 标志并记录离线时间
-  await room.onDisconnect().patch("/nodes/" + workerId, {
-    online: false,
-    disconnectedAt: new Date().toISOString(),
-  });
+  await room.onDisconnect([
+    {
+      op: "patch",
+      path: "/nodes/" + workerId,
+      value: {
+        online: false,
+        disconnectedAt: new Date().toISOString(),
+      },
+    },
+  ]);
 
-  console.log("监控节点已就绪，正在定期同步状态...");
+  console.log(`监控节点 ${workerId} 已就绪，正在定期同步状态至房间 ${docId}...`);
 
   // 定时每 5 秒上报一次节点健康与负载状态
   setInterval(async () => {
@@ -538,23 +646,27 @@ run().catch(console.error);
     .online { color: #22c55e; font-weight: bold; }
     .offline { color: #ef4444; font-weight: bold; }
   </style>
-  <script src="https://synapse.d2.pub/sdk/state-sync/v1/state-sync.global.min.js"></script>
+  <script src="{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.global.min.js"></script>
 </head>
 <body>
   <h1>集群节点实时监控</h1>
   <div id="nodes">加载中...</div>
 
   <script>
-    const { StateSyncClient } = window.SynapseStateSync;
-    const client = new StateSyncClient({
-      baseUrl: "https://synapse.d2.pub",
+    const { createClient } = window.SynapseStateSync;
+    const client = createClient({
+      baseUrl: "{{APP_PUBLIC_URL}}",
       spaceId: "SPACE_ID",
       token: "sys_READ_TOKEN", // 看板只需要 read 只读凭证
     });
 
+    const DOC_ID = "cluster-live-status";
+
     async function init() {
-      const room = await client.join({
-        docId: "cluster-live-status",
+      // 首参数传入 docId 加入房间，只订阅 /nodes 状态树
+      const room = await client.join(DOC_ID, {
+        clientId: "dashboard-viewer",
+        clientName: "Web 看板端",
         paths: ["/nodes"],
       });
 
@@ -589,5 +701,9 @@ run().catch(console.error);
 - **结构与深度**：路径最多 16 层深度；JSON 嵌套最多 32 层；单房间最多订阅 32 条路径；单连接最多 8 项 onDisconnect 动作。
 - **空间配额**：单空间默认最多保留 100 个有效房间（硬上限 500 个）；单空间最多保留 20 个专属凭证。
 - **生存时间（TTL）**：房间 TTL 最短 60 秒，最长 30 天，默认 86400 秒（24 小时）；无管理权限的凭证不能突破空间默认 TTL 规则。
-- **频率限制**：单 WS 连接写入持续 10 次/秒（突发 30 次/秒）；HTTP 写入按空间持续 30 次/秒（突发 60 次/秒），超频返回 `429 RATE_LIMITED` 与 `Retry-After` 响应头。
+- **频率限制（严格对齐服务配置）**：
+  - 单 WebSocket 连接写入：持续 20 次/秒（突发 60 次/秒）；
+  - 单文档总写入：持续 60 次/秒（突发 120 次/秒）；
+  - 单空间房间创建：持续 10 次/分（突发 30 次/分）；
+  - 超频将触发 HTTP `429 RATE_LIMITED`（响应头含 `Retry-After` 秒数）或 WebSocket `error` 帧（`code: "RATE_LIMITED"`）。
 - **心跳保活**：服务端每 25 秒下发 Ping，客户端连续错过 2 次将以 `4008` 断开；增量重放缓冲提供最近 100 条变更或 5 分钟窗口。

@@ -282,7 +282,7 @@ export function stateSyncOpenApiPaths() {
         summary: "读取同步空间详情",
         operationId: "getStateSyncSpace",
         security: [{ ApiKeyBearer: [] }],
-        "x-required-scope": STATE_SYNC_READ_SCOPE,
+        "x-required-scope": STATE_SYNC_MANAGE_SCOPE,
         responses: {
           "200": jsonRes("同步空间详情。", spaceSummarySchema),
           "401": errorRes("凭证无效（INVALID_CREDENTIAL）。"),
@@ -401,7 +401,7 @@ export function stateSyncOpenApiPaths() {
         security: [{ ApiKeyBearer: [] }],
         "x-required-scope": STATE_SYNC_MANAGE_SCOPE,
         parameters: [
-          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 }, description: "每页数量。" },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 }, description: "每页数量。" },
           { name: "cursor", in: "query", schema: { type: "string" }, description: "分页游标（上一页最后一条 docId）。" },
         ],
         responses: {

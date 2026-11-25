@@ -28,7 +28,7 @@ Synapse 提供免 npm 安装、零第三方运行时依赖的轻量官方 SDK。
       "major": "v1",
       "globalName": "SynapseStateSync",
       "docsUrl": "/document/open-api/api/state-sync",
-      "nodeDownloadCommand": "curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs",
+      "nodeDownloadCommand": "curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs",
       "files": {
         "browserGlobal": {
           "url": "/sdk/state-sync/1.0.0/state-sync.global.min.js",
@@ -86,7 +86,7 @@ Synapse SDK 采用双层 URL 路由设计：
 
 ```html
 <script
-  src="https://synapse.d2.pub/sdk/state-sync/1.0.0/state-sync.global.min.js"
+  src="{{APP_PUBLIC_URL}}/sdk/state-sync/1.0.0/state-sync.global.min.js"
   integrity="sha256-MK+5ztAuQlLD3lhZwHshAQG7KBuvSFDBGXc4KKySdUg="
   crossorigin="anonymous">
 </script>
@@ -101,11 +101,11 @@ Synapse SDK 采用双层 URL 路由设计：
 适合传统 HTML、大屏展示、低代码平台或无构建工具的网页：
 
 ```html
-<script src="https://synapse.d2.pub/sdk/state-sync/v1/state-sync.global.min.js"></script>
+<script src="{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.global.min.js"></script>
 <script>
-  const { StateSyncClient } = window.SynapseStateSync;
-  const client = new StateSyncClient({
-    baseUrl: "https://synapse.d2.pub",
+  const { createClient } = window.SynapseStateSync;
+  const client = createClient({
+    baseUrl: "{{APP_PUBLIC_URL}}",
     spaceId: "SPACE_ID",
     token: "sys_TOKEN",
   });
@@ -118,10 +118,10 @@ Synapse SDK 采用双层 URL 路由设计：
 
 ```html
 <script type="module">
-  import { StateSyncClient } from "https://synapse.d2.pub/sdk/state-sync/v1/state-sync.esm.min.js";
+  import { createClient } from "{{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.esm.min.js";
 
-  const client = new StateSyncClient({
-    baseUrl: "https://synapse.d2.pub",
+  const client = createClient({
+    baseUrl: "{{APP_PUBLIC_URL}}",
     spaceId: "SPACE_ID",
     token: "sys_TOKEN",
   });
@@ -133,16 +133,16 @@ Synapse SDK 采用双层 URL 路由设计：
 无需执行 `npm install`、`pnpm add` 或在服务端安装构建依赖，使用系统自带的 `curl` 将单文件 ESM 产物保存到本地：
 
 ```bash
-curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs
+curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.esm.min.js -o ./synapse-state-sync.mjs
 ```
 
 在 Node.js 脚本中直接引用（Node.js 22+ 内置全局 `WebSocket` 与 `fetch`，完全零第三方依赖）：
 
 ```javascript
-import { StateSyncClient } from "./synapse-state-sync.mjs";
+import { createClient } from "./synapse-state-sync.mjs";
 
-const client = new StateSyncClient({
-  baseUrl: process.env.SYNAPSE_BASE_URL || "https://synapse.d2.pub",
+const client = createClient({
+  baseUrl: process.env.SYNAPSE_BASE_URL || "{{APP_PUBLIC_URL}}",
   spaceId: process.env.SYNAPSE_SPACE_ID,
   token: process.env.SYNAPSE_SPACE_TOKEN,
 });
@@ -151,11 +151,11 @@ const client = new StateSyncClient({
 CommonJS 格式支持：
 
 ```bash
-curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/state-sync.cjs -o ./synapse-state-sync.cjs
+curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/state-sync.cjs -o ./synapse-state-sync.cjs
 ```
 
 ```javascript
-const { StateSyncClient } = require("./synapse-state-sync.cjs");
+const { createClient } = require("./synapse-state-sync.cjs");
 ```
 
 ### 4. TypeScript 类型支持
@@ -163,7 +163,7 @@ const { StateSyncClient } = require("./synapse-state-sync.cjs");
 下载类型定义文件供本地项目或 IDE 代码提示使用：
 
 ```bash
-curl -fsSL https://synapse.d2.pub/sdk/state-sync/v1/index.d.ts -o ./synapse-state-sync.d.ts
+curl -fsSL {{APP_PUBLIC_URL}}/sdk/state-sync/v1/index.d.ts -o ./synapse-state-sync.d.ts
 ```
 
 ---

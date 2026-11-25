@@ -3,6 +3,7 @@ import type { PageData } from 'vitepress'
 import { useData } from 'vitepress'
 import { VPButton } from 'vitepress/theme'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { restoreCopyMarkdown } from '../../copy-markdown.mjs'
 
 interface MarkdownPageData extends PageData {
   copyMarkdown?: string
@@ -24,7 +25,7 @@ const status = ref<CopyStatus>('idle')
 let resetTimer: ReturnType<typeof setTimeout> | undefined
 
 const copyMarkdownText = computed(
-  () => (page.value as MarkdownPageData).copyMarkdown?.replace(/<\\\/script/gi, '</script') ?? ''
+  () => restoreCopyMarkdown((page.value as MarkdownPageData).copyMarkdown ?? '')
 )
 
 const buttonText = computed(() => {

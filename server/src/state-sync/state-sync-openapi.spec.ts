@@ -24,6 +24,10 @@ describe("State Sync OpenAPI contract", () => {
       operationId: "createStateSyncSpace",
       "x-required-scope": "state_sync.manage",
     })
+    expect(paths["/state-sync/spaces/{spaceId}"]?.get).toMatchObject({
+      operationId: "getStateSyncSpace",
+      "x-required-scope": "state_sync.manage",
+    })
     expect(paths["/state-sync/spaces/{spaceId}"]?.patch).toMatchObject({
       operationId: "updateStateSyncSpace",
       "x-required-scope": "state_sync.manage",
@@ -44,6 +48,10 @@ describe("State Sync OpenAPI contract", () => {
       operationId: "listStateSyncDocs",
       "x-required-scope": "state_sync.manage",
     })
+    const listDocsLimit = (paths["/state-sync/spaces/{spaceId}/docs"]?.get?.parameters as any[])?.find(
+      (p) => p.name === "limit"
+    )
+    expect(listDocsLimit?.schema?.maximum).toBe(200)
     expect(paths["/state-sync/spaces/{spaceId}/docs"]?.post).toMatchObject({
       operationId: "createStateSyncDoc",
     })
