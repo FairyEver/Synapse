@@ -38,6 +38,7 @@ describe("ApiKeyController", () => {
       createForUser: vi.fn().mockResolvedValue({ apiKey: { id: "key-1" }, secret: "syn_sk_secret" }),
       updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }),
       updateChannelResourcesForUser: vi.fn().mockResolvedValue({ id: "key-1", channelResources: { mode: "selected", channelIds: ["ch_1"] } }),
+      updateStateSyncResourcesForUser: vi.fn().mockResolvedValue({ id: "key-1", stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] } }),
       renameForUser: vi.fn().mockResolvedValue({ id: "key-1", name: "生产环境" }),
       revokeForUser: vi.fn().mockResolvedValue({ ok: true }),
     }
@@ -45,7 +46,7 @@ describe("ApiKeyController", () => {
     const request = { user: { id: "user-1" }, ip: "203.0.113.12" }
 
     await expect(controller.list(request as never)).resolves.toEqual([])
-    expect(controller.capabilities().filter(c => !c.scope.startsWith("tables.") && !c.scope.startsWith("channels."))).toEqual([{
+    expect(controller.capabilities().filter(c => !c.scope.startsWith("tables.") && !c.scope.startsWith("channels.") && !c.scope.startsWith("state_sync."))).toEqual([{
       scope: "drive.public_link.download",
       name: "获取公共链接文件",
       description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
@@ -63,6 +64,7 @@ describe("ApiKeyController", () => {
     }])
     expect(controller.capabilities().filter(c => c.scope.startsWith("tables.")).map(c => c.scope)).toEqual(["tables.manage", "tables.records.read", "tables.records.create", "tables.records.update", "tables.records.delete"])
     expect(controller.capabilities().filter(c => c.scope.startsWith("channels.")).map(c => c.scope)).toEqual(["channels.manage", "channels.publish", "channels.subscribe"])
+    expect(controller.capabilities().filter(c => c.scope.startsWith("state_sync.")).map(c => c.scope)).toEqual(["state_sync.manage", "state_sync.read", "state_sync.write"])
     await expect(controller.create({ name: " CLI ", scopes: ["drive.public_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },
       secret: "syn_sk_secret",
@@ -81,10 +83,24 @@ describe("ApiKeyController", () => {
       id: "key-1",
       channelResources: { mode: "selected", channelIds: ["ch_1"] },
     })
+    await expect(controller.update("key-1", {
+      stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] },
+    }, request as never)).resolves.toEqual({
+      id: "key-1",
+      stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] },
+    })
     await expect(controller.create({
       name: "遥控器",
       scopes: ["channels.publish"],
       channelResources: { mode: "all_owned", channelIds: [] },
+    }, request as never)).resolves.toEqual({
+      apiKey: { id: "key-1" },
+      secret: "syn_sk_secret",
+    })
+    await expect(controller.create({
+      name: "同步助手",
+      scopes: ["state_sync.manage"],
+      stateSyncResources: { mode: "all_owned", spaceIds: [] },
     }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },
       secret: "syn_sk_secret",
@@ -101,12 +117,21 @@ describe("ApiKeyController", () => {
       scopes: ["channels.publish"],
       channelResources: { mode: "all_owned", channelIds: [] },
     }, "203.0.113.12")
+    expect(service.createForUser).toHaveBeenCalledWith("user-1", {
+      name: "同步助手",
+      scopes: ["state_sync.manage"],
+      stateSyncResources: { mode: "all_owned", spaceIds: [] },
+    }, "203.0.113.12")
     expect(service.updateScopesForUser).toHaveBeenCalledWith("user-1", "key-1", {
       scopes: [],
     }, "203.0.113.12")
     expect(service.updateChannelResourcesForUser).toHaveBeenCalledWith("user-1", "key-1", {
       mode: "selected",
       channelIds: ["ch_1"],
+    }, "203.0.113.12")
+    expect(service.updateStateSyncResourcesForUser).toHaveBeenCalledWith("user-1", "key-1", {
+      mode: "selected",
+      spaceIds: ["sp_1"],
     }, "203.0.113.12")
     expect(service.renameForUser).toHaveBeenCalledWith("user-1", "key-1", {
       name: "生产环境",
@@ -152,6 +177,13 @@ describe("ApiKeyController", () => {
     expect(() => controller.update("key-1", {
       scopes: ["channels.publish"],
       channelResources: { mode: "all_owned", channelIds: [] },
+    }, request as never)).toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", {
+      stateSyncResources: { mode: "all_owned", spaceIds: ["sp_1"] },
+    }, request as never)).toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", {
+      scopes: ["state_sync.write"],
+      stateSyncResources: { mode: "all_owned", spaceIds: [] },
     }, request as never)).toThrow("API key update request is invalid")
     expect(service.updateScopesForUser).not.toHaveBeenCalled()
     expect(service.renameForUser).not.toHaveBeenCalled()

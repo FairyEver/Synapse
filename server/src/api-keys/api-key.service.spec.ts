@@ -48,6 +48,8 @@ describe("ApiKeyService", () => {
         tableIds: true,
         channelAccessMode: true,
         channelIds: true,
+        stateSyncAccessMode: true,
+        stateSyncSpaceIds: true,
       },
     })
   })
@@ -83,6 +85,8 @@ describe("ApiKeyService", () => {
       tableIds: [],
       channelAccessMode: "selected",
       channelIds: [],
+      stateSyncAccessMode: "selected",
+      stateSyncSpaceIds: [],
       userId: "user-1",
       name: "CLI",
       keyHash: hashApiKeySecret(result.secret),
@@ -277,6 +281,8 @@ describe("ApiKeyService", () => {
       scopes: ["drive.public_link.download"],
       channelAccessMode: "selected",
       channelIds: [],
+      stateSyncAccessMode: "selected",
+      stateSyncSpaceIds: [],
     })
     expect(prisma.userApiKey.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { keyHash: hashApiKeySecret(secret) },
@@ -404,6 +410,8 @@ describe("ApiKeyService", () => {
         scopes: ["channels.publish", "channels.subscribe"],
         channelAccessMode: "selected",
         channelIds: ["ch_1"],
+        stateSyncAccessMode: "selected",
+        stateSyncSpaceIds: [],
       },
       {
         kind: "updated",
@@ -412,6 +420,141 @@ describe("ApiKeyService", () => {
         scopes: ["channels.subscribe"],
         channelAccessMode: "selected",
         channelIds: ["ch_1"],
+        stateSyncAccessMode: "selected",
+        stateSyncSpaceIds: [],
+      },
+      {
+        kind: "revoked",
+        userId: "user-1",
+        apiKeyId: "key-1",
+      },
+    ])
+  })
+
+  it("validates owned state sync spaces and emits change notifications on revoke, scope update, and state sync resource update", async () => {
+    const notifier = new ApiKeyChangeNotifier()
+    const events: unknown[] = []
+    notifier.onChange((event) => events.push(event))
+
+    const tx = {
+      stateSyncSpace: { findMany: vi.fn() },
+      userApiKey: {
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const service = new ApiKeyService(
+      { $transaction: (work: (client: typeof tx) => unknown) => work(tx) } as never,
+      { recordWithClient: vi.fn().mockResolvedValue(undefined) } as never,
+      undefined,
+      notifier,
+    )
+
+    tx.stateSyncSpace.findMany.mockResolvedValueOnce([])
+    await expect(service.createForUser("user-1", {
+      name: "同步助手",
+      scopes: ["state_sync.write"],
+      stateSyncResources: { mode: "selected", spaceIds: ["sp_foreign"] },
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    await expect(service.createForUser("user-1", {
+      name: "同步助手",
+      scopes: ["state_sync.write"],
+      stateSyncResources: { mode: "all_owned", spaceIds: ["sp_1"] },
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    tx.stateSyncSpace.findMany.mockResolvedValueOnce([{ id: "sp_1", ownerId: "user-1" }])
+    tx.userApiKey.create.mockImplementationOnce(async ({ data }) => ({
+      id: "key-sync-1",
+      name: data.name,
+      keyPrefix: data.keyPrefix,
+      scopes: data.scopes,
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: data.tableAccessMode,
+      tableIds: data.tableIds,
+      channelAccessMode: data.channelAccessMode,
+      channelIds: data.channelIds,
+      stateSyncAccessMode: data.stateSyncAccessMode,
+      stateSyncSpaceIds: data.stateSyncSpaceIds,
+    }))
+    await expect(service.createForUser("user-1", {
+      name: "同步助手",
+      scopes: ["state_sync.write"],
+      stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] },
+    })).resolves.toMatchObject({
+      apiKey: {
+        id: "key-sync-1",
+        stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] },
+      },
+    })
+
+    tx.stateSyncSpace.findMany.mockResolvedValueOnce([])
+    await expect(service.updateStateSyncResourcesForUser("user-1", "key-1", {
+      mode: "selected",
+      spaceIds: ["sp_foreign"],
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    tx.stateSyncSpace.findMany.mockResolvedValueOnce([{ id: "sp_1", ownerId: "user-1" }])
+    tx.userApiKey.findFirst.mockResolvedValueOnce({
+      id: "key-1",
+      name: "同步助手",
+      keyPrefix: "syn_sk_test",
+      scopes: ["state_sync.write", "state_sync.read"],
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: "selected",
+      tableIds: [],
+      channelAccessMode: "selected",
+      channelIds: [],
+      stateSyncAccessMode: "selected",
+      stateSyncSpaceIds: [],
+    })
+    await expect(service.updateStateSyncResourcesForUser("user-1", "key-1", {
+      mode: "selected",
+      spaceIds: ["sp_1"],
+    })).resolves.toMatchObject({
+      stateSyncResources: { mode: "selected", spaceIds: ["sp_1"] },
+    })
+
+    tx.userApiKey.findFirst.mockResolvedValueOnce({
+      id: "key-1",
+      name: "同步助手",
+      keyPrefix: "syn_sk_test",
+      scopes: ["state_sync.write", "state_sync.read"],
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: "selected",
+      tableIds: [],
+      channelAccessMode: "selected",
+      channelIds: [],
+      stateSyncAccessMode: "selected",
+      stateSyncSpaceIds: ["sp_1"],
+    })
+    await service.updateScopesForUser("user-1", "key-1", { scopes: ["state_sync.read"] })
+    await service.revokeForUser("user-1", "key-1")
+
+    expect(events).toEqual([
+      {
+        kind: "updated",
+        userId: "user-1",
+        apiKeyId: "key-1",
+        scopes: ["state_sync.write", "state_sync.read"],
+        channelAccessMode: "selected",
+        channelIds: [],
+        stateSyncAccessMode: "selected",
+        stateSyncSpaceIds: ["sp_1"],
+      },
+      {
+        kind: "updated",
+        userId: "user-1",
+        apiKeyId: "key-1",
+        scopes: ["state_sync.read"],
+        channelAccessMode: "selected",
+        channelIds: [],
+        stateSyncAccessMode: "selected",
+        stateSyncSpaceIds: ["sp_1"],
       },
       {
         kind: "revoked",

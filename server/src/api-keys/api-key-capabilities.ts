@@ -6,6 +6,9 @@ export const NOTIFICATION_SEND_SCOPE = "notification.send"
 export const CHANNELS_MANAGE_SCOPE = "channels.manage"
 export const CHANNELS_PUBLISH_SCOPE = "channels.publish"
 export const CHANNELS_SUBSCRIBE_SCOPE = "channels.subscribe"
+export const STATE_SYNC_MANAGE_SCOPE = "state_sync.manage"
+export const STATE_SYNC_READ_SCOPE = "state_sync.read"
+export const STATE_SYNC_WRITE_SCOPE = "state_sync.write"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
 export const API_KEY_CAPABILITIES = [
@@ -21,6 +24,11 @@ export const API_KEY_CAPABILITIES = [
     [CHANNELS_PUBLISH_SCOPE, "发布频道事件"],
     [CHANNELS_SUBSCRIBE_SCOPE, "订阅频道事件"],
   ] as const).map(([scope, name]) => ({ scope, name, description: "仅在明确授权的频道资源范围内执行。", documentationPath: "/open-api/api/channels" })),
+  ...([
+    [STATE_SYNC_MANAGE_SCOPE, "管理状态同步"],
+    [STATE_SYNC_READ_SCOPE, "读取状态同步"],
+    [STATE_SYNC_WRITE_SCOPE, "写入状态同步"],
+  ] as const).map(([scope, name]) => ({ scope, name, description: "仅在明确授权的同步空间资源范围内执行。", documentationPath: "/open-api/api/state-sync" })),
   {
     scope: PUBLIC_LINK_DOWNLOAD_SCOPE,
     name: "获取公共链接文件",

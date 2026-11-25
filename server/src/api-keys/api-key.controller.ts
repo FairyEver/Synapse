@@ -8,10 +8,12 @@ import { API_KEY_SCOPES, apiKeyCapabilities } from "./api-key-capabilities"
 import { ApiKeyService } from "./api-key.service"
 import { keyResourcesSchema } from "../cloud-tables/cloud-table-contract"
 import { channelKeyResourcesSchema } from "@synapse/shared/channel-contracts"
+import { stateSyncKeyResourcesSchema } from "@synapse/shared/state-sync-contracts"
 
 const createApiKeySchema = z.object({
   tableResources: keyResourcesSchema.optional(),
   channelResources: channelKeyResourcesSchema.optional(),
+  stateSyncResources: stateSyncKeyResourcesSchema.optional(),
   name: z.string().trim().min(1).max(80),
   scopes: z.array(z.enum(API_KEY_SCOPES)).min(1).superRefine((scopes, context) => {
     if (new Set(scopes).size !== scopes.length) {
@@ -37,6 +39,7 @@ const updateApiKeySchema = z.union([
   renameApiKeySchema,
   z.object({ tableResources: keyResourcesSchema }).strict(),
   z.object({ channelResources: channelKeyResourcesSchema }).strict(),
+  z.object({ stateSyncResources: stateSyncKeyResourcesSchema }).strict(),
 ])
 
 @UseGuards(UserAuthGuard)
@@ -82,6 +85,7 @@ export class ApiKeyController {
     }
     if ("tableResources" in result.data) return this.apiKeys.updateTableResourcesForUser(request.user!.id, id, result.data.tableResources, request.ip)
     if ("channelResources" in result.data) return this.apiKeys.updateChannelResourcesForUser(request.user!.id, id, result.data.channelResources, request.ip)
+    if ("stateSyncResources" in result.data) return this.apiKeys.updateStateSyncResourcesForUser(request.user!.id, id, result.data.stateSyncResources, request.ip)
     return this.apiKeys.updateScopesForUser(request.user!.id, id, result.data, request.ip)
   }
 

@@ -69,6 +69,7 @@ model User {
   webhooks                       UserWebhook[]
   apiKeys                        UserApiKey[]
   channels                       Channel[]
+  stateSyncSpaces                StateSyncSpace[]
   notifications                  UserNotification[]
   notificationImages             NotificationImage[]
   todoItems                      TodoItem[]
@@ -298,6 +299,8 @@ model UserApiKey {
   tableIds              String[]               @default([])
   channelAccessMode     String?                @default("selected") @db.VarChar(16)
   channelIds            String[]               @default([])
+  stateSyncAccessMode   String?                @default("selected") @db.VarChar(16)
+  stateSyncSpaceIds     String[]               @default([])
   lastUsedAt            DateTime?
   revokedAt             DateTime?
   createdAt             DateTime               @default(now())
@@ -348,6 +351,53 @@ model ChannelRetainedEvent {
   updatedAt      DateTime @updatedAt
 
   @@id([channelId, event])
+}
+
+model StateSyncSpace {
+  id                   String           @id @default(cuid())
+  ownerId              String
+  owner                User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name                 String           @db.VarChar(100)
+  description          String           @default("") @db.VarChar(500)
+  defaultDocTtlSeconds Int?             @default(86400)
+  maxDocs              Int              @default(100)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  tokens               StateSyncToken[]
+  docs                 StateSyncDoc[]
+
+  @@index([ownerId, createdAt])
+}
+
+model StateSyncToken {
+  id          String         @id @default(cuid())
+  spaceId     String
+  space       StateSyncSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name        String         @db.VarChar(80)
+  role        String         @db.VarChar(16)
+  tokenHash   String         @unique @db.VarChar(64)
+  tokenPrefix String         @db.VarChar(24)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([spaceId, revokedAt, createdAt])
+}
+
+model StateSyncDoc {
+  id         String
+  spaceId    String
+  space      StateSyncSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  data       Json           @default("{}")
+  rev        BigInt         @default(0)
+  ttlSeconds Int?
+  expiresAt  DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@id([spaceId, id])
+  @@index([spaceId, updatedAt])
+  @@index([expiresAt])
 }
 
 model CloudTable {

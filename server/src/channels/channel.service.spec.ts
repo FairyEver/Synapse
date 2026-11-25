@@ -336,6 +336,8 @@ describe("ChannelService", () => {
       scopes: [CHANNELS_SUBSCRIBE_SCOPE],
       channelAccessMode: "selected",
       channelIds: [ch1.id],
+      stateSyncAccessMode: "selected",
+      stateSyncSpaceIds: [],
     })
     expect(sKeyCh2.closed[0]?.code).toBe(CHANNEL_WS_CLOSE_CODES.REVOKED)
     expect(sKeyCh1.closed[0]?.code).toBe(CHANNEL_WS_CLOSE_CODES.ROLE_CHANGED)

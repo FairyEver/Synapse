@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException, Optional } from "@n
 import type { Prisma } from "@prisma/client"
 import type { CloudKeyResources, CloudMember } from "@synapse/shared"
 import type { ChannelKeyResources } from "@synapse/shared/channel-contracts"
+import type { StateSyncKeyResources } from "@synapse/shared/state-sync-contracts"
 import type { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
@@ -24,6 +25,8 @@ const apiKeySelect = {
   tableIds: true,
   channelAccessMode: true,
   channelIds: true,
+  stateSyncAccessMode: true,
+  stateSyncSpaceIds: true,
 } satisfies Prisma.UserApiKeySelect
 
 type ApiKeyRecord = Prisma.UserApiKeyGetPayload<{ select: typeof apiKeySelect }>
@@ -31,6 +34,7 @@ type ApiKeyRecord = Prisma.UserApiKeyGetPayload<{ select: typeof apiKeySelect }>
 export type UserApiKeyDto = {
   readonly tableResources?: CloudKeyResources
   readonly channelResources?: ChannelKeyResources
+  readonly stateSyncResources?: StateSyncKeyResources
   readonly id: string
   readonly name: string
   readonly prefix: string
@@ -45,6 +49,8 @@ export type OpenApiPrincipal = {
   readonly scopes: readonly string[]
   readonly channelAccessMode?: ChannelKeyResources["mode"]
   readonly channelIds?: readonly string[]
+  readonly stateSyncAccessMode?: StateSyncKeyResources["mode"]
+  readonly stateSyncSpaceIds?: readonly string[]
 }
 
 export type UserApiKeyCreateResult = {
@@ -77,6 +83,7 @@ export class ApiKeyService {
       readonly scopes: readonly ApiKeyScope[]
       readonly tableResources?: CloudKeyResources
       readonly channelResources?: ChannelKeyResources
+      readonly stateSyncResources?: StateSyncKeyResources
     },
     ipAddress = "system",
   ): Promise<UserApiKeyCreateResult> {
@@ -85,6 +92,7 @@ export class ApiKeyService {
     const apiKey = await this.prisma.$transaction(async (tx) => {
       if (input.tableResources) await this.assertTableResources(tx, userId, input.tableResources)
       if (input.channelResources) await this.assertChannelResources(tx, userId, input.channelResources)
+      if (input.stateSyncResources) await this.assertStateSyncResources(tx, userId, input.stateSyncResources)
       const created = await tx.userApiKey.create({
         data: {
           userId,
@@ -96,6 +104,8 @@ export class ApiKeyService {
           tableIds: input.tableResources?.tableIds ?? [],
           channelAccessMode: input.channelResources?.mode ?? "selected",
           channelIds: input.channelResources?.channelIds ?? [],
+          stateSyncAccessMode: input.stateSyncResources?.mode ?? "selected",
+          stateSyncSpaceIds: input.stateSyncResources?.spaceIds ?? [],
         },
         select: apiKeySelect,
       })
@@ -152,6 +162,8 @@ export class ApiKeyService {
       scopes: normalizeApiKeyScopes(scopes),
       channelAccessMode: normalizeChannelAccessMode(apiKey.channelAccessMode),
       channelIds: apiKey.channelIds ?? [],
+      stateSyncAccessMode: normalizeStateSyncAccessMode(apiKey.stateSyncAccessMode),
+      stateSyncSpaceIds: apiKey.stateSyncSpaceIds ?? [],
     })
     return toUserApiKeyDto(apiKey)
   }
@@ -223,6 +235,8 @@ export class ApiKeyService {
         scopes: true,
         channelAccessMode: true,
         channelIds: true,
+        stateSyncAccessMode: true,
+        stateSyncSpaceIds: true,
         revokedAt: true,
         user: { select: { status: true } },
       },
@@ -234,6 +248,8 @@ export class ApiKeyService {
       scopes: normalizeApiKeyScopes(apiKey.scopes),
       channelAccessMode: normalizeChannelAccessMode(apiKey.channelAccessMode),
       channelIds: apiKey.channelIds ?? [],
+      stateSyncAccessMode: normalizeStateSyncAccessMode(apiKey.stateSyncAccessMode),
+      stateSyncSpaceIds: apiKey.stateSyncSpaceIds ?? [],
     }
   }
 
@@ -319,6 +335,59 @@ export class ApiKeyService {
       scopes: normalizeApiKeyScopes(updated.scopes),
       channelAccessMode: resources.mode,
       channelIds: resources.channelIds,
+      stateSyncAccessMode: normalizeStateSyncAccessMode(updated.stateSyncAccessMode),
+      stateSyncSpaceIds: updated.stateSyncSpaceIds ?? [],
+    })
+    return toUserApiKeyDto(updated)
+  }
+
+  private async assertStateSyncResources(tx: Prisma.TransactionClient, userId: string, resources: StateSyncKeyResources): Promise<void> {
+    if (new Set(resources.spaceIds).size !== resources.spaceIds.length || (resources.mode === "all_owned" && resources.spaceIds.length > 0)) {
+      throw new BadRequestException("同步空间资源范围无效。")
+    }
+    if (resources.mode === "all_owned" || resources.spaceIds.length === 0) return
+    const spaces = await tx.stateSyncSpace.findMany({
+      where: { id: { in: resources.spaceIds }, ownerId: userId },
+      select: { id: true },
+      take: 500,
+    })
+    if (spaces.length !== resources.spaceIds.length) {
+      throw new BadRequestException("同步空间资源不存在或未获授权。")
+    }
+  }
+
+  async updateStateSyncResourcesForUser(userId: string, id: string, resources: StateSyncKeyResources, ipAddress = "system"): Promise<UserApiKeyDto> {
+    const updated = await this.prisma.$transaction(async tx => {
+      await this.assertStateSyncResources(tx, userId, resources)
+      const existing = await tx.userApiKey.findFirst({ where: { id, userId, revokedAt: null }, select: apiKeySelect })
+      if (!existing) throw new NotFoundException("API key not found")
+      const result = await tx.userApiKey.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { stateSyncAccessMode: resources.mode, stateSyncSpaceIds: resources.spaceIds },
+      })
+      if (!result.count) throw new NotFoundException("API key not found")
+      await this.auditLog.recordWithClient(tx, {
+        adminEmail: userId,
+        action: "api_key.state_sync_resources.update",
+        targetType: "api_key",
+        targetId: id,
+        detail: {
+          previous: { mode: normalizeStateSyncAccessMode(existing.stateSyncAccessMode), spaceIds: existing.stateSyncSpaceIds ?? [] },
+          resources,
+        },
+        ipAddress,
+      })
+      return { ...existing, stateSyncAccessMode: resources.mode, stateSyncSpaceIds: resources.spaceIds }
+    })
+    this.changeNotifier?.emit({
+      kind: "updated",
+      userId,
+      apiKeyId: id,
+      scopes: normalizeApiKeyScopes(updated.scopes),
+      channelAccessMode: normalizeChannelAccessMode(updated.channelAccessMode),
+      channelIds: updated.channelIds ?? [],
+      stateSyncAccessMode: resources.mode,
+      stateSyncSpaceIds: resources.spaceIds,
     })
     return toUserApiKeyDto(updated)
   }
@@ -328,10 +397,15 @@ function normalizeChannelAccessMode(mode: string | null | undefined): ChannelKey
   return mode === "all_owned" ? "all_owned" : "selected"
 }
 
+function normalizeStateSyncAccessMode(mode: string | null | undefined): StateSyncKeyResources["mode"] {
+  return mode === "all_owned" ? "all_owned" : "selected"
+}
+
 function toUserApiKeyDto(apiKey: ApiKeyRecord): UserApiKeyDto {
   return {
     ...(apiKey.tableAccessMode ? { tableResources: { mode: apiKey.tableAccessMode as CloudKeyResources["mode"], tableIds: apiKey.tableIds ?? [] } } : {}),
     ...(apiKey.channelAccessMode ? { channelResources: { mode: normalizeChannelAccessMode(apiKey.channelAccessMode), channelIds: apiKey.channelIds ?? [] } } : {}),
+    ...(apiKey.stateSyncAccessMode ? { stateSyncResources: { mode: normalizeStateSyncAccessMode(apiKey.stateSyncAccessMode), spaceIds: apiKey.stateSyncSpaceIds ?? [] } } : {}),
     id: apiKey.id,
     name: apiKey.name,
     prefix: apiKey.keyPrefix,

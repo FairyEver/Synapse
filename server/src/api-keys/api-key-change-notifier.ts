@@ -13,6 +13,8 @@ export type ApiKeyChangeEvent =
       readonly scopes: readonly string[]
       readonly channelAccessMode: "selected" | "all_owned"
       readonly channelIds: readonly string[]
+      readonly stateSyncAccessMode: "selected" | "all_owned"
+      readonly stateSyncSpaceIds: readonly string[]
     }
   | {
       readonly kind: "user_disabled"
