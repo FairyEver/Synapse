@@ -24,6 +24,8 @@ OpenAPI 3.1 契约由服务端提供：
 
 已登录 Synapse 桌面端的 AI 可以通过 MCP 以当前账号操作云表。独立脚本和集成也可以通过[云端数据表开放 API](/open-api/api/cloud-tables)建表、配置字段与权限、管理记录和回收站并读取日志。开放 API 建表需要 `tables.manage` 及“自己的全部表”。
 
+实时信号与多端联动：[频道](/open-api/api/channels)。支持原生 WebSocket 双向收发、HTTP POST 无状态触发、轻量在线感知（Presence）、断线补发与可选 Retain 状态快照；浏览器端使用单频道分角色专属凭证（`syc_`），无需登录 SY。
+
 下载示例：[获取公共链接文件](/open-api/api/share-link-download)。先创建下载地址，再于十分钟内执行响应中的 `GET` 地址。
 
 发送消息步骤：[使用 API 发送消息](/open-api/guide/send-message)。此接口需要单独的 `notification.send` 权限。
@@ -39,6 +41,8 @@ drive.public_link.download
 ```
 
 云表使用独立的 `tables.manage`、`tables.records.read/create/update/delete` 五项 scope，并额外检查密钥的表资源和表授权。已有密钥不会自动获得云表权限。
+
+频道使用独立的 `channels.manage`、`channels.publish`、`channels.subscribe` 三项 scope 及频道资源范围；已有密钥同样不会自动获得频道权限。浏览器网页请使用在频道页签发的单频道专属凭证（`syc_`），避免暴露个人 API 密钥。
 
 完整密钥只显示一次。创建后可以编辑或清空 API 权限，不会轮换密钥；撤销密钥后无法恢复。移除下载权限或撤销密钥会使新请求以及尚未开始的临时下载失效。
 
@@ -77,6 +81,8 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 | `getCloudTablePublicCount` | `GET` | `/tables/{id}/public-count` | 表主开启时可匿名读取总数 | [公开记录总数](/open-api/api/cloud-tables#仅公开记录总数) |
 | `getCloudTableDailySummary` | `GET` | `/tables/{id}/daily-summary` | 表主已发布时可匿名读取汇总 | [公开今日汇总](/open-api/api/cloud-tables#公开今日汇总) |
 | `mutateCloudTableRecords` | `POST` | `/tables/{id}/records/batch` | 逐操作检查 scope、表资源及表授权，或显式开放的匿名操作 | [批量写入](/open-api/api/cloud-tables#批量新增、修改与删除) |
+| `publishChannelEvent` | `POST` | `/channels/{channelId}/events` | 频道专属凭证（`publish`/`pubsub`）或 `channels.publish` 密钥 | [频道](/open-api/api/channels#http-open-rest-api) |
+| `getChannelPresence` | `GET` | `/channels/{channelId}/presence` | 任意有效频道凭证或频道运行态密钥 | [频道](/open-api/api/channels#http-open-rest-api) |
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
 | `createPublicLinkArticleMessage` | `POST` | `/drive/public-links/messages` | `Authorization: Bearer` 与 `drive.public_link.message.create` | [给分享文章留言](/open-api/api/article-message-create) |
 | `sendNotification` | `POST` | `/notifications` | 请求体 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#整体式) |

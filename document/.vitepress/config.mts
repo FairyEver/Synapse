@@ -100,6 +100,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { text: '云端数据表', link: '/open-api/api/cloud-tables' },
+            { text: '频道', link: '/open-api/api/channels' },
             {
               text: '获取公共链接文件',
               link: '/open-api/api/share-link-download'

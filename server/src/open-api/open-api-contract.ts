@@ -1,4 +1,5 @@
 import { cloudTableOpenApiPaths, CLOUD_TABLE_JSON_SCHEMA } from "../cloud-tables/cloud-table-openapi"
+import { channelOpenApiPaths, CHANNEL_JSON_SCHEMA } from "../channels/channel-openapi"
 import { z } from "zod"
 import { DRIVE_MESSAGE_BODY_MAX_LENGTH } from "@synapse/shared"
 import { NOTIFICATION_SEND_SCOPE, PUBLIC_LINK_MESSAGE_CREATE_SCOPE, PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
@@ -546,11 +547,22 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
 } as const
 
 export function createOpenApiContractDocument(documentPublicUrl: string) {
-  const paths = { ...OPEN_API_CONTRACT_DOCUMENT_BASE.paths, ...cloudTableOpenApiPaths() } as typeof OPEN_API_CONTRACT_DOCUMENT_BASE.paths & ReturnType<typeof cloudTableOpenApiPaths>
+  const paths = {
+    ...OPEN_API_CONTRACT_DOCUMENT_BASE.paths,
+    ...cloudTableOpenApiPaths(),
+    ...channelOpenApiPaths(),
+  } as typeof OPEN_API_CONTRACT_DOCUMENT_BASE.paths & ReturnType<typeof cloudTableOpenApiPaths> & ReturnType<typeof channelOpenApiPaths>
   return {
     ...OPEN_API_CONTRACT_DOCUMENT_BASE,
     paths,
-    components: { ...OPEN_API_CONTRACT_DOCUMENT_BASE.components, schemas: { ...OPEN_API_CONTRACT_DOCUMENT_BASE.components.schemas, CloudTableJsonValue: CLOUD_TABLE_JSON_SCHEMA } },
+    components: {
+      ...OPEN_API_CONTRACT_DOCUMENT_BASE.components,
+      schemas: {
+        ...OPEN_API_CONTRACT_DOCUMENT_BASE.components.schemas,
+        CloudTableJsonValue: CLOUD_TABLE_JSON_SCHEMA,
+        ChannelJsonValue: CHANNEL_JSON_SCHEMA,
+      },
+    },
     externalDocs: {
       description: "开放接口文档",
       url: new URL("open-api/", `${documentPublicUrl.replace(/\/+$/u, "")}/`).toString(),
