@@ -1,5 +1,7 @@
+import "reflect-metadata"
 import { describe, expect, it, vi } from "vitest"
-import { channelCors, ChannelGuard, channelLogRequest, isChannelOpenPath, isChannelPath } from "./channel-http"
+import { channelCors, ChannelGuard, channelLogRequest, isChannelOpenPath, isChannelPath, registerChannelBodyErrors, registerChannelIngress } from "./channel-http"
+import { ChannelController } from "./channel.controller"
 import type { ChannelService } from "./channel.service"
 
 describe("channel-http", () => {
@@ -78,5 +80,50 @@ describe("channel-http", () => {
     await expect(guard.canActivate(ctxConsole as never)).resolves.toBe(true)
     expect(userAuth.canActivate).toHaveBeenCalledTimes(1)
     expect((consoleReq as Record<string, unknown>).channelActor).toEqual({ kind: "console", userId: "u1" })
+  })
+
+  it("enforces 128 KiB pre/post body limits, formats JSON parse errors, and skips global Throttler on ChannelController", () => {
+    const middlewares: Array<(...args: unknown[]) => void> = []
+    const app = { use: (fn: (...args: unknown[]) => void) => middlewares.push(fn) }
+    registerChannelIngress(app as never)
+    registerChannelBodyErrors(app as never)
+
+    const makeRes = () => {
+      const headers: Record<string, string> = {}
+      let statusCode = 200
+      let payload: unknown
+      return {
+        headers,
+        get statusCode() { return statusCode },
+        get payload() { return payload },
+        setHeader: (k: string, v: string) => { headers[k] = v },
+        status: (code: number) => ({ json: (body: unknown) => { statusCode = code; payload = body } }),
+      }
+    }
+
+    // 1. Pre-parse ingress rejects > 128 KiB Content-Length
+    const res1 = makeRes()
+    const next1 = vi.fn()
+    middlewares[0]!({ path: "/api/open/v1/channels/ch_1/events", headers: { "content-length": "200000" } }, res1, next1)
+    expect(next1).not.toHaveBeenCalled()
+    expect(res1.statusCode).toBe(413)
+    expect(res1.payload).toMatchObject({ error: { code: "REQUEST_TOO_LARGE" } })
+
+    // 2. Post-parse rejects chunked body > 128 KiB
+    const res2 = makeRes()
+    const next2 = vi.fn()
+    middlewares[1]!({ path: "/api/open/v1/channels/ch_1/events", headers: {}, body: { data: "x".repeat(140000) } }, res2, next2)
+    expect(next2).not.toHaveBeenCalled()
+    expect(res2.statusCode).toBe(413)
+
+    // 3. Error middleware formats malformed JSON as 400 INVALID_REQUEST
+    const res3 = makeRes()
+    const next3 = vi.fn()
+    middlewares[2]!({ status: 400 }, { path: "/api/open/v1/channels/ch_1/events", headers: {} }, res3, next3)
+    expect(res3.statusCode).toBe(400)
+    expect(res3.payload).toMatchObject({ error: { code: "INVALID_REQUEST" } })
+
+    // 4. ChannelController skips global ThrottlerGuard
+    expect(Reflect.getMetadata("THROTTLER:SKIPdefault", ChannelController)).toBe(true)
   })
 })

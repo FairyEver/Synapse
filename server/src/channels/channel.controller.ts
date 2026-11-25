@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, Res, UseFilters, UseGuards } from "@nestjs/common"
+import { SkipThrottle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { openApiRequestId, type OpenApiRequest } from "../open-api/open-api.types"
@@ -6,6 +7,7 @@ import { ChannelGuard, isChannelOpenPath, type ChannelRequest } from "./channel-
 import { ChannelService } from "./channel.service"
 
 @Controller(["/api/open/v1/channels", "/api/console/channels"])
+@SkipThrottle()
 @UseGuards(ChannelGuard)
 @UseFilters(OpenApiExceptionFilter)
 export class ChannelController {

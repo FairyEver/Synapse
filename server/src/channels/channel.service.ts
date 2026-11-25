@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy, OnModuleInit, Optional } from "@nestjs/common"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import {
   CHANNEL_OPEN_BASE,
@@ -89,6 +89,7 @@ export type ChannelPublishResult = {
 }
 
 const TOKEN_LAST_USED_THROTTLE_MS = 60_000
+const TOKEN_LAST_USED_CACHE_MAX = 5000
 
 function resolveApiKeyWsRole(scopes: readonly string[]): ChannelRole | null {
   const canPub = scopes.includes(CHANNELS_PUBLISH_SCOPE)
@@ -117,6 +118,7 @@ function parseBody<T>(schema: { safeParse(v: unknown): { success: true; data: T 
 export class ChannelService implements OnModuleInit, OnDestroy {
   private unsubscribeNotifier: (() => void) | null = null
   private readonly tokenLastUsedCache = new Map<string, number>()
+  private readonly retainLocks = new Map<string, Promise<unknown>>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -336,7 +338,8 @@ export class ChannelService implements OnModuleInit, OnDestroy {
 
   async deleteChannel(actor: ChannelActor, channelId: string): Promise<{ readonly deleted: true }> {
     await this.requireOwnedChannel(actor, channelId, "manage")
-    await this.prisma.channel.delete({ where: { id: channelId } })
+    const result = await this.prisma.channel.deleteMany({ where: { id: channelId } })
+    if (result.count === 0) throw new OpenApiHttpError(404, "CHANNEL_NOT_FOUND", "频道不存在。")
     this.hub.disconnectByChannel(channelId, CHANNEL_WS_CLOSE_CODES.REVOKED, "Channel deleted")
     return { deleted: true }
   }
@@ -466,11 +469,12 @@ export class ChannelService implements OnModuleInit, OnDestroy {
     if (actor.kind !== "console") {
       throw new OpenApiHttpError(403, "INSUFFICIENT_SCOPE", "仅控制台或桌面 MCP 可调用状态聚合接口。")
     }
-    await this.requireOwnedChannel(actor, channelId, "manage")
+    const channel = await this.requireOwnedChannel(actor, channelId, "manage")
     const retained = await this.loadRetainedItems(channelId)
+    const latestSeq = await this.resolveSeqFloor(channelId, channel.seqEpoch)
     return {
       channelId,
-      latestSeq: this.hub.getLatestSeq(channelId),
+      latestSeq,
       presence: this.hub.getPresence(channelId),
       retained,
     }
@@ -514,50 +518,73 @@ export class ChannelService implements OnModuleInit, OnDestroy {
     readonly targetClientId?: string
     readonly sender: ChannelEventSender
   }): Promise<ChannelPublishResult> {
-    const seqFloor = await this.resolveSeqFloor(input.channelId, input.seqEpoch)
-    if (input.retain) {
-      await this.assertRetainCapacity(input.channelId, input.event)
+    if (!input.retain) {
+      const seqFloor = await this.resolveSeqFloor(input.channelId, input.seqEpoch)
+      const published = this.hub.publishEvent({
+        channelId: input.channelId,
+        event: input.event,
+        payload: input.payload,
+        retain: false,
+        echo: input.echo,
+        targetClientId: input.targetClientId,
+        sender: input.sender,
+        seqFloor,
+      })
+      return {
+        seq: published.seq,
+        deliveredCount: published.deliveredCount,
+        retained: false,
+        sentAt: published.sentAt,
+      }
     }
 
-    const published = this.hub.publishEvent({
-      channelId: input.channelId,
-      event: input.event,
-      payload: input.payload,
-      retain: input.retain,
-      echo: input.echo,
-      targetClientId: input.targetClientId,
-      sender: input.sender,
-      seqFloor,
-    })
-
-    if (input.retain) {
+    // Serialize retain writes per channel and persist BEFORE live fan-out so DB errors
+    // or the 20-key cap never emit phantom retain broadcasts, and newer seqs never lose to older ones.
+    return this.withChannelRetainLock(input.channelId, async () => {
+      const seqFloor = await this.resolveSeqFloor(input.channelId, input.seqEpoch)
+      const nextSeq = this.hub.allocateNextSeq(input.channelId, seqFloor)
       await this.persistRetainedEvent({
         channelId: input.channelId,
         event: input.event,
         payload: input.payload,
-        seq: published.seq,
+        seq: nextSeq,
         sender: input.sender,
       })
-    }
-
-    return {
-      seq: published.seq,
-      deliveredCount: published.deliveredCount,
-      retained: input.retain,
-      sentAt: published.sentAt,
-    }
+      const published = this.hub.publishEvent({
+        channelId: input.channelId,
+        event: input.event,
+        payload: input.payload,
+        retain: true,
+        echo: input.echo,
+        targetClientId: input.targetClientId,
+        sender: input.sender,
+        preallocatedSeq: nextSeq,
+      })
+      return {
+        seq: published.seq,
+        deliveredCount: published.deliveredCount,
+        retained: true,
+        sentAt: published.sentAt,
+      }
+    })
   }
 
-  private async assertRetainCapacity(channelId: string, event: string): Promise<void> {
-    const existing = await this.prisma.channelRetainedEvent.findUnique({
-      where: { channelId_event: { channelId, event } },
-      select: { event: true },
+  private async withChannelRetainLock<T>(channelId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.retainLocks.get(channelId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
     })
-    if (existing) return
-    const count = await this.prisma.channelRetainedEvent.count({ where: { channelId } })
-    const max = this.hub.getLimits().maxRetainedPerChannel
-    if (count >= max) {
-      throw new OpenApiHttpError(422, "RETAIN_LIMIT_EXCEEDED", `单频道最多保留 ${max} 个不同事件名的状态快照。`)
+    const tail = previous.catch(() => undefined).then(() => current)
+    this.retainLocks.set(channelId, tail)
+    await previous.catch(() => undefined)
+    try {
+      return await work()
+    } finally {
+      release()
+      if (this.retainLocks.get(channelId) === tail) {
+        this.retainLocks.delete(channelId)
+      }
     }
   }
 
@@ -569,6 +596,9 @@ export class ChannelService implements OnModuleInit, OnDestroy {
     readonly sender: ChannelEventSender
   }): Promise<void> {
     const max = this.hub.getLimits().maxRetainedPerChannel
+    const prismaPayload = input.payload === null
+      ? Prisma.JsonNull
+      : (input.payload as Prisma.InputJsonValue)
     await this.prisma.$transaction(async (tx) => {
       const existing = await tx.channelRetainedEvent.findUnique({
         where: { channelId_event: { channelId: input.channelId, event: input.event } },
@@ -585,13 +615,13 @@ export class ChannelService implements OnModuleInit, OnDestroy {
         create: {
           channelId: input.channelId,
           event: input.event,
-          payload: input.payload as Prisma.InputJsonValue,
+          payload: prismaPayload,
           seq: BigInt(input.seq),
           senderClientId: input.sender.clientId,
           senderName: input.sender.clientName,
         },
         update: {
-          payload: input.payload as Prisma.InputJsonValue,
+          payload: prismaPayload,
           seq: BigInt(input.seq),
           senderClientId: input.sender.clientId,
           senderName: input.sender.clientName,
@@ -712,6 +742,10 @@ export class ChannelService implements OnModuleInit, OnDestroy {
     const now = Date.now()
     const prev = this.tokenLastUsedCache.get(tokenId) ?? 0
     if (now - prev < TOKEN_LAST_USED_THROTTLE_MS) return
+    if (this.tokenLastUsedCache.size >= TOKEN_LAST_USED_CACHE_MAX) {
+      const oldestKey = this.tokenLastUsedCache.keys().next().value
+      if (oldestKey) this.tokenLastUsedCache.delete(oldestKey)
+    }
     this.tokenLastUsedCache.set(tokenId, now)
     void this.prisma.channelToken.updateMany({
       where: { id: tokenId, revokedAt: null },

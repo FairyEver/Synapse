@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { Prisma } from "@prisma/client"
 import { CHANNEL_WS_CLOSE_CODES } from "@synapse/shared/channel-contracts"
 import { ApiKeyChangeNotifier } from "../api-keys/api-key-change-notifier"
 import { CHANNELS_MANAGE_SCOPE, CHANNELS_PUBLISH_SCOPE, CHANNELS_SUBSCRIBE_SCOPE } from "../api-keys/api-key-capabilities"
@@ -93,6 +94,10 @@ function createHarness() {
         const ch = channels.get(where.id)!
         channels.delete(where.id)
         return ch
+      }),
+      deleteMany: vi.fn(async ({ where }) => {
+        const existed = channels.delete(where.id)
+        return { count: existed ? 1 : 0 }
       }),
     },
     channelToken: {
@@ -256,7 +261,7 @@ describe("ChannelService", () => {
   })
 
   it("enforces the 20-key Retain ceiling while allowing overwrites of existing keys, and deletes retained silently", async () => {
-    const { service, hub } = createHarness()
+    const { service, hub, retained } = createHarness()
     const ch = await service.createChannel({ kind: "console", userId: "u1" }, { name: "状态频道", description: "" })
     const actor = { kind: "console" as const, userId: "u1" }
 
@@ -268,15 +273,31 @@ describe("ChannelService", () => {
     await expect(service.publishEvent(actor, ch.id, { event: "state.1", payload: { v: 999 }, retain: true }))
       .resolves.toMatchObject({ retained: true })
 
-    // Inserting 21st distinct key MUST fail cleanly with RETAIN_LIMIT_EXCEEDED
+    // Inserting 21st distinct key MUST fail cleanly with RETAIN_LIMIT_EXCEEDED and NOT broadcast to live subscribers
+    const publishSpy = vi.spyOn(hub, "publishEvent")
     await expect(service.publishEvent(actor, ch.id, { event: "state.21", payload: { v: 21 }, retain: true }))
       .rejects.toMatchObject({ statusCode: 422, code: "RETAIN_LIMIT_EXCEEDED" })
+    expect(publishSpy).not.toHaveBeenCalled()
+
+    // Overwriting an existing key with payload: null stores Prisma.JsonNull cleanly
+    await expect(service.publishEvent(actor, ch.id, { event: "state.1", payload: null, retain: true }))
+      .resolves.toMatchObject({ retained: true })
+    expect(retained.get(`${ch.id}:state.1`)?.payload).toBe(Prisma.JsonNull)
 
     // Silent clear does not publish to Hub
-    const publishSpy = vi.spyOn(hub, "publishEvent")
+    publishSpy.mockClear()
     await expect(service.clearRetained(actor, ch.id, "state.1")).resolves.toEqual({ deleted: true })
     await expect(service.clearRetained(actor, ch.id, "state.1")).resolves.toEqual({ deleted: false })
     expect(publishSpy).not.toHaveBeenCalled()
+
+    // Deleting channel disconnects active sockets with 4003
+    const subSock = createFakeSocket()
+    hub.registerConnection({
+      channelId: ch.id, ownerId: "u1", credentialType: "channel_token", credentialId: "t_del",
+      role: "subscribe", isObserver: false, clientId: "c_del", clientName: null, meta: {}, socket: subSock.socket,
+    })
+    await expect(service.deleteChannel(actor, ch.id)).resolves.toEqual({ deleted: true })
+    expect(subSock.closed[0]?.code).toBe(CHANNEL_WS_CLOSE_CODES.REVOKED)
   })
 
   it("disconnects live WS sockets on token revoke, channel delete, API key revoke/removal (4003), and API key scope change (4004)", async () => {

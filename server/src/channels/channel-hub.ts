@@ -105,6 +105,7 @@ export type HubPublishInput = {
   readonly targetClientId?: string
   readonly sender: ChannelEventSender
   readonly seqFloor?: number
+  readonly preallocatedSeq?: number
   readonly now?: number
 }
 
@@ -276,16 +277,29 @@ export class ChannelHub {
     return member
   }
 
+  allocateNextSeq(channelId: string, seqFloor = 0, now = Date.now()): number {
+    const state = this.getOrCreateChannel(channelId, seqFloor, now)
+    if (seqFloor > state.seq) state.seq = seqFloor
+    state.seq += 1
+    return state.seq
+  }
+
   publishEvent(input: HubPublishInput): { readonly seq: number; readonly deliveredCount: number; readonly sentAt: string } {
     const now = input.now ?? Date.now()
     const state = this.getOrCreateChannel(input.channelId, input.seqFloor ?? 0, now)
     this.pruneBuffer(state, now)
 
-    if (input.seqFloor !== undefined && input.seqFloor > state.seq) {
-      state.seq = input.seqFloor
+    let seq: number
+    if (input.preallocatedSeq !== undefined) {
+      seq = input.preallocatedSeq
+      if (seq > state.seq) state.seq = seq
+    } else {
+      if (input.seqFloor !== undefined && input.seqFloor > state.seq) {
+        state.seq = input.seqFloor
+      }
+      state.seq += 1
+      seq = state.seq
     }
-    state.seq += 1
-    const seq = state.seq
     const sentAt = new Date(now).toISOString()
     const targeted = Boolean(input.targetClientId)
 

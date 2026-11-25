@@ -44,16 +44,37 @@ function sendChannelJsonError(req: Request, res: Response, status: number, code:
   res.status(status).json({ requestId, error: { code, message } })
 }
 
+export function registerChannelIngress(app: NestExpressApplication): void {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!isChannelPath(req.path)) {
+      next()
+      return
+    }
+    if (isChannelOpenPath(req.path)) {
+      res.setHeader("Access-Control-Allow-Origin", "*")
+      res.setHeader("Access-Control-Expose-Headers", "X-Request-Id, Retry-After")
+    }
+    const contentLength = Number(req.headers["content-length"] ?? 0)
+    if (Number.isFinite(contentLength) && contentLength > 131072) {
+      sendChannelJsonError(req, res, 413, "REQUEST_TOO_LARGE", "频道请求体不能超过 128 KiB。")
+      return
+    }
+    next()
+  })
+}
+
 export function registerChannelBodyErrors(app: NestExpressApplication): void {
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (!isChannelPath(req.path)) {
       next()
       return
     }
-    const contentLength = Number(req.headers["content-length"] ?? 0)
-    if (Number.isFinite(contentLength) && contentLength > 131072) {
-      sendChannelJsonError(req, res, 413, "REQUEST_TOO_LARGE", "频道请求体不能超过 128 KiB。")
-      return
+    if (req.body !== undefined) {
+      const serialized = JSON.stringify(req.body)
+      if (serialized !== undefined && Buffer.byteLength(serialized, "utf8") > 131072) {
+        sendChannelJsonError(req, res, 413, "REQUEST_TOO_LARGE", "频道请求体不能超过 128 KiB。")
+        return
+      }
     }
     next()
   })
