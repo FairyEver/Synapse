@@ -117,6 +117,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.mail.search-tasks",
         "app.mail.search-results",
         "app.mail.previews",
+        "app.mail.scheduled",
 
         "agent.command-settings",
         "agent.commands",
