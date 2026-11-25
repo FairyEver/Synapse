@@ -300,7 +300,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
         ownerId: space.ownerId,
         credentialType: "console_ticket",
         credentialId: `dbg_${randomUUID().replaceAll("-", "")}`,
-        role: "create_write",
+        role: "read",
         isObserver: true,
       }
     }
@@ -703,6 +703,8 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
     const now = new Date()
     const expiresAt = ttlSeconds !== null ? new Date(now.getTime() + ttlSeconds * 1000) : null
 
+    let shouldEvictExpiredDoc = false
+
     try {
       const created = await this.prisma.$transaction(async (tx) => {
         if (parsed.docId !== undefined) {
@@ -710,13 +712,19 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
             where: { spaceId_id: { spaceId, id: docId } },
           })
           if (existing) {
+            const handle = this.hub.getDocHandle(spaceId, docId)
+            const hasActiveConn = this.hub.hasActiveConnections(spaceId, docId)
+              || (handle !== null && (handle.onlineCount > 0 || handle.observerCount > 0))
+            const isHubActiveOrRenewed = handle !== null
+              && (handle.dirty || handle.expiresAt === null || handle.expiresAt.getTime() >= now.getTime())
             const existingExpired = isExpiredAt(existing.expiresAt, now.getTime())
-              && !this.hub.hasActiveConnections(spaceId, docId)
+              && !hasActiveConn
+              && !isHubActiveOrRenewed
             if (!existingExpired) {
               throw new OpenApiHttpError(409, "DOC_ALREADY_EXISTS", "该房间 ID 已存在。")
             }
             await tx.stateSyncDoc.deleteMany({ where: { spaceId, id: docId } })
-            this.hub.disconnectByDoc(spaceId, docId, STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document expired")
+            shouldEvictExpiredDoc = true
           }
         }
 
@@ -741,6 +749,10 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
           },
         })
       })
+
+      if (shouldEvictExpiredDoc) {
+        this.hub.disconnectByDoc(spaceId, docId, STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document expired")
+      }
 
       return {
         spaceId: created.spaceId,
@@ -1030,6 +1042,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
       },
     })
     if (result.count === 0) {
+      this.hub.disconnectByDoc(input.spaceId, input.docId, STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document deleted")
       throw new OpenApiHttpError(404, "DOC_NOT_FOUND", "房间不存在或已删除。")
     }
   }

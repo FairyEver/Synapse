@@ -274,7 +274,22 @@ function createHarness(envOverrides: Record<string, string> = {}) {
         return { count }
       }),
     },
-    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => {
+      const spacesSnap = new Map(spaces)
+      const tokensSnap = new Map(tokens)
+      const docsSnap = new Map([...docs].map(([k, v]) => [k, { ...v, data: structuredClone(v.data) }]))
+      try {
+        return await work(prisma)
+      } catch (err) {
+        spaces.clear()
+        for (const [k, v] of spacesSnap) spaces.set(k, v)
+        tokens.clear()
+        for (const [k, v] of tokensSnap) tokens.set(k, v)
+        docs.clear()
+        for (const [k, v] of docsSnap) docs.set(k, v)
+        throw err
+      }
+    }),
   }
 
   const apiKeyService = {
@@ -635,6 +650,7 @@ describe("StateSyncService", () => {
       docId: doc.docId,
       ownerId: "u1",
       credentialType: "console_ticket",
+      role: "read",
       isObserver: true,
     })
     const wsCred2 = await service.authenticateWsToken(space.id, doc.docId, issued.ticket)
@@ -663,5 +679,191 @@ describe("StateSyncService", () => {
     await expect(service.revokeToken(consoleActor, space.id, tok.token.id)).resolves.toEqual({ revoked: true })
     expect(tokSock.closed[0]?.code).toBe(STATE_SYNC_WS_CLOSE_CODES.REVOKED)
     await expect(service.authenticateWsToken(space.id, doc.docId, tok.secret)).resolves.toBeNull()
+  })
+
+  it("persistHubDoc count === 0 evicts phantom Hub handle and surfaces DOC_NOT_FOUND (404), not 500", async () => {
+    const { service, hub, docs } = createHarness()
+    const consoleActor = { kind: "console" as const, userId: "u1" }
+    const space = await service.createSpace(consoleActor, { name: "落盘测试空间" })
+    const doc = await service.createDoc(consoleActor, space.id, { docId: "phantom-doc", initialData: { count: 0 } })
+
+    const snap = await service.loadDocForGateway(space.id, doc.docId)
+    const subscriber = createFakeSocket()
+    hub.registerConnection({
+      spaceId: space.id,
+      docId: doc.docId,
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "sst_1",
+      role: "read",
+      isObserver: false,
+      clientId: "sub-1",
+      clientName: null,
+      meta: {},
+      socket: subscriber.socket,
+      docSnapshot: snap!,
+    })
+
+    // Simulate PG row deletion behind Hub's back
+    docs.delete(`${space.id}:${doc.docId}`)
+
+    // Mutate triggers sync persist, updateMany count===0, evicts phantom handle, and surfaces 404 DOC_NOT_FOUND
+    await expect(
+      service.mutateDoc(consoleActor, space.id, doc.docId, {
+        op: "set",
+        path: "/count",
+        value: 1,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      code: "DOC_NOT_FOUND",
+    })
+
+    // Phantom handle must be evicted from Hub
+    expect(hub.getDocHandle(space.id, doc.docId)).toBeNull()
+
+    // Live socket must be closed with 4003 REVOKED
+    expect(subscriber.closed[0]?.code).toBe(STATE_SYNC_WS_CLOSE_CODES.REVOKED)
+
+    // Subsequent mutate also rejects with 404 immediately
+    await expect(
+      service.mutateDoc(consoleActor, space.id, doc.docId, {
+        op: "set",
+        path: "/count",
+        value: 2,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      code: "DOC_NOT_FOUND",
+    })
+  })
+
+  it("createDoc custom-ID replacement respects dirty/renewed Hub expiresAt and does not evict Hub on rolled-back transaction (e.g. DOC_LIMIT_EXCEEDED)", async () => {
+    const { service, hub, docs } = createHarness()
+    const consoleActor = { kind: "console" as const, userId: "u1" }
+    const space = await service.createSpace(consoleActor, { name: "并发建房空间", maxDocs: 1 })
+
+    // 1. Existing doc expired in PG, but Hub handle is dirty -> rejected with 409
+    const d1 = await service.createDoc(consoleActor, space.id, { docId: "custom-1", initialData: { v: 1 } })
+    const snap1 = await service.loadDocForGateway(space.id, d1.docId)
+    hub.loadOrAttachDoc(snap1!)
+    docs.get(`${space.id}:${d1.docId}`)!.expiresAt = new Date(Date.now() - 10_000)
+
+    // Trigger mutation without sync persist to make it dirty
+    await hub.mutate(space.id, d1.docId, { op: "set", path: "/v", value: 2, syncPersist: false })
+    expect(hub.getDocHandle(space.id, d1.docId)?.dirty).toBe(true)
+
+    await expect(
+      service.createDoc(consoleActor, space.id, { docId: "custom-1" }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOC_ALREADY_EXISTS",
+    })
+
+    // 2. Existing doc expired in PG, but Hub handle expiresAt is renewed to the future -> rejected with 409
+    const sp2 = await service.createSpace(consoleActor, { name: "续期空间", maxDocs: 5 })
+    const d2 = await service.createDoc(consoleActor, sp2.id, { docId: "custom-2" })
+    const snap2 = await service.loadDocForGateway(sp2.id, d2.docId)
+    hub.loadOrAttachDoc(snap2!)
+    docs.get(`${sp2.id}:${d2.docId}`)!.expiresAt = new Date(Date.now() - 10_000)
+
+    // Renew hub handle expiresAt into the future
+    const liveDoc = (hub as unknown as { docs: Map<string, { expiresAt: Date | null; dirty: boolean }> }).docs.get(
+      `${sp2.id}:${d2.docId}`,
+    )
+    expect(liveDoc).toBeDefined()
+    liveDoc!.expiresAt = new Date(Date.now() + 60_000)
+    liveDoc!.dirty = false
+
+    await expect(
+      service.createDoc(consoleActor, sp2.id, { docId: "custom-2" }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOC_ALREADY_EXISTS",
+    })
+
+    // 3. Existing doc expired in PG & Hub, but transaction fails with DOC_LIMIT_EXCEEDED -> does NOT evict Hub entry
+    const sp3 = await service.createSpace(consoleActor, { name: "限额回滚空间", maxDocs: 1 })
+    // Create an active non-expired doc that consumes maxDocs=1 quota
+    await service.createDoc(consoleActor, sp3.id, { docId: "active-doc", ttlSeconds: null })
+
+    // Insert an expired doc row into docs map & attach in Hub
+    const past = new Date(Date.now() - 20_000)
+    docs.set(`${sp3.id}:expired-room`, {
+      id: "expired-room",
+      spaceId: sp3.id,
+      data: { old: true },
+      rev: 0n,
+      ttlSeconds: 10,
+      expiresAt: past,
+      createdAt: past,
+      updatedAt: past,
+    })
+    hub.loadOrAttachDoc({
+      spaceId: sp3.id,
+      docId: "expired-room",
+      data: { old: true },
+      rev: 0n,
+      ttlSeconds: 10,
+      expiresAt: past,
+    })
+    expect(hub.getDocHandle(sp3.id, "expired-room")).not.toBeNull()
+
+    // Attempting to recreate "expired-room": deleted in tx, but activeCount (active-doc) >= maxDocs (1) throws 422
+    await expect(
+      service.createDoc(consoleActor, sp3.id, { docId: "expired-room" }),
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      code: "DOC_LIMIT_EXCEEDED",
+    })
+
+    // Transaction was rolled back: Hub handle must NOT have been evicted!
+    expect(hub.getDocHandle(sp3.id, "expired-room")).not.toBeNull()
+  })
+
+  it("deleteSpace disconnects live WS with 4003 & debug ticket resolves role=\"read\" + isObserver=true", async () => {
+    const { service, hub } = createHarness()
+    const consoleActor = { kind: "console" as const, userId: "u1" }
+    const space = await service.createSpace(consoleActor, { name: "删除空间测试" })
+    const doc = await service.createDoc(consoleActor, space.id, { docId: "space-ws-doc" })
+
+    // 1. deleteSpace disconnects live WS with 4003 REVOKED
+    const snap = await service.loadDocForGateway(space.id, doc.docId)
+    const subscriber = createFakeSocket()
+    hub.registerConnection({
+      spaceId: space.id,
+      docId: doc.docId,
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "sst_1",
+      role: "read",
+      isObserver: false,
+      clientId: "sub-1",
+      clientName: null,
+      meta: {},
+      socket: subscriber.socket,
+      docSnapshot: snap!,
+    })
+
+    await expect(service.deleteSpace(consoleActor, space.id)).resolves.toEqual({ deleted: true })
+    expect(subscriber.closed[0]?.code).toBe(STATE_SYNC_WS_CLOSE_CODES.REVOKED)
+    expect(subscriber.closed[0]?.reason).toBe("Space deleted")
+    expect(hub.getDocHandle(space.id, doc.docId)).toBeNull()
+
+    // 2. Debug ticket resolves role="read" and isObserver=true
+    const sp2 = await service.createSpace(consoleActor, { name: "调试票据空间" })
+    const doc2 = await service.createDoc(consoleActor, sp2.id, { docId: "dbg-doc" })
+    const issued = await service.issueDebugTicket(consoleActor, sp2.id, doc2.docId)
+    const wsCred = await service.authenticateWsToken(sp2.id, doc2.docId, issued.ticket)
+
+    expect(wsCred).toEqual({
+      spaceId: sp2.id,
+      docId: doc2.docId,
+      ownerId: "u1",
+      credentialType: "console_ticket",
+      credentialId: expect.stringMatching(/^dbg_[a-f0-9]+$/),
+      role: "read",
+      isObserver: true,
+    })
   })
 })
