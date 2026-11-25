@@ -3,6 +3,9 @@ import { buildPublicDocumentUrl } from "../common/public-document-url"
 export const PUBLIC_LINK_DOWNLOAD_SCOPE = "drive.public_link.download"
 export const PUBLIC_LINK_MESSAGE_CREATE_SCOPE = "drive.public_link.message.create"
 export const NOTIFICATION_SEND_SCOPE = "notification.send"
+export const CHANNELS_MANAGE_SCOPE = "channels.manage"
+export const CHANNELS_PUBLISH_SCOPE = "channels.publish"
+export const CHANNELS_SUBSCRIBE_SCOPE = "channels.subscribe"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
 export const API_KEY_CAPABILITIES = [
@@ -13,6 +16,11 @@ export const API_KEY_CAPABILITIES = [
     ["tables.records.update", "修改云表记录"],
     ["tables.records.delete", "删除云表记录"],
   ] as const).map(([scope, name]) => ({ scope, name, description: "仅在明确授权的表资源和当前表权限内执行。", documentationPath: "/open-api/api/cloud-tables" })),
+  ...([
+    [CHANNELS_MANAGE_SCOPE, "管理频道"],
+    [CHANNELS_PUBLISH_SCOPE, "发布频道事件"],
+    [CHANNELS_SUBSCRIBE_SCOPE, "订阅频道事件"],
+  ] as const).map(([scope, name]) => ({ scope, name, description: "仅在明确授权的频道资源范围内执行。", documentationPath: "/open-api/api/channels" })),
   {
     scope: PUBLIC_LINK_DOWNLOAD_SCOPE,
     name: "获取公共链接文件",

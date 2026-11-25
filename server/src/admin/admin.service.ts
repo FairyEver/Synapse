@@ -3,6 +3,7 @@ import { Prisma, type UserStatus } from "@prisma/client"
 import { normalizeUserHandle, normalizeUserNickname } from "@synapse/shared"
 import { PinoLogger } from "nestjs-pino"
 import { createPasswordResetLink } from "../auth/password-reset"
+import { ApiKeyChangeNotifier } from "../api-keys/api-key-change-notifier"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
@@ -96,6 +97,7 @@ export class AdminService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
     @Optional() private readonly logger?: PinoLogger,
+    @Optional() private readonly apiKeyChangeNotifier?: ApiKeyChangeNotifier,
   ) {}
 
   async getSystemOverview() {
@@ -178,6 +180,7 @@ export class AdminService {
     })
     if (input.status === "disabled") {
       this.liveDesktopGateway?.disconnectUser(id)
+      this.apiKeyChangeNotifier?.emit({ kind: "user_disabled", userId: id })
     }
     await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,

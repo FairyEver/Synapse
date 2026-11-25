@@ -7,9 +7,11 @@ import { resolvePublicDocumentUrl } from "../common/public-document-url"
 import { API_KEY_SCOPES, apiKeyCapabilities } from "./api-key-capabilities"
 import { ApiKeyService } from "./api-key.service"
 import { keyResourcesSchema } from "../cloud-tables/cloud-table-contract"
+import { channelKeyResourcesSchema } from "@synapse/shared/channel-contracts"
 
 const createApiKeySchema = z.object({
   tableResources: keyResourcesSchema.optional(),
+  channelResources: channelKeyResourcesSchema.optional(),
   name: z.string().trim().min(1).max(80),
   scopes: z.array(z.enum(API_KEY_SCOPES)).min(1).superRefine((scopes, context) => {
     if (new Set(scopes).size !== scopes.length) {
@@ -30,7 +32,12 @@ const renameApiKeySchema = z.object({
   name: z.string().trim().min(1).max(80),
 }).strict()
 
-const updateApiKeySchema = z.union([updateApiKeyScopesSchema, renameApiKeySchema, z.object({ tableResources: keyResourcesSchema }).strict()])
+const updateApiKeySchema = z.union([
+  updateApiKeyScopesSchema,
+  renameApiKeySchema,
+  z.object({ tableResources: keyResourcesSchema }).strict(),
+  z.object({ channelResources: channelKeyResourcesSchema }).strict(),
+])
 
 @UseGuards(UserAuthGuard)
 @Controller(["/api/console", "/api/dashboard"])
@@ -74,6 +81,7 @@ export class ApiKeyController {
       return this.apiKeys.renameForUser(request.user!.id, id, result.data, request.ip)
     }
     if ("tableResources" in result.data) return this.apiKeys.updateTableResourcesForUser(request.user!.id, id, result.data.tableResources, request.ip)
+    if ("channelResources" in result.data) return this.apiKeys.updateChannelResourcesForUser(request.user!.id, id, result.data.channelResources, request.ip)
     return this.apiKeys.updateScopesForUser(request.user!.id, id, result.data, request.ip)
   }
 

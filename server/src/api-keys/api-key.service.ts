@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type { CloudKeyResources, CloudMember } from "@synapse/shared"
+import type { ChannelKeyResources } from "@synapse/shared/channel-contracts"
 import type { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
+import { ApiKeyChangeNotifier } from "./api-key-change-notifier"
 import {
   isApiKeyScope,
   normalizeApiKeyScopes,
@@ -20,12 +22,15 @@ const apiKeySelect = {
   createdAt: true,
   tableAccessMode: true,
   tableIds: true,
+  channelAccessMode: true,
+  channelIds: true,
 } satisfies Prisma.UserApiKeySelect
 
 type ApiKeyRecord = Prisma.UserApiKeyGetPayload<{ select: typeof apiKeySelect }>
 
 export type UserApiKeyDto = {
   readonly tableResources?: CloudKeyResources
+  readonly channelResources?: ChannelKeyResources
   readonly id: string
   readonly name: string
   readonly prefix: string
@@ -38,6 +43,8 @@ export type OpenApiPrincipal = {
   readonly userId: string
   readonly apiKeyId: string
   readonly scopes: readonly string[]
+  readonly channelAccessMode: ChannelKeyResources["mode"]
+  readonly channelIds: readonly string[]
 }
 
 export type UserApiKeyCreateResult = {
@@ -51,6 +58,7 @@ export class ApiKeyService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
     @Optional() private readonly logger?: PinoLogger,
+    @Optional() private readonly changeNotifier?: ApiKeyChangeNotifier,
   ) {}
 
   async listForUser(userId: string): Promise<UserApiKeyDto[]> {
@@ -64,13 +72,19 @@ export class ApiKeyService {
 
   async createForUser(
     userId: string,
-    input: { readonly name: string; readonly scopes: readonly ApiKeyScope[]; readonly tableResources?: CloudKeyResources },
+    input: {
+      readonly name: string
+      readonly scopes: readonly ApiKeyScope[]
+      readonly tableResources?: CloudKeyResources
+      readonly channelResources?: ChannelKeyResources
+    },
     ipAddress = "system",
   ): Promise<UserApiKeyCreateResult> {
     assertValidApiKeyScopes(input.scopes, false)
     const secret = createApiKeySecret()
     const apiKey = await this.prisma.$transaction(async (tx) => {
       if (input.tableResources) await this.assertTableResources(tx, userId, input.tableResources)
+      if (input.channelResources) await this.assertChannelResources(tx, userId, input.channelResources)
       const created = await tx.userApiKey.create({
         data: {
           userId,
@@ -80,6 +94,8 @@ export class ApiKeyService {
           scopes: [...input.scopes],
           tableAccessMode: input.tableResources?.mode ?? "selected",
           tableIds: input.tableResources?.tableIds ?? [],
+          channelAccessMode: input.channelResources?.mode ?? "selected",
+          channelIds: input.channelResources?.channelIds ?? [],
         },
         select: apiKeySelect,
       })
@@ -128,6 +144,14 @@ export class ApiKeyService {
         ipAddress,
       })
       return { ...existing, scopes }
+    })
+    this.changeNotifier?.emit({
+      kind: "updated",
+      userId,
+      apiKeyId: id,
+      scopes: normalizeApiKeyScopes(scopes),
+      channelAccessMode: normalizeChannelAccessMode(apiKey.channelAccessMode),
+      channelIds: apiKey.channelIds ?? [],
     })
     return toUserApiKeyDto(apiKey)
   }
@@ -185,6 +209,7 @@ export class ApiKeyService {
         ipAddress,
       })
     })
+    this.changeNotifier?.emit({ kind: "revoked", userId, apiKeyId: id })
     return { ok: true }
   }
 
@@ -196,6 +221,8 @@ export class ApiKeyService {
         id: true,
         userId: true,
         scopes: true,
+        channelAccessMode: true,
+        channelIds: true,
         revokedAt: true,
         user: { select: { status: true } },
       },
@@ -205,6 +232,8 @@ export class ApiKeyService {
       userId: apiKey.userId,
       apiKeyId: apiKey.id,
       scopes: normalizeApiKeyScopes(apiKey.scopes),
+      channelAccessMode: normalizeChannelAccessMode(apiKey.channelAccessMode),
+      channelIds: apiKey.channelIds ?? [],
     }
   }
 
@@ -244,11 +273,62 @@ export class ApiKeyService {
       return toUserApiKeyDto({ ...existing, tableAccessMode: resources.mode, tableIds: resources.tableIds })
     })
   }
+
+  private async assertChannelResources(tx: Prisma.TransactionClient, userId: string, resources: ChannelKeyResources): Promise<void> {
+    if (resources.mode === "all_owned" || resources.channelIds.length === 0) return
+    const channels = await tx.channel.findMany({
+      where: { id: { in: resources.channelIds }, ownerId: userId },
+      select: { id: true },
+      take: 500,
+    })
+    if (channels.length !== resources.channelIds.length) {
+      throw new BadRequestException("频道资源不存在或未获授权。")
+    }
+  }
+
+  async updateChannelResourcesForUser(userId: string, id: string, resources: ChannelKeyResources, ipAddress = "system"): Promise<UserApiKeyDto> {
+    const updated = await this.prisma.$transaction(async tx => {
+      await this.assertChannelResources(tx, userId, resources)
+      const existing = await tx.userApiKey.findFirst({ where: { id, userId, revokedAt: null }, select: apiKeySelect })
+      if (!existing) throw new NotFoundException("API key not found")
+      const result = await tx.userApiKey.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { channelAccessMode: resources.mode, channelIds: resources.channelIds },
+      })
+      if (!result.count) throw new NotFoundException("API key not found")
+      await this.auditLog.recordWithClient(tx, {
+        adminEmail: userId,
+        action: "api_key.channel_resources.update",
+        targetType: "api_key",
+        targetId: id,
+        detail: {
+          previous: { mode: normalizeChannelAccessMode(existing.channelAccessMode), channelIds: existing.channelIds ?? [] },
+          resources,
+        },
+        ipAddress,
+      })
+      return { ...existing, channelAccessMode: resources.mode, channelIds: resources.channelIds }
+    })
+    this.changeNotifier?.emit({
+      kind: "updated",
+      userId,
+      apiKeyId: id,
+      scopes: normalizeApiKeyScopes(updated.scopes),
+      channelAccessMode: resources.mode,
+      channelIds: resources.channelIds,
+    })
+    return toUserApiKeyDto(updated)
+  }
+}
+
+function normalizeChannelAccessMode(mode: string | null | undefined): ChannelKeyResources["mode"] {
+  return mode === "all_owned" ? "all_owned" : "selected"
 }
 
 function toUserApiKeyDto(apiKey: ApiKeyRecord): UserApiKeyDto {
   return {
     ...(apiKey.tableAccessMode ? { tableResources: { mode: apiKey.tableAccessMode as CloudKeyResources["mode"], tableIds: apiKey.tableIds ?? [] } } : {}),
+    ...(apiKey.channelAccessMode ? { channelResources: { mode: normalizeChannelAccessMode(apiKey.channelAccessMode), channelIds: apiKey.channelIds ?? [] } } : {}),
     id: apiKey.id,
     name: apiKey.name,
     prefix: apiKey.keyPrefix,

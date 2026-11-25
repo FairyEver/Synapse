@@ -68,6 +68,7 @@ model User {
   modulePermissions              UserModulePermission[]
   webhooks                       UserWebhook[]
   apiKeys                        UserApiKey[]
+  channels                       Channel[]
   notifications                  UserNotification[]
   notificationImages             NotificationImage[]
   todoItems                      TodoItem[]
@@ -295,6 +296,8 @@ model UserApiKey {
   scopes                String[]               @default([])
   tableAccessMode       String                 @default("selected") @db.VarChar(16)
   tableIds              String[]               @default([])
+  channelAccessMode     String?                @default("selected") @db.VarChar(16)
+  channelIds            String[]               @default([])
   lastUsedAt            DateTime?
   revokedAt             DateTime?
   createdAt             DateTime               @default(now())
@@ -302,6 +305,49 @@ model UserApiKey {
   openApiUsageLogs      OpenApiUsageLog[]
 
   @@index([userId, revokedAt, createdAt])
+}
+
+model Channel {
+  id             String                 @id @default(cuid())
+  ownerId        String
+  owner          User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name           String                 @db.VarChar(100)
+  description    String                 @default("") @db.VarChar(500)
+  seqEpoch       BigInt                 @default(0)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  tokens         ChannelToken[]
+  retainedEvents ChannelRetainedEvent[]
+
+  @@index([ownerId, createdAt])
+}
+
+model ChannelToken {
+  id          String    @id @default(cuid())
+  channelId   String
+  channel     Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  name        String    @db.VarChar(80)
+  role        String    @db.VarChar(16)
+  tokenHash   String    @unique @db.VarChar(64)
+  tokenPrefix String    @db.VarChar(24)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([channelId, revokedAt, createdAt])
+}
+
+model ChannelRetainedEvent {
+  channelId      String
+  channel        Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  event          String   @db.VarChar(64)
+  payload        Json
+  seq            BigInt
+  senderClientId String?  @db.VarChar(64)
+  senderName     String?  @db.VarChar(64)
+  updatedAt      DateTime @updatedAt
+
+  @@id([channelId, event])
 }
 
 model CloudTable {

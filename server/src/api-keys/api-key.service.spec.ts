@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
+import { ApiKeyChangeNotifier } from "./api-key-change-notifier"
 import { hashApiKeySecret } from "./api-key-token"
 import { ApiKeyService } from "./api-key.service"
 
@@ -45,6 +46,8 @@ describe("ApiKeyService", () => {
         createdAt: true,
         tableAccessMode: true,
         tableIds: true,
+        channelAccessMode: true,
+        channelIds: true,
       },
     })
   })
@@ -78,6 +81,8 @@ describe("ApiKeyService", () => {
     expect(createInput?.data).toEqual({
       tableAccessMode: "selected",
       tableIds: [],
+      channelAccessMode: "selected",
+      channelIds: [],
       userId: "user-1",
       name: "CLI",
       keyHash: hashApiKeySecret(result.secret),
@@ -270,6 +275,8 @@ describe("ApiKeyService", () => {
       userId: "user-1",
       apiKeyId: "key-1",
       scopes: ["drive.public_link.download"],
+      channelAccessMode: "selected",
+      channelIds: [],
     })
     expect(prisma.userApiKey.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { keyHash: hashApiKeySecret(secret) },
@@ -295,6 +302,93 @@ describe("ApiKeyService", () => {
       },
       data: { lastUsedAt: now },
     })
+  })
+
+  it("validates owned channels and emits change notifications on revoke, scope update, and channel resource update", async () => {
+    const notifier = new ApiKeyChangeNotifier()
+    const events: unknown[] = []
+    notifier.onChange((event) => events.push(event))
+
+    const tx = {
+      channel: { findMany: vi.fn() },
+      userApiKey: {
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const service = new ApiKeyService(
+      { $transaction: (work: (client: typeof tx) => unknown) => work(tx) } as never,
+      { recordWithClient: vi.fn().mockResolvedValue(undefined) } as never,
+      undefined,
+      notifier,
+    )
+
+    tx.channel.findMany.mockResolvedValueOnce([])
+    await expect(service.createForUser("user-1", {
+      name: "遥控器",
+      scopes: ["channels.publish"],
+      channelResources: { mode: "selected", channelIds: ["ch_foreign"] },
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    tx.channel.findMany.mockResolvedValueOnce([{ id: "ch_1", ownerId: "user-1" }])
+    tx.userApiKey.findFirst.mockResolvedValueOnce({
+      id: "key-1",
+      name: "遥控器",
+      keyPrefix: "syn_sk_test",
+      scopes: ["channels.publish", "channels.subscribe"],
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: "selected",
+      tableIds: [],
+      channelAccessMode: "selected",
+      channelIds: [],
+    })
+    await expect(service.updateChannelResourcesForUser("user-1", "key-1", {
+      mode: "selected",
+      channelIds: ["ch_1"],
+    })).resolves.toMatchObject({
+      channelResources: { mode: "selected", channelIds: ["ch_1"] },
+    })
+
+    tx.userApiKey.findFirst.mockResolvedValueOnce({
+      id: "key-1",
+      name: "遥控器",
+      keyPrefix: "syn_sk_test",
+      scopes: ["channels.publish", "channels.subscribe"],
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: "selected",
+      tableIds: [],
+      channelAccessMode: "selected",
+      channelIds: ["ch_1"],
+    })
+    await service.updateScopesForUser("user-1", "key-1", { scopes: ["channels.subscribe"] })
+    await service.revokeForUser("user-1", "key-1")
+
+    expect(events).toEqual([
+      {
+        kind: "updated",
+        userId: "user-1",
+        apiKeyId: "key-1",
+        scopes: ["channels.publish", "channels.subscribe"],
+        channelAccessMode: "selected",
+        channelIds: ["ch_1"],
+      },
+      {
+        kind: "updated",
+        userId: "user-1",
+        apiKeyId: "key-1",
+        scopes: ["channels.subscribe"],
+        channelAccessMode: "selected",
+        channelIds: ["ch_1"],
+      },
+      {
+        kind: "revoked",
+        userId: "user-1",
+        apiKeyId: "key-1",
+      },
+    ])
   })
 })
 

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
+import { ApiKeyModule } from "../api-keys/api-key.module"
 import { AuditLogService } from "../common/audit-log.service"
 import { LiveModule } from "../live/live.module"
 import { MailModule } from "../mail/mail.module"
@@ -12,7 +13,7 @@ import { LogFileController } from "./log-file.controller"
 import { LogFileService } from "./log-file.service"
 
 @Module({
-  imports: [AdminAuthModule, LiveModule, MailModule, WebhookModule],
+  imports: [AdminAuthModule, ApiKeyModule, LiveModule, MailModule, WebhookModule],
   controllers: [AdminController, LogFileController],
   providers: [
     AdminService,
