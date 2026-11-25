@@ -20,6 +20,7 @@ class FakeWebSocket {
   onmessage: ((ev: { data: string }) => void) | null = null
   onclose: ((ev: { code: number; reason: string }) => void) | null = null
   onerror: (() => void) | null = null
+  autoCloseSync = true
   constructor(readonly url: string) {
     FakeWebSocket.instances.push(this)
     queueMicrotask(() => this.onopen?.())
@@ -29,7 +30,9 @@ class FakeWebSocket {
   }
   close(code = 1000, reason = '') {
     this.readyState = 3
-    this.onclose?.({ code, reason })
+    if (this.autoCloseSync) {
+      this.onclose?.({ code, reason })
+    }
   }
   emitServer(payload: Record<string, unknown>) {
     this.onmessage?.({ data: JSON.stringify(payload) })
@@ -599,7 +602,122 @@ describe('Dashboard State Sync Console UI', () => {
     expect(document.body.textContent).toContain('未连接')
   })
 
-  it('shows 同步空间资源 button on existing API key card with state_sync.* scope and falls back when SDK manifest is unavailable', async () => {
+  it('ignores asynchronous onclose from room A after switching to room B and keeps room B state intact', async () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.spyOn(stateSyncApi, 'listSpaces').mockResolvedValue({ data: [sampleSpace] })
+    vi.spyOn(stateSyncApi, 'getSpace').mockResolvedValue(sampleSpace)
+    vi.spyOn(stateSyncApi, 'listDocs').mockResolvedValue({
+      data: [
+        {
+          spaceId: 'ss_space_1',
+          docId: 'room-alpha',
+          rev: 1,
+          onlineCount: 1,
+          ttlSeconds: 3600,
+          expiresAt: null,
+          createdAt: '2026-11-26T01:00:00.000Z',
+          updatedAt: '2026-11-26T01:00:00.000Z',
+        },
+        {
+          spaceId: 'ss_space_1',
+          docId: 'room-beta',
+          rev: 2,
+          onlineCount: 1,
+          ttlSeconds: 3600,
+          expiresAt: null,
+          createdAt: '2026-11-26T01:00:00.000Z',
+          updatedAt: '2026-11-26T01:00:00.000Z',
+        },
+      ],
+      nextCursor: null,
+    })
+    vi.spyOn(stateSyncApi, 'issueDebugTicket').mockImplementation(async (_spaceId, docId) => ({
+      ticket: `ticket_for_${docId}`,
+      expiresAt: '2026-11-26T02:00:00.000Z',
+    }))
+
+    await renderNode(<StateSyncPage />)
+    await flush()
+    await act(async () => findButton('协同白板空间').click())
+    await flush()
+
+    // 1. Connect to room-alpha
+    await act(async () => findButton('room-alpha').click())
+    await flush()
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    const wsA = FakeWebSocket.instances[0]!
+    wsA.autoCloseSync = false // simulate delayed async onclose callback
+
+    await act(async () => {
+      wsA.emitServer({
+        type: 'ready',
+        spaceId: 'ss_space_1',
+        docId: 'room-alpha',
+        rev: 1,
+        presence: [{
+          connectionId: 'conn_a',
+          clientId: 'player-a',
+          clientName: '玩家甲',
+          role: 'write',
+          meta: {},
+          connectedAt: '2026-11-26T01:00:00.000Z',
+        }],
+        snapshots: [{ path: '/', exists: true, value: { room: 'alpha' } }],
+      })
+    })
+    await flush()
+
+    expect(document.body.textContent).toContain('调试中（隐身）')
+    expect(document.body.textContent).toContain('玩家甲')
+    expect(document.body.textContent).toContain('已连接房间 room-alpha')
+
+    // 2. Switch to room-beta
+    await act(async () => findButton('room-beta').click())
+    await flush()
+
+    expect(FakeWebSocket.instances).toHaveLength(2)
+    const wsB = FakeWebSocket.instances[1]!
+
+    await act(async () => {
+      wsB.emitServer({
+        type: 'ready',
+        spaceId: 'ss_space_1',
+        docId: 'room-beta',
+        rev: 5,
+        presence: [{
+          connectionId: 'conn_b',
+          clientId: 'player-b',
+          clientName: '玩家乙',
+          role: 'write',
+          meta: {},
+          connectedAt: '2026-11-26T01:05:00.000Z',
+        }],
+        snapshots: [{ path: '/', exists: true, value: { room: 'beta' } }],
+      })
+    })
+    await flush()
+
+    expect(document.body.textContent).toContain('调试中（隐身）')
+    expect(document.body.textContent).toContain('玩家乙')
+    expect(document.body.textContent).toContain('已连接房间 room-beta')
+
+    // 3. Simulate delayed asynchronous onclose event firing from room-alpha
+    await act(async () => {
+      wsA.onclose?.({ code: 1000, reason: 'delayed async close' })
+    })
+    await flush()
+
+    // 4. Assert room-beta remains fully connected with presence and logs untouched
+    expect(document.body.textContent).toContain('调试中（隐身）')
+    expect(document.body.textContent).not.toContain('未连接')
+    expect(document.body.textContent).toContain('玩家乙')
+    expect(document.body.textContent).not.toContain('连接房间后显示在线成员')
+    expect(document.body.textContent).toContain('已连接房间 room-beta')
+    expect(document.body.textContent).not.toContain('连接已关闭')
+  })
+
+  it('shows 同步空间资源 button on existing API key card with state_sync.* scope', async () => {
     vi.spyOn(dashboardApi, 'listApiKeys').mockResolvedValue([{
       id: 'key_existing_ss',
       name: '状态同步后端',
@@ -620,5 +738,30 @@ describe('Dashboard State Sync Console UI', () => {
     await flush()
     expect(document.body.textContent).toContain('密钥的同步空间资源')
     expect(document.body.textContent).toContain('协同白板空间')
+  })
+
+  it('falls back cleanly to v1.0.0 and /sdk/state-sync/v1/... URLs when /sdk/manifest.json returns null or rejects', async () => {
+    vi.spyOn(stateSyncApi, 'listSpaces').mockResolvedValue({ data: [sampleSpace] })
+    vi.spyOn(stateSyncApi, 'getSpace').mockResolvedValue(sampleSpace)
+    vi.spyOn(stateSyncApi, 'listDocs').mockResolvedValue({ data: [], nextCursor: null })
+    vi.spyOn(stateSyncApi, 'getSdkManifest').mockResolvedValue(null)
+
+    await renderNode(<StateSyncPage />)
+    await flush()
+    await act(async () => findButton('协同白板空间').click())
+    await flush()
+
+    const examplesTab = Array.from(document.querySelectorAll('[role="tab"]')).find(
+      (el) => el.textContent?.includes('接入与 SDK 示例'),
+    ) as HTMLElement
+    await act(async () => examplesTab.click())
+    await flush()
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('v1.0.0')
+    expect(text).toContain('/sdk/state-sync/v1/state-sync.global.min.js')
+    expect(text).toContain('/sdk/state-sync/v1/state-sync.esm.min.js')
+    expect(text).toContain('SynapseStateSync.createClient')
+    expect(text).toContain('import { createClient }')
   })
 })

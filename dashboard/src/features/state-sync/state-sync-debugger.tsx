@@ -150,6 +150,7 @@ export function StateSyncDebugger({
       wsRef.current = ws
 
       ws.onopen = () => {
+        if (connectAttemptRef.current !== attemptId || wsRef.current !== ws) return
         ws.send(JSON.stringify({
           type: 'auth',
           token: ticket,
@@ -158,6 +159,7 @@ export function StateSyncDebugger({
       }
 
       ws.onmessage = (event) => {
+        if (connectAttemptRef.current !== attemptId || wsRef.current !== ws) return
         let msg: Record<string, unknown>
         try {
           msg = JSON.parse(String(event.data)) as Record<string, unknown>
@@ -241,6 +243,7 @@ export function StateSyncDebugger({
       }
 
       ws.onclose = (ev) => {
+        if (connectAttemptRef.current !== attemptId || wsRef.current !== ws) return
         if (wsRef.current === ws) wsRef.current = null
         setStatus('disconnected')
         setPresence([])
@@ -248,6 +251,7 @@ export function StateSyncDebugger({
       }
 
       ws.onerror = () => {
+        if (connectAttemptRef.current !== attemptId || wsRef.current !== ws) return
         toast.danger('调试台 WebSocket 连接异常')
       }
     } catch (error) {
