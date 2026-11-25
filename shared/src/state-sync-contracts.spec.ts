@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  STATE_SYNC_CANONICAL_INDEX_REGEX,
   STATE_SYNC_CLIENT_ID_REGEX,
   STATE_SYNC_CUSTOM_DOC_ID_REGEX,
   STATE_SYNC_DOC_MAX_BYTES,
@@ -23,8 +24,10 @@ import {
   isAncestorOrEqualPath,
   parseStateSyncPath,
   readStateSyncPath,
+  refineStateSyncMutation,
   stateSyncDocCreateSchema,
   stateSyncKeyResourcesSchema,
+  stateSyncMetaSchema,
   stateSyncMutateHttpSchema,
   stateSyncOnDisconnectActionSchema,
   stateSyncPathSchema,
@@ -528,5 +531,243 @@ describe("Zod schemas", () => {
       message: "Version mismatch",
       currentRev: 5,
     }).success).toBe(true)
+  })
+})
+
+describe("Fix Round 1: Contract tightening and edge-case validation", () => {
+  it("Finding 1: rejects op 'set' when value is undefined in mutation engine and schemas", () => {
+    const root = { a: 1 }
+
+    // applyStateSyncMutation
+    const res = applyStateSyncMutation(root, {
+      op: "set",
+      path: "/b",
+      value: undefined,
+    })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.code).toBe("INVALID_INPUT")
+    }
+    expect(root).toEqual({ a: 1 })
+
+    // stateSyncMutateHttpSchema
+    expect(stateSyncMutateHttpSchema.safeParse({
+      op: "set",
+      path: "/b",
+    }).success).toBe(false)
+
+    expect(stateSyncMutateHttpSchema.safeParse({
+      op: "set",
+      path: "/b",
+      value: undefined,
+    }).success).toBe(false)
+
+    // stateSyncOnDisconnectActionSchema
+    expect(stateSyncOnDisconnectActionSchema.safeParse({
+      op: "set",
+      path: "/status",
+    }).success).toBe(false)
+
+    // wsMutateFrameSchema
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "mutate",
+      id: "m-1",
+      op: "set",
+      path: "/b",
+    }).success).toBe(false)
+
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "mutate",
+      id: "m-2",
+      op: "set",
+      path: "/b",
+      value: undefined,
+    }).success).toBe(false)
+
+    // Valid set with null or value succeeds
+    expect(stateSyncMutateHttpSchema.safeParse({
+      op: "set",
+      path: "/b",
+      value: null,
+    }).success).toBe(true)
+  })
+
+  it("Finding 2: patch on non-existent path with {} creates nodes and returns changed: true", () => {
+    const original: Record<string, unknown> = {}
+    const res = applyStateSyncMutation(original, {
+      op: "patch",
+      path: "/nested/node",
+      value: {},
+    })
+
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.changed).toBe(true)
+      expect(res.nextRoot).toEqual({ nested: { node: {} } })
+    }
+
+    // Applying patch {} on an existing empty node returns changed: false
+    const existing = { nested: { node: {} } }
+    const res2 = applyStateSyncMutation(existing, {
+      op: "patch",
+      path: "/nested/node",
+      value: {},
+    })
+    expect(res2.ok).toBe(true)
+    if (res2.ok) {
+      expect(res2.changed).toBe(false)
+      expect(res2.nextRoot).toEqual({ nested: { node: {} } })
+    }
+  })
+
+  it("Finding 3: validateStateSyncJsonValue rejects undefined members, non-finite numbers, and non-plain objects", () => {
+    // undefined members in object or array
+    expect(validateStateSyncJsonValue({ a: undefined }).ok).toBe(false)
+    expect(validateStateSyncJsonValue([1, undefined, 2]).ok).toBe(false)
+
+    // Non-finite numbers
+    expect(validateStateSyncJsonValue(NaN).ok).toBe(false)
+    expect(validateStateSyncJsonValue(Infinity).ok).toBe(false)
+    expect(validateStateSyncJsonValue(-Infinity).ok).toBe(false)
+    expect(validateStateSyncJsonValue({ val: NaN }).ok).toBe(false)
+
+    // Non-plain objects (Date, Map, Set, RegExp)
+    expect(validateStateSyncJsonValue(new Date()).ok).toBe(false)
+    expect(validateStateSyncJsonValue(new Map()).ok).toBe(false)
+    expect(validateStateSyncJsonValue(new Set()).ok).toBe(false)
+    expect(validateStateSyncJsonValue(/regex/).ok).toBe(false)
+    expect(validateStateSyncJsonValue({ created: new Date() }).ok).toBe(false)
+    expect(validateStateSyncJsonValue({ map: new Map() }).ok).toBe(false)
+
+    // Functions / Symbols
+    expect(validateStateSyncJsonValue({ fn: () => {} }).ok).toBe(false)
+  })
+
+  it("Finding 3: patch safely handles Object.prototype keys without prototype pollution or false comparison", () => {
+    const root: Record<string, unknown> = { obj: {} }
+
+    // Patching 'toString' onto an empty object must mark changed: true and set own property
+    const res1 = applyStateSyncMutation(root, {
+      op: "patch",
+      path: "/obj",
+      value: { toString: "custom_to_string" },
+    })
+    expect(res1.ok).toBe(true)
+    if (res1.ok) {
+      expect(res1.changed).toBe(true)
+      expect(Object.prototype.hasOwnProperty.call(res1.nextRoot.obj, "toString")).toBe(true)
+      expect((res1.nextRoot.obj as Record<string, unknown>).toString).toBe("custom_to_string")
+    }
+
+    // Re-patching identical 'toString' must return changed: false
+    const res2 = applyStateSyncMutation(res1.ok ? res1.nextRoot : {}, {
+      op: "patch",
+      path: "/obj",
+      value: { toString: "custom_to_string" },
+    })
+    expect(res2.ok).toBe(true)
+    if (res2.ok) {
+      expect(res2.changed).toBe(false)
+    }
+
+    // Root-level patch with 'valueOf'
+    const rootRes = applyStateSyncMutation({}, {
+      op: "patch",
+      path: "/",
+      value: { valueOf: 42 },
+    })
+    expect(rootRes.ok).toBe(true)
+    if (rootRes.ok) {
+      expect(rootRes.changed).toBe(true)
+      expect(Object.prototype.hasOwnProperty.call(rootRes.nextRoot, "valueOf")).toBe(true)
+    }
+  })
+
+  it("Finding 4: meta validation in WS auth and presence.update frames validates safely and prevents throwing", () => {
+    // Valid meta succeeds
+    const validAuth = stateSyncWsClientFrameSchema.safeParse({
+      type: "auth",
+      token: "sys_token",
+      meta: { role: "moderator", color: "#ffffff" },
+    })
+    expect(validAuth.success).toBe(true)
+
+    // Circular meta does not throw and fails validation
+    const circular: Record<string, unknown> = { name: "test" }
+    circular.self = circular
+
+    expect(() => {
+      const authWithCircular = stateSyncWsClientFrameSchema.safeParse({
+        type: "auth",
+        token: "sys_token",
+        meta: circular,
+      })
+      expect(authWithCircular.success).toBe(false)
+    }).not.toThrow()
+
+    expect(() => {
+      const presenceWithCircular = stateSyncWsClientFrameSchema.safeParse({
+        type: "presence.update",
+        meta: circular,
+      })
+      expect(presenceWithCircular.success).toBe(false)
+    }).not.toThrow()
+
+    // Non-plain object in meta is rejected
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "auth",
+      token: "sys_token",
+      meta: { ts: new Date() },
+    }).success).toBe(false)
+
+    // Undefined member in meta is rejected
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "auth",
+      token: "sys_token",
+      meta: { user: undefined },
+    }).success).toBe(false)
+
+    // Dangerous keys in meta are rejected
+    const protoMeta = JSON.parse('{"__proto__":{"polluted":true}}')
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "auth",
+      token: "sys_token",
+      meta: protoMeta,
+    }).success).toBe(false)
+
+    // Meta exceeding 2 KiB is rejected
+    const hugeMeta = { data: "x".repeat(STATE_SYNC_META_MAX_BYTES + 10) }
+    expect(stateSyncWsClientFrameSchema.safeParse({
+      type: "auth",
+      token: "sys_token",
+      meta: hugeMeta,
+    }).success).toBe(false)
+  })
+
+  it("Cleanups: readStateSyncPath validates canonical array index /^(0|[1-9]\\d*)$/", () => {
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("0")).toBe(true)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("1")).toBe(true)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("123")).toBe(true)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("00")).toBe(false)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("01")).toBe(false)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("+1")).toBe(false)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("-1")).toBe(false)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("1.0")).toBe(false)
+    expect(STATE_SYNC_CANONICAL_INDEX_REGEX.test("length")).toBe(false)
+
+    const root = {
+      items: ["zero", "one", "two"],
+    }
+
+    expect(readStateSyncPath(root, "/items/0")).toEqual({ exists: true, value: "zero" })
+    expect(readStateSyncPath(root, "/items/1")).toEqual({ exists: true, value: "one" })
+    expect(readStateSyncPath(root, "/items/2")).toEqual({ exists: true, value: "two" })
+
+    // Non-canonical index or out-of-bounds returns exists: false
+    expect(readStateSyncPath(root, "/items/00")).toEqual({ exists: false, value: undefined })
+    expect(readStateSyncPath(root, "/items/01")).toEqual({ exists: false, value: undefined })
+    expect(readStateSyncPath(root, "/items/1.0")).toEqual({ exists: false, value: undefined })
+    expect(readStateSyncPath(root, "/items/3")).toEqual({ exists: false, value: undefined })
+    expect(readStateSyncPath(root, "/items/length")).toEqual({ exists: false, value: undefined })
   })
 })

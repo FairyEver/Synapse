@@ -6,9 +6,13 @@ export { z as stateSyncZod }
 const utf8Encoder = new TextEncoder()
 
 export function utf8JsonByteLength(value: unknown): number {
-  const serialized = JSON.stringify(value)
-  if (serialized === undefined) return Number.POSITIVE_INFINITY
-  return utf8Encoder.encode(serialized).byteLength
+  try {
+    const serialized = JSON.stringify(value)
+    if (serialized === undefined) return Number.POSITIVE_INFINITY
+    return utf8Encoder.encode(serialized).byteLength
+  } catch {
+    return Number.POSITIVE_INFINITY
+  }
 }
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -19,6 +23,7 @@ export const STATE_SYNC_OPEN_BASE = "/api/open/v1/state-sync"
 export const STATE_SYNC_PATH_SEGMENT_REGEX = /^[a-zA-Z0-9._:-]{1,64}$/u
 export const STATE_SYNC_CUSTOM_DOC_ID_REGEX = /^[a-zA-Z0-9._:-]{3,64}$/u
 export const STATE_SYNC_CLIENT_ID_REGEX = /^[a-zA-Z0-9._:-]{1,64}$/u
+export const STATE_SYNC_CANONICAL_INDEX_REGEX = /^(0|[1-9]\d*)$/u
 export const STATE_SYNC_MAX_PATH_DEPTH = 16
 export const STATE_SYNC_MAX_VALUE_DEPTH = 32
 export const STATE_SYNC_DOC_MAX_BYTES = 262144
@@ -121,8 +126,20 @@ export function validateStateSyncJsonValue(
     if (depth > maxDepth) {
       return { ok: false, message: `JSON 嵌套深度超过上限 (${maxDepth} 层)。` }
     }
-    if (node === null || typeof node !== "object") {
+    if (typeof node === "undefined") {
+      return { ok: false, message: "JSON 值中不能包含 undefined。" }
+    }
+    if (typeof node === "number") {
+      if (!Number.isFinite(node)) {
+        return { ok: false, message: "数字必须为有限数值 (不能为 NaN 或 Infinity)。" }
+      }
       return { ok: true }
+    }
+    if (node === null || typeof node === "string" || typeof node === "boolean") {
+      return { ok: true }
+    }
+    if (typeof node !== "object") {
+      return { ok: false, message: `非法的数据类型: ${typeof node}。` }
     }
     if (Array.isArray(node)) {
       for (const item of node) {
@@ -130,6 +147,9 @@ export function validateStateSyncJsonValue(
         if (!sub.ok) return sub
       }
       return { ok: true }
+    }
+    if (!isPlainObject(node)) {
+      return { ok: false, message: "对象必须为普通 JSON 对象 (不能为 Date、Map、Set、RegExp 等)。" }
     }
 
     const keys = Object.keys(node)
@@ -169,8 +189,11 @@ export function readStateSyncPath(
       return { exists: false, value: undefined }
     }
     if (Array.isArray(curr)) {
+      if (!STATE_SYNC_CANONICAL_INDEX_REGEX.test(segment)) {
+        return { exists: false, value: undefined }
+      }
       const idx = Number(segment)
-      if (!Number.isInteger(idx) || idx < 0 || idx >= curr.length) {
+      if (idx >= curr.length) {
         return { exists: false, value: undefined }
       }
       curr = curr[idx]
@@ -207,6 +230,10 @@ export function applyStateSyncMutation(
 
   if (input.op === "delete" && parsed.segments.length === 0) {
     return { ok: false, code: "INVALID_INPUT", message: "禁止删除根路径 /。" }
+  }
+
+  if (input.op === "set" && input.value === undefined) {
+    return { ok: false, code: "INVALID_INPUT", message: "set 操作必须提供非 undefined 的 value。" }
   }
 
   if (input.op === "set" && parsed.segments.length === 0) {
@@ -247,7 +274,7 @@ export function applyStateSyncMutation(
     } else if (input.op === "patch") {
       const partial = input.value as Record<string, unknown>
       for (const [k, v] of Object.entries(partial)) {
-        if (JSON.stringify(nextRoot[k]) !== JSON.stringify(v)) {
+        if (!Object.prototype.hasOwnProperty.call(nextRoot, k) || JSON.stringify(nextRoot[k]) !== JSON.stringify(v)) {
           changed = true
         }
         nextRoot[k] = structuredClone(v)
@@ -268,6 +295,7 @@ export function applyStateSyncMutation(
           return { ok: true, nextRoot, changed: false, bytes }
         }
         curr[seg] = {}
+        changed = true
         curr = curr[seg] as Record<string, unknown>
       } else {
         const nextNode = curr[seg]
@@ -279,20 +307,24 @@ export function applyStateSyncMutation(
     }
 
     if (input.op === "set") {
-      const beforeStr = Object.prototype.hasOwnProperty.call(curr, targetKey) ? JSON.stringify(curr[targetKey]) : undefined
+      const hasKey = Object.prototype.hasOwnProperty.call(curr, targetKey)
+      const beforeStr = hasKey ? JSON.stringify(curr[targetKey]) : undefined
       const afterStr = JSON.stringify(input.value)
-      changed = beforeStr !== afterStr
+      if (!hasKey || beforeStr !== afterStr) {
+        changed = true
+      }
       curr[targetKey] = structuredClone(input.value)
     } else if (input.op === "patch") {
       if (!Object.prototype.hasOwnProperty.call(curr, targetKey) || curr[targetKey] === undefined) {
         curr[targetKey] = {}
+        changed = true
       } else if (!isPlainObject(curr[targetKey])) {
         return { ok: false, code: "PATH_CONFLICT", message: `目标节点不是普通对象，无法执行 patch。` }
       }
       const targetObj = curr[targetKey] as Record<string, unknown>
       const partial = input.value as Record<string, unknown>
       for (const [k, v] of Object.entries(partial)) {
-        if (JSON.stringify(targetObj[k]) !== JSON.stringify(v)) {
+        if (!Object.prototype.hasOwnProperty.call(targetObj, k) || JSON.stringify(targetObj[k]) !== JSON.stringify(v)) {
           changed = true
         }
         targetObj[k] = structuredClone(v)
@@ -363,7 +395,7 @@ export const stateSyncCustomDocIdSchema = z.string().regex(STATE_SYNC_CUSTOM_DOC
 
 export const stateSyncDocCreateSchema = z.object({
   docId: stateSyncCustomDocIdSchema.optional(),
-  initialData: z.record(z.string(), z.unknown()).optional().superRefine((val, ctx) => {
+  initialData: z.custom<Record<string, unknown>>((v) => isPlainObject(v), "initialData 必须为普通 JSON 对象。").optional().superRefine((val, ctx) => {
     if (val === undefined) return
     const res = validateStateSyncJsonValue(val, { requirePlainObject: true, maxBytes: STATE_SYNC_DOC_MAX_BYTES })
     if (!res.ok) {
@@ -376,19 +408,22 @@ export const stateSyncDocCreateSchema = z.object({
   ttlSeconds: z.number().int().min(STATE_SYNC_TTL_MIN_SECONDS).max(STATE_SYNC_TTL_MAX_SECONDS).nullable().optional(),
 }).strict()
 
-export const stateSyncMutateHttpSchema = z.object({
-  op: z.enum(STATE_SYNC_MUTATION_OPS),
-  path: stateSyncPathSchema,
-  value: z.unknown().optional(),
-  expectedRev: z.number().int().min(0).optional(),
-  actorClientId: z.string().regex(STATE_SYNC_CLIENT_ID_REGEX).optional(),
-  actorName: z.string().trim().min(1).max(64).optional(),
-}).strict().superRefine((data, ctx) => {
+export function refineStateSyncMutation(
+  data: { op: StateSyncMutationOp; path: string; value?: unknown },
+  ctx: z.RefinementCtx,
+): void {
   if (data.op === "delete" && data.path === "/") {
     ctx.addIssue({
       code: "custom",
       path: ["path"],
       message: "禁止删除根路径 /。",
+    })
+  }
+  if (data.op === "set" && data.value === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["value"],
+      message: "set 操作必须提供 value。",
     })
   }
   if (data.op === "patch" && !isPlainObject(data.value)) {
@@ -415,45 +450,36 @@ export const stateSyncMutateHttpSchema = z.object({
       })
     }
   }
+}
+
+export const stateSyncMetaSchema = z.custom<Record<string, unknown>>((v) => isPlainObject(v), "meta 必须为普通 JSON 对象。").optional().superRefine((v, ctx) => {
+  if (v === undefined) return
+  const res = validateStateSyncJsonValue(v, {
+    maxBytes: STATE_SYNC_META_MAX_BYTES,
+    requirePlainObject: true,
+  })
+  if (!res.ok) {
+    ctx.addIssue({
+      code: "custom",
+      message: res.message,
+    })
+  }
 })
+
+export const stateSyncMutateHttpSchema = z.object({
+  op: z.enum(STATE_SYNC_MUTATION_OPS),
+  path: stateSyncPathSchema,
+  value: z.unknown().optional(),
+  expectedRev: z.number().int().min(0).optional(),
+  actorClientId: z.string().regex(STATE_SYNC_CLIENT_ID_REGEX).optional(),
+  actorName: z.string().trim().min(1).max(64).optional(),
+}).strict().superRefine(refineStateSyncMutation)
 
 export const stateSyncOnDisconnectActionSchema = z.object({
   op: z.enum(STATE_SYNC_MUTATION_OPS),
   path: stateSyncPathSchema,
   value: z.unknown().optional(),
-}).strict().superRefine((data, ctx) => {
-  if (data.op === "delete" && data.path === "/") {
-    ctx.addIssue({
-      code: "custom",
-      path: ["path"],
-      message: "禁止在 onDisconnect 中删除根路径 /。",
-    })
-  }
-  if (data.op === "patch" && !isPlainObject(data.value)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["value"],
-      message: "patch 动作的载荷必须是普通 JSON 对象。",
-    })
-  }
-  if (data.op === "set" && data.path === "/" && !isPlainObject(data.value)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["value"],
-      message: "根路径 set 动作的载荷必须是普通 JSON 对象。",
-    })
-  }
-  if (data.value !== undefined) {
-    const valRes = validateStateSyncJsonValue(data.value, { maxBytes: STATE_SYNC_WRITE_MAX_BYTES })
-    if (!valRes.ok) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["value"],
-        message: valRes.message,
-      })
-    }
-  }
-})
+}).strict().superRefine(refineStateSyncMutation)
 
 const wsRequestIdSchema = z.string().min(1).max(128)
 
@@ -462,10 +488,7 @@ const wsAuthFrameSchema = z.object({
   token: z.string().min(1).max(512),
   clientId: z.string().regex(STATE_SYNC_CLIENT_ID_REGEX).optional(),
   clientName: z.string().trim().min(1).max(64).optional(),
-  meta: z.record(z.string(), z.unknown()).optional().refine(
-    (v) => v === undefined || utf8JsonByteLength(v) <= STATE_SYNC_META_MAX_BYTES,
-    "meta 序列化后不能超过 2 KiB。",
-  ),
+  meta: stateSyncMetaSchema,
   paths: z.array(stateSyncPathSchema).max(STATE_SYNC_MAX_SUBSCRIBED_PATHS).optional(),
   sinceRev: z.number().int().min(0).optional(),
 }).strict()
@@ -490,39 +513,7 @@ const wsMutateFrameSchema = z.object({
   value: z.unknown().optional(),
   expectedRev: z.number().int().min(0).optional(),
   echo: z.boolean().optional().default(false),
-}).strict().superRefine((data, ctx) => {
-  if (data.op === "delete" && data.path === "/") {
-    ctx.addIssue({
-      code: "custom",
-      path: ["path"],
-      message: "禁止删除根路径 /。",
-    })
-  }
-  if (data.op === "patch" && !isPlainObject(data.value)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["value"],
-      message: "patch 载荷必须为普通 JSON 对象。",
-    })
-  }
-  if (data.op === "set" && data.path === "/" && !isPlainObject(data.value)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["value"],
-      message: "根节点必须为普通 JSON 对象。",
-    })
-  }
-  if (data.value !== undefined) {
-    const valRes = validateStateSyncJsonValue(data.value, { maxBytes: STATE_SYNC_WRITE_MAX_BYTES })
-    if (!valRes.ok) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["value"],
-        message: valRes.message,
-      })
-    }
-  }
-})
+}).strict().superRefine(refineStateSyncMutation)
 
 const wsOnDisconnectSetFrameSchema = z.object({
   type: z.literal("onDisconnect.set"),
@@ -538,10 +529,7 @@ const wsOnDisconnectClearFrameSchema = z.object({
 const wsPresenceUpdateFrameSchema = z.object({
   type: z.literal("presence.update"),
   clientName: z.string().trim().min(1).max(64).optional(),
-  meta: z.record(z.string(), z.unknown()).optional().refine(
-    (v) => v === undefined || utf8JsonByteLength(v) <= STATE_SYNC_META_MAX_BYTES,
-    "meta 序列化后不能超过 2 KiB。",
-  ),
+  meta: stateSyncMetaSchema,
 }).strict().refine(
   (v) => v.clientName !== undefined || v.meta !== undefined,
   "presence.update 至少需要提供 clientName 或 meta。",
