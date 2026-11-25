@@ -126,19 +126,8 @@ export class ChannelHub {
 
   registerConnection(input: RegisterChannelConnectionInput): RegisterChannelConnectionResult {
     const now = input.now ?? Date.now()
-    const state = this.getOrCreateChannel(input.channelId, input.seqFloor ?? 0, now)
-    this.pruneBuffer(state, now)
 
-    if (input.isObserver) {
-      if (state.observerCount >= this.config.maxObserversPerChannel) {
-        return {
-          ok: false,
-          code: "OBSERVER_LIMIT_EXCEEDED",
-          closeCode: CHANNEL_WS_CLOSE_CODES.LIMIT_EXCEEDED,
-          message: "当前频道的调试台连接数已达上限。",
-        }
-      }
-    } else {
+    if (!input.isObserver) {
       if (this.globalProductionCount >= this.config.maxGlobalConnections) {
         return {
           ok: false,
@@ -156,15 +145,29 @@ export class ChannelHub {
           message: "当前账号的频道连接数已达上限。",
         }
       }
-      if (state.productionCount >= this.config.maxConnectionsPerChannel) {
+    }
+
+    const existingState = this.channels.get(input.channelId)
+    if (input.isObserver) {
+      if ((existingState?.observerCount ?? 0) >= this.config.maxObserversPerChannel) {
         return {
           ok: false,
-          code: "CHANNEL_CONNECTION_LIMIT_EXCEEDED",
+          code: "OBSERVER_LIMIT_EXCEEDED",
           closeCode: CHANNEL_WS_CLOSE_CODES.LIMIT_EXCEEDED,
-          message: "当前频道的在线连接数已达上限。",
+          message: "当前频道的调试台连接数已达上限。",
         }
       }
+    } else if ((existingState?.productionCount ?? 0) >= this.config.maxConnectionsPerChannel) {
+      return {
+        ok: false,
+        code: "CHANNEL_CONNECTION_LIMIT_EXCEEDED",
+        closeCode: CHANNEL_WS_CLOSE_CODES.LIMIT_EXCEEDED,
+        message: "当前频道的在线连接数已达上限。",
+      }
     }
+
+    const state = this.getOrCreateChannel(input.channelId, input.seqFloor ?? 0, now)
+    this.pruneBuffer(state, now)
 
     const connection: LiveChannelConnection = {
       connectionId: `conn_${randomUUID().replaceAll("-", "")}`,
@@ -184,6 +187,18 @@ export class ChannelHub {
       rateLastRefillMs: now,
     }
 
+    // Broadcast join to existing sockets BEFORE inserting the new connection so
+    // any cascading eviction (presence.leave) cannot reach this socket before `ready`,
+    // and the presence snapshot built below reflects any evicted broken sockets.
+    if (!connection.isObserver) {
+      this.broadcastFrame(state, {
+        type: "presence.join",
+        member: toPresenceMember(connection),
+      })
+    }
+
+    // Re-attach state in case evicting all prior broken sockets pruned the empty entry.
+    this.channels.set(input.channelId, state)
     state.connections.set(connection.connectionId, connection)
     this.connectionsById.set(connection.connectionId, connection)
     if (connection.isObserver) {
@@ -205,12 +220,6 @@ export class ChannelHub {
     }
 
     const presence = this.buildPresenceList(state)
-    if (!connection.isObserver) {
-      this.broadcastFrame(state, {
-        type: "presence.join",
-        member: toPresenceMember(connection),
-      }, connection.connectionId)
-    }
 
     return {
       ok: true,
@@ -224,7 +233,7 @@ export class ChannelHub {
     }
   }
 
-  unregisterConnection(channelId: string, connectionId: string): void {
+  unregisterConnection(channelId: string, connectionId: string, broadcastLeave = true): void {
     const state = this.channels.get(channelId)
     if (!state) return
     const connection = state.connections.get(connectionId)
@@ -241,10 +250,12 @@ export class ChannelHub {
       if (nextAccountCount <= 0) this.productionCountByAccount.delete(connection.ownerId)
       else this.productionCountByAccount.set(connection.ownerId, nextAccountCount)
 
-      this.broadcastFrame(state, {
-        type: "presence.leave",
-        member: toPresenceMember(connection),
-      })
+      if (broadcastLeave) {
+        this.broadcastFrame(state, {
+          type: "presence.leave",
+          member: toPresenceMember(connection),
+        })
+      }
     }
 
     this.pruneChannelIfIdle(channelId, state, Date.now())
@@ -347,9 +358,11 @@ export class ChannelHub {
   consumeWsPublishRate(connectionId: string, now = Date.now()): boolean {
     const connection = this.connectionsById.get(connectionId)
     if (!connection) return false
-    const elapsedSec = Math.max(0, (now - connection.rateLastRefillMs) / 1000)
-    connection.rateTokens = Math.min(this.config.wsBurst, connection.rateTokens + elapsedSec * this.config.wsRatePerSec)
-    connection.rateLastRefillMs = now
+    if (now > connection.rateLastRefillMs) {
+      const elapsedSec = (now - connection.rateLastRefillMs) / 1000
+      connection.rateTokens = Math.min(this.config.wsBurst, connection.rateTokens + elapsedSec * this.config.wsRatePerSec)
+      connection.rateLastRefillMs = now
+    }
     if (connection.rateTokens < 1) return false
     connection.rateTokens -= 1
     return true
@@ -357,9 +370,11 @@ export class ChannelHub {
 
   consumeHttpPublishRate(channelId: string, now = Date.now()): { readonly allowed: boolean; readonly retryAfterSec: number } {
     const state = this.getOrCreateChannel(channelId, 0, now)
-    const elapsedSec = Math.max(0, (now - state.httpRate.lastRefillMs) / 1000)
-    state.httpRate.tokens = Math.min(this.config.httpBurst, state.httpRate.tokens + elapsedSec * this.config.httpRatePerSec)
-    state.httpRate.lastRefillMs = now
+    if (now > state.httpRate.lastRefillMs) {
+      const elapsedSec = (now - state.httpRate.lastRefillMs) / 1000
+      state.httpRate.tokens = Math.min(this.config.httpBurst, state.httpRate.tokens + elapsedSec * this.config.httpRatePerSec)
+      state.httpRate.lastRefillMs = now
+    }
     if (state.httpRate.tokens < 1) {
       const needed = 1 - state.httpRate.tokens
       const retryAfterSec = Math.max(1, Math.ceil(needed / this.config.httpRatePerSec))
@@ -374,7 +389,7 @@ export class ChannelHub {
     if (!state) return 0
     const targets = [...state.connections.values()]
     for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reason)
+      this.forceCloseConnection(conn, closeCode, reason, false)
     }
     this.channels.delete(channelId)
     return targets.length
@@ -393,7 +408,7 @@ export class ChannelHub {
         && (!predicate || predicate(conn)),
     )
     for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reason)
+      this.forceCloseConnection(conn, closeCode, reason, true)
     }
     return targets.length
   }
@@ -401,7 +416,7 @@ export class ChannelHub {
   disconnectByOwner(ownerId: string, closeCode: number, reason: string): number {
     const targets = [...this.connectionsById.values()].filter((conn) => conn.ownerId === ownerId)
     for (const conn of targets) {
-      this.forceCloseConnection(conn, closeCode, reason)
+      this.forceCloseConnection(conn, closeCode, reason, false)
     }
     return targets.length
   }
@@ -409,7 +424,7 @@ export class ChannelHub {
   shutdownAll(): void {
     const targets = [...this.connectionsById.values()]
     for (const conn of targets) {
-      this.forceCloseConnection(conn, CHANNEL_WS_CLOSE_CODES.GOING_AWAY, "Server shutting down")
+      this.forceCloseConnection(conn, CHANNEL_WS_CLOSE_CODES.GOING_AWAY, "Server shutting down", false)
     }
   }
 
@@ -489,8 +504,8 @@ export class ChannelHub {
     this.forceCloseConnection(connection, CHANNEL_WS_CLOSE_CODES.TIMEOUT_OR_SLOW, "Slow consumer or broken socket")
   }
 
-  private forceCloseConnection(connection: LiveChannelConnection, closeCode: number, reason: string): void {
-    this.unregisterConnection(connection.channelId, connection.connectionId)
+  private forceCloseConnection(connection: LiveChannelConnection, closeCode: number, reason: string, broadcastLeave = true): void {
+    this.unregisterConnection(connection.channelId, connection.connectionId, broadcastLeave)
     try {
       connection.socket.close(closeCode, reason)
     } catch (error) {

@@ -23,8 +23,8 @@ export type ChannelLimitsConfig = {
 }
 
 function positiveInt(raw: string | undefined, fallback: number): number {
-  if (!raw) return fallback
-  const parsed = Number.parseInt(raw, 10)
+  if (!raw || !/^\d+$/u.test(raw.trim())) return fallback
+  const parsed = Number.parseInt(raw.trim(), 10)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 

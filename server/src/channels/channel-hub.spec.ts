@@ -443,6 +443,7 @@ describe("ChannelHub", () => {
     const s1 = createFakeSocket()
     const s2 = createFakeSocket()
 
+    const now = 1_700_000_000_000
     const r1 = hub.registerConnection({
       channelId: "ch_1",
       ownerId: "u1",
@@ -454,6 +455,7 @@ describe("ChannelHub", () => {
       clientName: null,
       meta: {},
       socket: s1.socket,
+      now,
     })
     const r2 = hub.registerConnection({
       channelId: "ch_2",
@@ -466,11 +468,11 @@ describe("ChannelHub", () => {
       clientName: null,
       meta: {},
       socket: s2.socket,
+      now,
     })
     expect(r1.ok && r2.ok).toBe(true)
     if (!r1.ok) return
 
-    const now = 1_700_000_000_000
     expect(hub.consumeWsPublishRate(r1.connection.connectionId, now)).toBe(true)
     expect(hub.consumeWsPublishRate(r1.connection.connectionId, now)).toBe(true)
     expect(hub.consumeWsPublishRate(r1.connection.connectionId, now)).toBe(false)
@@ -485,5 +487,155 @@ describe("ChannelHub", () => {
     hub.shutdownAll()
     expect(s2.closed[0]?.code).toBe(1001)
     expect(hub.getOnlineCount("ch_2")).toBe(0)
+  })
+
+  it("does not emit presence.leave during full channel teardown or send pre-ready presence.leave on join eviction", () => {
+    const hub = new ChannelHub(loadChannelConfig({}))
+    const broken = createFakeSocket({ throwOnSend: true })
+    const healthy = createFakeSocket()
+
+    hub.registerConnection({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t1",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "broken-old",
+      clientName: null,
+      meta: {},
+      socket: broken.socket,
+    })
+
+    // Joining while an existing socket is broken evicts the broken socket first:
+    // the new socket must receive 0 frames before ready, and readySnapshot.presence must exclude broken-old.
+    const rHealthy = hub.registerConnection({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t1",
+      role: "publish",
+      isObserver: false,
+      clientId: "remote-1",
+      clientName: "遥控器",
+      meta: {},
+      socket: healthy.socket,
+    })
+    expect(rHealthy.ok).toBe(true)
+    if (!rHealthy.ok) return
+    expect(healthy.sent).toEqual([])
+    expect(rHealthy.readySnapshot.presence.map((m) => m.clientId)).toEqual(["remote-1"])
+    expect(broken.closed).toEqual([{ code: CHANNEL_WS_CLOSE_CODES.TIMEOUT_OR_SLOW, reason: expect.any(String) }])
+
+    // Another client joins -> publish-only socket receives presence.join
+    const second = createFakeSocket({ throwOnSend: true })
+    hub.registerConnection({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t1",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "screen-2",
+      clientName: null,
+      meta: {},
+      socket: second.socket,
+    })
+    expect(healthy.sent.some((m) => m.type === "presence.join")).toBe(true)
+    healthy.sent.length = 0
+
+    // disconnectByChannel must NOT broadcast presence.leave or double-close the broken socket with 4008
+    expect(hub.disconnectByChannel("ch_1", CHANNEL_WS_CLOSE_CODES.REVOKED, "Channel deleted")).toBe(2)
+    expect(healthy.sent).toEqual([])
+    expect(healthy.closed).toEqual([{ code: 4003, reason: "Channel deleted" }])
+    expect(second.closed).toEqual([{ code: 4003, reason: "Channel deleted" }])
+  })
+
+  it("enforces seqFloor non-regression, account/global caps, and observer silent unregister", () => {
+    const config = { ...loadChannelConfig({}), maxConnectionsPerAccount: 1, maxGlobalConnections: 2 }
+    const hub = new ChannelHub(config)
+    const s1 = createFakeSocket()
+    const s2 = createFakeSocket()
+    const s3 = createFakeSocket()
+    const s4 = createFakeSocket()
+
+    const r1 = hub.registerConnection({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t1",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "c1",
+      clientName: null,
+      meta: {},
+      seqFloor: 50,
+      afterSeq: 10,
+      socket: s1.socket,
+    })
+    expect(r1.ok).toBe(true)
+    if (!r1.ok) return
+    expect(r1.readySnapshot.latestSeq).toBe(50)
+    expect(r1.readySnapshot.replayTruncated).toBe(true)
+
+    // Account cap (1) blocks second prod connection for u1
+    expect(hub.registerConnection({
+      channelId: "ch_2",
+      ownerId: "u1",
+      credentialType: "channel_token",
+      credentialId: "t2",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "c2",
+      clientName: null,
+      meta: {},
+      socket: s2.socket,
+    }).ok).toBe(false)
+
+    // Another account fits under global cap (2)
+    expect(hub.registerConnection({
+      channelId: "ch_3",
+      ownerId: "u2",
+      credentialType: "channel_token",
+      credentialId: "t3",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "c3",
+      clientName: null,
+      meta: {},
+      socket: s3.socket,
+    }).ok).toBe(true)
+
+    // Global cap (2) blocks third prod connection
+    expect(hub.registerConnection({
+      channelId: "ch_4",
+      ownerId: "u3",
+      credentialType: "channel_token",
+      credentialId: "t4",
+      role: "subscribe",
+      isObserver: false,
+      clientId: "c4",
+      clientName: null,
+      meta: {},
+      socket: s4.socket,
+    }).ok).toBe(false)
+
+    // Observer unregister stays silent
+    const obs = createFakeSocket()
+    const rObs = hub.registerConnection({
+      channelId: "ch_1",
+      ownerId: "u1",
+      credentialType: "console_ticket",
+      credentialId: "dbg",
+      role: "pubsub",
+      isObserver: true,
+      clientId: "console-debugger",
+      clientName: null,
+      meta: {},
+      socket: obs.socket,
+    })
+    expect(rObs.ok).toBe(true)
+    if (rObs.ok) hub.unregisterConnection("ch_1", rObs.connection.connectionId)
+    expect(s1.sent.filter((m) => m.type === "presence.leave")).toEqual([])
   })
 })
