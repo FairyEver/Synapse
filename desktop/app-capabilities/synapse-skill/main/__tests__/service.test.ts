@@ -244,6 +244,8 @@ describe("SynapseSkillService", () => {
     expect(detail.content).toContain("cloud-tables/public-apps.md")
     expect(detail.content).toContain("channels/index.md")
     expect(detail.content).toContain("channels/remote-screen.md")
+    expect(detail.content).toContain("state-sync/index.md")
+    expect(detail.content).toContain("state-sync/multiplayer-game.md")
     expect(detail.content).toContain("workflow/index.md")
     expect(detail.content).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
     expect(source.description).not.toMatch(/wecom|企业微信|Enterprise WeChat/iu)
@@ -269,6 +271,8 @@ describe("SynapseSkillService", () => {
       "database/index.md",
       "drive/index.md",
       "skill-authoring/index.md",
+      "state-sync/index.md",
+      "state-sync/multiplayer-game.md",
       "todos/index.md",
       "web-publishing/index.md",
       "workflow/index.md",

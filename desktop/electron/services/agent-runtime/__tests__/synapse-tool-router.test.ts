@@ -366,3 +366,28 @@ it("discovers channel tools for remote-screen, web-to-backend, and channel creat
   expect(channelCreate.tools.map((t) => t.name)).toContain("app_channels_channel_create")
   expect(channelCreate.tools.map((t) => t.name)).toContain("app_channels_event_publish")
 })
+
+it("discovers state_sync tools for multiplayer games, shared JSON, wilddog, and SDK URL queries", async () => {
+  const index = indexOf(await searchSynapseTools({ domain: "state_sync" }))
+  expect(index.total).toBe(14)
+  expect(isSynapseToolReadOnly("app_state_sync_space_create")).toBe(false)
+  expect(isSynapseToolReadOnly("app_state_sync_doc_mutate")).toBe(false)
+  expect(isSynapseToolReadOnly("app_state_sync_doc_get")).toBe(true)
+  expect(isSynapseToolReadOnly("app_state_sync_publish_preflight_get")).toBe(true)
+
+  const multiplayer = searchMatches(await searchSynapseTools({ query: "做一个多人联机小游戏", limit: 5 }))
+  expect(multiplayer.tools.map((t) => t.name)).toEqual([
+    "app_state_sync_publish_preflight_get",
+    "app_state_sync_space_create",
+    "app_state_sync_token_create",
+    "app_drive_folder_upload",
+    "app_drive_site_create",
+  ])
+  expect(multiplayer.guidance).toContain("state-sync/multiplayer-game.md")
+
+  for (const query of ["状态同步", "共享 JSON 实时同步", "野狗", "SDK 最新版本链接"]) {
+    const result = searchMatches(await searchSynapseTools({ query, limit: 5 }))
+    expect(result.tools.map((t) => t.name), query).toContain("app_state_sync_publish_preflight_get")
+    expect(result.tools.some((t) => t.domain === "state_sync"), query).toBe(true)
+  }
+})

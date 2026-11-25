@@ -17,6 +17,7 @@ import { excludedSearchDomains, lexiconTokens } from "./synapse-tool-router-lexi
 import { mailSearchIntent } from "./synapse-tool-router-mail"
 import { cloudTableAppSearchIntent } from "./synapse-tool-router-cloud-app"
 import { channelAppSearchIntent } from "./synapse-tool-router-channel-app"
+import { stateSyncAppSearchIntent } from "./synapse-tool-router-state-sync-app"
 
 export const SYNAPSE_TOOL_ROUTER_SERVER_NAME = "synapse-tool-router"
 export const SYNAPSE_TOOL_ROUTER_SEARCH_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVER_NAME}__search`
@@ -24,6 +25,7 @@ export const SYNAPSE_TOOL_ROUTER_INVOKE_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVE
 export const SYNAPSE_MCP_TOOL_PREFIX = "mcp__synapse-mcp__"
 
 const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  state_sync: ["状态同步", "同步空间", "状态房间", "多人联机", "联机小游戏", "共享 JSON", "状态树", "野狗", "state sync", "wilddog", "sdk"],
   channels: ["频道", "实时频道", "大屏遥控器", "手机遥控器", "channel", "realtime signaling", "websocket"],
   cloud_tables: ["云端数据表", "云表", "cloud table", "anonymous form", "匿名填写"],
   skill_hub: ["Synapse Skill Hub", "团队 Skill", "本人团队", "上传 Skill", "Skill 发布", "Skill 回执"],
@@ -308,11 +310,13 @@ export function buildSynapseToolCatalog(): readonly SynapseToolCatalogEntry[] {
 export async function searchSynapseTools(input: SynapseToolSearchInput): Promise<SynapseToolSearchResult> {
   const query = (input.query ?? "").trim()
   const domain = input.domain?.trim() || (
-    /频道|\bchannels?\b/iu.test(query) && !/云盘|网盘|云文档|\bdrive\b/iu.test(query)
-      ? "channels"
-      : /云端数据表|云表|\bcloud[ _-]+tables?\b/iu.test(query)
-        ? "cloud_tables"
-        : undefined
+    /状态同步|\bstate[ _-]+sync\b/iu.test(query) && !/云盘|网盘|云文档|\bdrive\b/iu.test(query)
+      ? "state_sync"
+      : /频道|\bchannels?\b/iu.test(query) && !/云盘|网盘|云文档|\bdrive\b/iu.test(query)
+        ? "channels"
+        : /云端数据表|云表|\bcloud[ _-]+tables?\b/iu.test(query)
+          ? "cloud_tables"
+          : undefined
   )
   if (domain && !availableDomains.includes(domain)) {
     return { mode: "search", tools: [], domains: availableDomains }
@@ -342,6 +346,19 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
       tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
       domains: availableDomains,
       guidance: "普通邮件、邮箱、收件箱默认使用 mail；只有明确站内信或其带类型引用才使用 mail_internal。单一已配置邮箱直接使用，不要询问选择账号。先读邮箱 Skill，发现工具不等于授权执行。",
+    }
+  }
+  const stateSyncAppTools = stateSyncAppSearchIntent(query, input.domain?.trim())
+  if (stateSyncAppTools) {
+    const entries = stateSyncAppTools.toolNames.flatMap(name => {
+      const entry = catalogByName.get(name)
+      return entry && (!input.domain?.trim() || matchesScope(entry)) ? [entry] : []
+    }).slice(0, limit)
+    return {
+      mode: "search",
+      tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
+      domains: availableDomains,
+      guidance: stateSyncAppTools.guidance,
     }
   }
   const channelAppTools = channelAppSearchIntent(query, input.domain?.trim())

@@ -26,6 +26,7 @@ export type SynapseActionRouterDeps = {
   readonly skillHubDispatch?: DomainDispatch
   readonly cloudTablesDispatch?: DomainDispatch
   readonly channelsDispatch?: DomainDispatch
+  readonly stateSyncDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
   readonly workflowDispatch: DomainDispatch
@@ -57,6 +58,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "channels") {
         if (!deps.channelsDispatch) throw new Error("Channel dispatcher is not configured")
         return deps.channelsDispatch(action, params, context)
+      }
+      if (domainId === "state_sync") {
+        if (!deps.stateSyncDispatch) throw new Error("State sync dispatcher is not configured")
+        return deps.stateSyncDispatch(action, params, context)
       }
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)

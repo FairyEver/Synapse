@@ -28,6 +28,7 @@ const CAPABILITY_ACTIONS = [
   "read_chunk",
   "write",
   "patch",
+  "mutate",
   "resize",
   "execute",
   "extract",
