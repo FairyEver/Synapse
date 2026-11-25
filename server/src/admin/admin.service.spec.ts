@@ -225,11 +225,14 @@ describe("AdminService", () => {
     }))
   })
 
-  it("disables a user without returning the password hash", async () => {
+  it("disables a user without returning the password hash and notifies api key listeners only on disable", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService)
+    const events: unknown[] = []
+    const notifier = { emit: vi.fn((event: unknown) => events.push(event)) }
+    const service = new AdminService(prisma as unknown as PrismaService, undefined, undefined, undefined, notifier as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" })
+    await service.updateUserStatus("user-1", { status: "active" })
 
     expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "user-1" },
@@ -246,6 +249,7 @@ describe("AdminService", () => {
     }))
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("modulePermissions")
+    expect(events).toEqual([{ kind: "user_disabled", userId: "user-1" }])
   })
 
   it("updates admin-only user notes without auditing note content", async () => {

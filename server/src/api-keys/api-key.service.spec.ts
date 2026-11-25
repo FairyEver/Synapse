@@ -331,6 +331,36 @@ describe("ApiKeyService", () => {
       channelResources: { mode: "selected", channelIds: ["ch_foreign"] },
     })).rejects.toBeInstanceOf(BadRequestException)
 
+    await expect(service.createForUser("user-1", {
+      name: "遥控器",
+      scopes: ["channels.publish"],
+      channelResources: { mode: "all_owned", channelIds: ["ch_1"] },
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    tx.channel.findMany.mockResolvedValueOnce([{ id: "ch_1", ownerId: "user-1" }])
+    tx.userApiKey.create.mockImplementationOnce(async ({ data }) => ({
+      id: "key-ch-1",
+      name: data.name,
+      keyPrefix: data.keyPrefix,
+      scopes: data.scopes,
+      lastUsedAt: null,
+      createdAt,
+      tableAccessMode: data.tableAccessMode,
+      tableIds: data.tableIds,
+      channelAccessMode: data.channelAccessMode,
+      channelIds: data.channelIds,
+    }))
+    await expect(service.createForUser("user-1", {
+      name: "遥控器",
+      scopes: ["channels.publish"],
+      channelResources: { mode: "selected", channelIds: ["ch_1"] },
+    })).resolves.toMatchObject({
+      apiKey: {
+        id: "key-ch-1",
+        channelResources: { mode: "selected", channelIds: ["ch_1"] },
+      },
+    })
+
     tx.channel.findMany.mockResolvedValueOnce([{ id: "ch_1", ownerId: "user-1" }])
     tx.userApiKey.findFirst.mockResolvedValueOnce({
       id: "key-1",

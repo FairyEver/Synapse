@@ -275,6 +275,9 @@ export class ApiKeyService {
   }
 
   private async assertChannelResources(tx: Prisma.TransactionClient, userId: string, resources: ChannelKeyResources): Promise<void> {
+    if (new Set(resources.channelIds).size !== resources.channelIds.length || (resources.mode === "all_owned" && resources.channelIds.length > 0)) {
+      throw new BadRequestException("频道资源范围无效。")
+    }
     if (resources.mode === "all_owned" || resources.channelIds.length === 0) return
     const channels = await tx.channel.findMany({
       where: { id: { in: resources.channelIds }, ownerId: userId },

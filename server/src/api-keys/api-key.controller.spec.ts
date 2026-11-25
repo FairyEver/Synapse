@@ -37,6 +37,7 @@ describe("ApiKeyController", () => {
       listForUser: vi.fn().mockResolvedValue([]),
       createForUser: vi.fn().mockResolvedValue({ apiKey: { id: "key-1" }, secret: "syn_sk_secret" }),
       updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }),
+      updateChannelResourcesForUser: vi.fn().mockResolvedValue({ id: "key-1", channelResources: { mode: "selected", channelIds: ["ch_1"] } }),
       renameForUser: vi.fn().mockResolvedValue({ id: "key-1", name: "生产环境" }),
       revokeForUser: vi.fn().mockResolvedValue({ ok: true }),
     }
@@ -74,6 +75,20 @@ describe("ApiKeyController", () => {
       id: "key-1",
       name: "生产环境",
     })
+    await expect(controller.update("key-1", {
+      channelResources: { mode: "selected", channelIds: ["ch_1"] },
+    }, request as never)).resolves.toEqual({
+      id: "key-1",
+      channelResources: { mode: "selected", channelIds: ["ch_1"] },
+    })
+    await expect(controller.create({
+      name: "遥控器",
+      scopes: ["channels.publish"],
+      channelResources: { mode: "all_owned", channelIds: [] },
+    }, request as never)).resolves.toEqual({
+      apiKey: { id: "key-1" },
+      secret: "syn_sk_secret",
+    })
     await expect(controller.revoke("key-1", request as never)).resolves.toEqual({ ok: true })
 
     expect(service.listForUser).toHaveBeenCalledWith("user-1")
@@ -81,8 +96,17 @@ describe("ApiKeyController", () => {
       name: "CLI",
       scopes: ["drive.public_link.download"],
     }, "203.0.113.12")
+    expect(service.createForUser).toHaveBeenCalledWith("user-1", {
+      name: "遥控器",
+      scopes: ["channels.publish"],
+      channelResources: { mode: "all_owned", channelIds: [] },
+    }, "203.0.113.12")
     expect(service.updateScopesForUser).toHaveBeenCalledWith("user-1", "key-1", {
       scopes: [],
+    }, "203.0.113.12")
+    expect(service.updateChannelResourcesForUser).toHaveBeenCalledWith("user-1", "key-1", {
+      mode: "selected",
+      channelIds: ["ch_1"],
     }, "203.0.113.12")
     expect(service.renameForUser).toHaveBeenCalledWith("user-1", "key-1", {
       name: "生产环境",
@@ -122,6 +146,13 @@ describe("ApiKeyController", () => {
       .toThrow("API key update request is invalid")
     expect(() => controller.update("key-1", { name: " " }, request as never))
       .toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", {
+      channelResources: { mode: "all_owned", channelIds: ["ch_1"] },
+    }, request as never)).toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", {
+      scopes: ["channels.publish"],
+      channelResources: { mode: "all_owned", channelIds: [] },
+    }, request as never)).toThrow("API key update request is invalid")
     expect(service.updateScopesForUser).not.toHaveBeenCalled()
     expect(service.renameForUser).not.toHaveBeenCalled()
 
