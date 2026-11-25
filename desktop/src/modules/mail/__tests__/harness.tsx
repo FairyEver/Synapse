@@ -2,11 +2,11 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { beforeEach, afterEach, vi } from "vitest"
 import type { MailBridge } from "../../../../app-capabilities/mail/shared/bridge"
-const mocks = vi.hoisted(() => ({ owner: "user", api: {} as Record<string, ReturnType<typeof vi.fn>>, changed: (_event: unknown) => undefined, identityChanged: (() => undefined) as () => void }))
+const mocks = vi.hoisted(() => ({ owner: "user", api: {} as Record<string, ReturnType<typeof vi.fn>>, openCompose: vi.fn(), changed: (_event: unknown) => undefined, identityChanged: (() => undefined) as () => void }))
 export { mocks }
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: mocks.owner } } } }) }))
 vi.mock("@/lib/electron-bridge", () => ({ getSynapseBridge: () => ({ account: { state: { onChanged: (listener: () => void) => { mocks.identityChanged = listener; return () => undefined } } } }) }))
-vi.mock("../api", () => ({ mailApi: () => mocks.api as unknown as MailBridge, mailError: (error: unknown) => error instanceof Error ? error.message : "邮箱操作失败" }))
+vi.mock("../api", () => ({ mailApi: () => mocks.api as unknown as MailBridge, mailError: (error: unknown) => error instanceof Error ? error.message : "邮箱操作失败", openMailCompose: (...args: unknown[]) => mocks.openCompose(...args) }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 export const summary = { id: "em_one", accountId: "ma_one", subject: "测试主题", from: [{ address: "a@example.com" }], to: [], cc: [], date: null, snippet: "", read: false, star: false, stale: false, attachmentCount: 0, revision: 1, bodyState: "remote" as const, locator: { accountId: "ma_one", folderId: "mf_one", uid: 1, uidValidity: "1" } }
 export const detail = { ...summary, attachments: [], headers: { replyTo: [], references: [], messageId: null }, bodyRef: null }
@@ -22,8 +22,8 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   }
-  mocks.owner = "user"; mocks.api = {}
-  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "syncGet", "messageCount", "uiScope", "onChanged", "draftList", "scheduledList", "scheduledGet", "scheduledCreate", "scheduledUpdate", "scheduledCancel", "scheduledSend", "scheduledBody", "operationGet"]) mocks.api[name] = vi.fn()
+  mocks.owner = "user"; mocks.api = {}; mocks.openCompose = vi.fn().mockResolvedValue(undefined)
+  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "syncGet", "messageCount", "uiScope", "onChanged", "draftList", "draftCreate", "scheduledList", "scheduledGet", "scheduledCreate", "scheduledUpdate", "scheduledCancel", "scheduledSend", "scheduledBody", "operationGet"]) mocks.api[name] = vi.fn()
   mocks.api.uiScope.mockResolvedValue({ ownerId: "user", generation: 1, notificationsSupported: true, notificationError: null })
   mocks.api.accountList.mockResolvedValue({ items: [account, { ...account, id: "ma_two", name: "个人" }], nextCursor: null })
   mocks.api.folderList.mockResolvedValue({ items: [{ id: "mf_one", accountId: "ma_one", role: "inbox", name: "收件箱", selectable: true }], nextCursor: null })
@@ -38,6 +38,6 @@ beforeEach(() => {
   mocks.api.onChanged.mockImplementation(listener => { listeners.add(listener); return () => { listeners.delete(listener) } })
   mocks.api.draftList.mockResolvedValue({ items: [], nextCursor: null })
   mocks.api.scheduledList.mockResolvedValue({ items: [], nextCursor: null })
-  mocks.api.scheduledBody.mockResolvedValue({ html: "<p>定时正文</p>", text: "定时正文" })
+  mocks.api.scheduledBody.mockResolvedValue({ html: "<p>定时正文</p>", text: "定时正文", cid: {} })
 })
 afterEach(() => { if (root) act(() => root!.unmount()); root = null; document.body.innerHTML = "" })

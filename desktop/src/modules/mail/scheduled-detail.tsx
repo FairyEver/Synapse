@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, CalendarClock, Download, FilePen, RefreshCw, Send, XCircle } from "lucide-react"
+import { ArrowLeft, CalendarClock, CopyPlus, Download, FilePen, RefreshCw, Send, XCircle } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,7 @@ function scheduledErrorDescription(detail: ScheduledSendDetail): string | null {
     return `自动发送失败（${detail.errorCode ?? "未知原因"}），可修改时间重试或取消并编辑。`
   }
   if (detail.state === "unknown") {
-    return "发送过程被中断或未收到完整回执，已停止自动重试以防重复发信。请先核验发送结果。"
+    return "发送过程被中断或未收到完整回执，已停止自动重试以防重复发信。请先核验发送结果，确认未发出时可另存为新草稿。"
   }
   return null
 }
@@ -44,6 +44,7 @@ export function MailScheduledDetail({
   onCancelAndEdit,
   onSendNow,
   onReconcile,
+  onCopyToDraft,
 }: {
   detail: ScheduledSendDetail
   busy: boolean
@@ -56,46 +57,69 @@ export function MailScheduledDetail({
   onCancelAndEdit(): Promise<void>
   onSendNow(): Promise<void>
   onReconcile(operationId: string): Promise<void>
+  onCopyToDraft(): Promise<void>
 }) {
-  const [body, setBody] = useState<{ html: string; text: string } | null>(null)
+  const [body, setBody] = useState<{ html: string; text: string; cid: Record<string, string>; unavailable?: boolean } | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
   const [bodyError, setBodyError] = useState<string | null>(null)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [confirmSendNow, setConfirmSendNow] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   useEffect(() => {
     let active = true
+    const blobs: string[] = []
     setBody(null)
     setBodyError(null)
     setBodyLoading(true)
     void mailApi().scheduledBody({ scheduledId: detail.id })
-      .then(result => { if (active) setBody(result) })
+      .then(result => {
+        if (!active) return
+        const cidUrls: Record<string, string> = {}
+        for (const [key, image] of Object.entries(result.cid ?? {})) {
+          const binary = atob(image.base64)
+          const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
+          const url = URL.createObjectURL(new Blob([bytes], { type: image.mime }))
+          blobs.push(url)
+          cidUrls[key] = url
+        }
+        setBody({ html: result.html, text: result.text, cid: cidUrls, unavailable: result.unavailable })
+      })
       .catch(cause => { if (active) setBodyError(mailError(cause)) })
       .finally(() => { if (active) setBodyLoading(false) })
-    return () => { active = false }
+    return () => {
+      active = false
+      for (const blob of blobs) URL.revokeObjectURL(blob)
+    }
   }, [detail.id, detail.bodyRef])
 
-  const projection = useMemo(() => (body?.html ? sanitizeMailHtml(body.html, { cid: {}, remote: {} }) : null), [body])
+  const projection = useMemo(() => (body?.html ? sanitizeMailHtml(body.html, { cid: body.cid ?? {}, remote: {} }) : null), [body])
   const mutable = detail.state === "pending" || detail.state === "missed" || detail.state === "failed"
   const meta = scheduledStateMeta[detail.state]
   const notice = scheduledErrorDescription(detail)
   const canReconcile = !!detail.operationId && (detail.state === "unknown" || (detail.state === "sent" && detail.receipt && detail.receipt.sentCopyState !== "saved"))
+  const canCopyDraft = !!body && !body.unavailable && (detail.state === "unknown" || detail.state === "sent" || detail.state === "cancelled")
 
   return (
     <article aria-label="定时邮件详情" className="flex h-full min-h-0 min-w-0 flex-col bg-background" key={detail.id}>
-      <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
+      <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-y-1 border-b bg-background px-3 py-1">
         <SystemAppTopBarActionButton iconOnly className="@min-[53rem]/mail-client:hidden" aria-label="返回定时发送列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
         {mutable && (
           <>
             <SystemAppTopBarActionButton disabled={busy} onClick={() => setRescheduleOpen(true)} data-track="mail.scheduled.reschedule"><CalendarClock />修改时间</SystemAppTopBarActionButton>
             <SystemAppTopBarActionButton disabled={busy} onClick={() => setConfirmSendNow(true)} data-track="mail.scheduled.send_now"><Send />立即发送</SystemAppTopBarActionButton>
             <SystemAppTopBarActionButton disabled={busy} onClick={() => void onCancelAndEdit()} data-track="mail.scheduled.edit"><FilePen />取消并编辑</SystemAppTopBarActionButton>
-            <SystemAppTopBarActionButton disabled={busy} tone="destructive" onClick={() => void onCancel()} data-track="mail.scheduled.cancel"><XCircle />取消定时</SystemAppTopBarActionButton>
+            <SystemAppTopBarActionButton disabled={busy} tone="destructive" onClick={() => setConfirmCancel(true)} data-track="mail.scheduled.cancel"><XCircle />取消定时</SystemAppTopBarActionButton>
           </>
         )}
         {canReconcile && (
           <SystemAppTopBarActionButton disabled={busy} onClick={() => void onReconcile(detail.operationId!)} data-track="mail.scheduled.reconcile">
             <RefreshCw />{detail.state === "unknown" ? "核验发送结果" : "核验已发送副本"}
+          </SystemAppTopBarActionButton>
+        )}
+        {canCopyDraft && (
+          <SystemAppTopBarActionButton disabled={busy} onClick={() => void onCopyToDraft()} data-track="mail.scheduled.copy_draft">
+            <CopyPlus />另存为新草稿
           </SystemAppTopBarActionButton>
         )}
       </div>
@@ -159,7 +183,11 @@ export function MailScheduledDetail({
           <div className="space-y-3">
             {bodyLoading && <Skeleton className="h-32 w-full" />}
             {bodyError && <p role="alert" className="text-sm text-destructive">{bodyError}</p>}
-            {projection ? (
+            {body?.unavailable ? (
+              <p className="text-sm text-muted-foreground">
+                {detail.state === "sent" ? "邮件已发出，本地定时副本已清理，请在「已发送」文件夹查看。" : "定时发送已取消，原内容已退回草稿箱或已清理。"}
+              </p>
+            ) : projection ? (
               <MailHtmlBody projection={projection} onLink={onLink} />
             ) : (
               body && <pre className="font-sans text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">{body.text}</pre>
@@ -186,8 +214,23 @@ export function MailScheduledDetail({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
-            <Button disabled={busy} onClick={() => { void onSendNow().then(() => setConfirmSendNow(false)) }}>
+            <Button disabled={busy} onClick={() => { void onSendNow().finally(() => setConfirmSendNow(false)) }}>
               {busy ? "发送中…" : "立即发送"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmCancel} onOpenChange={open => { if (!busy) setConfirmCancel(open) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>取消定时发送？</AlertDialogTitle>
+            <AlertDialogDescription>取消后该邮件不会自动发出，内容将退回草稿箱以便继续编辑。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>保留定时</AlertDialogCancel>
+            <Button variant="destructive" disabled={busy} onClick={() => { void onCancel().finally(() => setConfirmCancel(false)) }}>
+              {busy ? "取消中…" : "确认取消定时"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -235,6 +235,10 @@ describe("external mail scheduled sends", () => {
       const retrying = await r.scheduler.get(r.ctx, { scheduledId: created.id })
       expect(retrying.state).toBe("pending")
       expect(retrying.errorCode).toBe("NETWORK_ERROR")
+      expect(retrying.operationId).toBeNull()
+      // Transient failed operation should be cleaned up so retries do not accumulate stale receipts
+      const opsAfterRetry = await r.repo.page(r.ctx, "operations", { accountId: r.account.id, limit: 20 })
+      expect(opsAfterRetry.items).toHaveLength(0)
 
       // Second attempt fails with uncertain outcome -> unknown, never retried
       vi.mocked(r.smtp.submit).mockRejectedValueOnce(new MailError("NETWORK_TIMEOUT", "uncertain"))
@@ -330,6 +334,93 @@ describe("external mail scheduled sends", () => {
       const failed = await r.scheduler.get(r.ctx, { scheduledId: created.id })
       expect(failed.state).toBe("failed")
       expect(failed.errorCode).toBe("ACCOUNT_CHANGED")
+    } finally {
+      await r.scheduler.dispose()
+      await r.close()
+    }
+  })
+
+  it("keeps armed timer alive when the short-lived create() request signal aborts, and returns inline image CIDs or unavailable fallback in readBody", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
+    vi.setSystemTime(new Date("2026-11-25T10:00:00.000Z"))
+    const r = await scheduledRig()
+    try {
+      // 1x1 PNG bytes for rasterMime validation
+      const pngBytes = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      )
+      const img = await r.assets.put(r.ctx, Readable.from([pngBytes]), {
+        accountId: r.account.id,
+        name: "dot.png",
+        mime: "image/png",
+      })
+      const updatedDraft = await r.drafts.execute(r.ctx, "draft.update", {
+        draftId: r.draft.id,
+        expectedRevision: r.draft.revision,
+        patch: {
+          html: '<p>图<img src="cid:dot1" /></p>',
+          inlineImages: [{ assetId: img.id, cid: "dot1" }],
+        },
+      })
+      const preview = await r.send.preview(r.ctx, { draftId: updatedDraft.id, expectedRevision: updatedDraft.revision })
+
+      // Pass a short-lived request AbortController to create(), then abort it immediately after create returns
+      const reqAbort = new AbortController()
+      const reqCtx = { ...r.ctx, signal: reqAbort.signal }
+      const created = await r.scheduler.create(reqCtx, {
+        previewId: preview.previewId,
+        sendAt: "2026-11-25T10:05:00.000Z",
+        clientRequestId: randomUUID(),
+        confirmed: true,
+      })
+      reqAbort.abort()
+
+      const body = await r.scheduler.readBody(r.ctx, created.id)
+      expect(body.cid.dot1).toEqual({ mime: "image/png", base64: pngBytes.toString("base64") })
+      expect(body.unavailable).toBeUndefined()
+
+      // Timer must still fire via long-lived sync context even though reqAbort was aborted
+      const tickSpy = vi.spyOn(r.scheduler, "tick")
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 500)
+      expect(tickSpy).toHaveBeenCalledTimes(1)
+      // Await the in-flight tickTask returned by tick() until disk I/O and SMTP finish
+      await r.scheduler.tick(r.ctx)
+      expect(r.smtp.submit).toHaveBeenCalledTimes(1)
+      expect((await r.scheduler.get(r.ctx, { scheduledId: created.id })).state).toBe("sent")
+
+      // When a sent/cancelled record's body asset has been evicted, readBody returns unavailable: true gracefully
+      const cancelledDraft = await r.drafts.execute(r.ctx, "draft.create", {
+        accountId: r.account.id,
+        to: [{ address: "to@example.com" }],
+        cc: [],
+        bcc: [],
+        subject: "Cancel Me",
+        html: "<p>Bye</p>",
+        text: "Bye",
+        assetIds: [],
+        inlineImages: [],
+      })
+      const cancelPreview = await r.send.preview(r.ctx, { draftId: cancelledDraft.id, expectedRevision: cancelledDraft.revision })
+      const toCancel = await r.scheduler.create(r.ctx, {
+        previewId: cancelPreview.previewId,
+        sendAt: "2026-11-25T12:00:00.000Z",
+        clientRequestId: randomUUID(),
+        confirmed: true,
+      })
+      const cancelled = await r.scheduler.cancel(r.ctx, {
+        scheduledId: toCancel.id,
+        expectedRevision: toCancel.revision,
+        restoreDraft: true,
+      })
+      const restoredDraft = await r.drafts.get(r.ctx, cancelledDraft.id)
+      await r.drafts.execute(r.ctx, "draft.delete", { draftId: restoredDraft.id, expectedRevision: restoredDraft.revision })
+      vi.setSystemTime(new Date("2026-11-25T13:00:00.000Z"))
+      await r.send.expire(r.ctx)
+      await r.assets.rebuildPins(r.ctx, r.account.id)
+      await r.assets.remove(r.ctx, cancelled.bodyRef)
+      const afterClear = await r.scheduler.readBody(r.ctx, cancelled.id)
+      expect(afterClear.unavailable).toBe(true)
     } finally {
       await r.scheduler.dispose()
       await r.close()

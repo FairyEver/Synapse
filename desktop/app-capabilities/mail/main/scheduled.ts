@@ -4,6 +4,7 @@ import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mai
 import {
   MAIL_MAX_ATTACHMENT_BYTES,
   MAIL_MAX_BODY_BYTES,
+  MAIL_MAX_IMAGE_BYTES,
   MAIL_SCHEDULED_GRACE_MS,
   MAIL_SCHEDULED_MAX_AHEAD_YEARS,
   MAIL_SCHEDULED_MIN_LEAD_MS,
@@ -30,6 +31,7 @@ import { MailAccounts } from "./accounts"
 import { MailAssets } from "./assets"
 import { MailDrafts, type StoredDraft } from "./drafts"
 import { compileDraftMime } from "./mime-compose"
+import { rasterMime } from "./body-resources"
 import { providerPolicy } from "./protocol/aliyun-policy"
 import { normalizeProtocolError } from "./protocol/types"
 import {
@@ -167,13 +169,19 @@ export class MailScheduler {
     if (this.timer) { clearTimeout(this.timer); this.timer = undefined }
   }
 
-  async rearm(ctx: MailContext): Promise<void> {
+  async rearm(ctx?: MailContext): Promise<void> {
     this.clearTimer()
-    if (this.suspended || ctx.signal.aborted) return
+    if (this.suspended) return
+    // Always bind background timer lifecycle to the identity-scoped sync context,
+    // never to a short-lived UI/MCP request AbortSignal.
+    let syncCtx: MailContext
+    try { syncCtx = this.hooks.context("sync") } catch { return }
+    if (ctx && (ctx.ownerId !== syncCtx.ownerId || ctx.generation !== syncCtx.generation)) return
+    if (syncCtx.signal.aborted) return
     let minDueMs = Number.POSITIVE_INFINITY
     let cursor: string | undefined
     do {
-      const page = await this.repo.page<StoredScheduled>(ctx, "scheduled", { cursor, limit: 100 })
+      const page = await this.repo.page<StoredScheduled>(syncCtx, "scheduled", { cursor, limit: 100 })
       for (const row of page.items) {
         if (row.data.kind !== "scheduled" || row.data.state !== "pending") continue
         const dueMs = Math.max(Date.parse(row.data.sendAt), row.data.nextAttemptAt ? Date.parse(row.data.nextAttemptAt) : 0)
@@ -181,13 +189,13 @@ export class MailScheduler {
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
-    if (!Number.isFinite(minDueMs) || this.suspended || ctx.signal.aborted) return
+    if (!Number.isFinite(minDueMs) || this.suspended || syncCtx.signal.aborted) return
     const delay = Math.min(Math.max(0, minDueMs - Date.now()), MAIL_SCHEDULED_TIMER_MAX_MS)
     this.timer = setTimeout(() => {
       this.timer = undefined
-      if (this.suspended || ctx.signal.aborted) return
-      void this.tick(this.hooks.context("sync")).catch(() => {
-        if (!ctx.signal.aborted) this.hooks.diagnostic("MAIL_SCHEDULED_TICK_FAILED", "mail")
+      if (this.suspended || syncCtx.signal.aborted) return
+      void this.tick(syncCtx).catch(() => {
+        if (!syncCtx.signal.aborted) this.hooks.diagnostic("MAIL_SCHEDULED_TICK_FAILED", "mail")
       })
     }, delay)
     this.timer.unref?.()
@@ -317,12 +325,31 @@ export class MailScheduler {
     return this.toDetail(ctx, row)
   }
 
-  async readBody(ctx: MailContext, scheduledId: string): Promise<{ html: string; text: string }> {
+  async readBody(ctx: MailContext, scheduledId: string): Promise<{ html: string; text: string; cid: Record<string, { mime: string; base64: string }>; unavailable?: boolean }> {
     const row = await this.stored(ctx, scheduledId)
-    const bytes = await this.assets.read(ctx, row.data.payload.bodyRef, MAIL_MAX_BODY_BYTES)
+    let bytes: Buffer
+    try {
+      bytes = await this.assets.read(ctx, row.data.payload.bodyRef, MAIL_MAX_BODY_BYTES)
+    } catch (error) {
+      if ((row.data.state === "cancelled" || row.data.state === "sent") && error instanceof MailError && (error.code === "NOT_FOUND" || error.code === "UNAVAILABLE" || error.code === "ASSET_UNAVAILABLE")) {
+        return { html: "", text: "", cid: {}, unavailable: true }
+      }
+      throw error
+    }
     const parsed = JSON.parse(bytes.toString("utf8")) as { html?: unknown; text?: unknown }
     if (typeof parsed.html !== "string" || typeof parsed.text !== "string") throw new MailError("ASSET_UNAVAILABLE", "定时邮件正文不可用")
-    return { html: parsed.html, text: parsed.text }
+    const cid: Record<string, { mime: string; base64: string }> = {}
+    for (const image of row.data.payload.draft.inlineImages) {
+      try {
+        const imgBytes = await this.assets.read(ctx, image.assetId, MAIL_MAX_IMAGE_BYTES)
+        const mime = rasterMime(imgBytes)
+        if (mime) cid[image.cid] = { mime, base64: imgBytes.toString("base64") }
+      } catch (error) {
+        if (ctx.signal.aborted) throw error
+        this.hooks.diagnostic("SCHEDULED_INLINE_IMAGE_UNAVAILABLE", row.accountId)
+      }
+    }
+    return { html: parsed.html, text: parsed.text, cid }
   }
 
   async reschedule(ctx: MailContext, input: MailInputs["scheduled.update"]): Promise<ScheduledSendDetail> {
@@ -574,6 +601,13 @@ export class MailScheduler {
       && (afterMs - Date.parse(row.data.sendAt) + MAIL_SCHEDULED_RETRY_MS <= row.data.graceMs)
 
     if (withinGraceForRetry) {
+      // Remove the transient pre-submit failed operation so grace-window retries
+      // do not accumulate stale operation receipts or keep temporary EML assets pinned.
+      const failedOp = await this.repo.find<StoredSend>(ctx, "operations", receipt.operationId)
+      if (failedOp?.data.kind === "send" && failedOp.data.state === "failed") {
+        await this.repo.remove(ctx, "operations", failedOp.id, failedOp.revision)
+        for (const id of failedOp.data.pinnedAssetIds) await this.assets.pin(ctx, id, -1)
+      }
       row = await this.repo.save<StoredScheduled>(
         ctx,
         "scheduled",

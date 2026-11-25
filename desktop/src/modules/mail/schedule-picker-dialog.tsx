@@ -185,35 +185,41 @@ export function MailSchedulePickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={next => { if (!disabled) onOpenChange(next) }}>
-      <DialogContent className="max-w-md" aria-describedby={undefined}>
+      <DialogContent className="max-h-[calc(100vh-2rem)] max-w-md overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <form noValidate onSubmit={event => void handleSubmit(event)} className="space-y-4">
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="快捷时间">
-            {presets.map(preset => (
-              <Button
-                key={preset.key}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={disabled || preset.disabled}
-                data-track={`mail.schedule.preset.${preset.key}`}
-                onClick={() => applyTarget(preset.target)}
-                className="justify-between font-normal"
-              >
-                <span>{preset.label}</span>
-                <span className="tabular-nums text-xs text-muted-foreground">{format(preset.target, "MM-dd HH:mm")}</span>
-              </Button>
-            ))}
+            {presets.map(preset => {
+              const activePreset = !preset.disabled && toDateValue(preset.target) === dateStr && toTimeValue(preset.target) === timeStr
+              return (
+                <Button
+                  key={preset.key}
+                  type="button"
+                  variant={activePreset ? "secondary" : "outline"}
+                  size="sm"
+                  disabled={disabled || preset.disabled}
+                  data-track={`mail.schedule.preset.${preset.key}`}
+                  onClick={() => applyTarget(preset.target)}
+                  className="justify-between font-normal"
+                >
+                  <span>{preset.label}</span>
+                  <span className="tabular-nums text-xs text-muted-foreground">{format(preset.target, "MM-dd HH:mm")}</span>
+                </Button>
+              )
+            })}
           </div>
 
           <div className="rounded-md border p-2">
             <Calendar
               mode="single"
+              captionLayout="dropdown"
               locale={zhCN}
               month={month}
               onMonthChange={setMonth}
+              startMonth={today}
+              endMonth={maxDate}
               selected={selectedDate}
               onSelect={handleCalendarSelect}
               disabled={{ before: today, after: maxDate }}

@@ -66,7 +66,7 @@ export interface MailBridge {
   imageImport(input: { accountId: string; base64: string }): Promise<MailAsset>
   pickAttachments(input: { accountId: string }): Promise<MailAsset[]>
   saveAttachment(input: { assetId: string }): Promise<MailResults["attachment.download_file"] | null>
-  scheduledBody(input: { scheduledId: string }): Promise<{ html: string; text: string }>
+  scheduledBody(input: { scheduledId: string }): Promise<{ html: string; text: string; cid: Record<string, { mime: string; base64: string }>; unavailable?: boolean }>
   onChanged(listener: (event: MailChanged) => void): () => void
 }
 export function createMailBridge(invoke: <T>(channel: string, input: unknown) => Promise<T>, subscribe: MailBridge["onChanged"]): MailBridge {

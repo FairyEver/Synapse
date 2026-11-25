@@ -121,10 +121,114 @@ describe("external mail scheduled UI", () => {
     act(() => { cancelButton.click() })
     await flush()
 
+    // Confirmation AlertDialog prevents accidental cancellation
+    expect(mocks.api.scheduledCancel).not.toHaveBeenCalled()
+    const confirmCancelButton = [...document.body.querySelectorAll("button")].find(btn => btn.textContent?.trim() === "确认取消定时") as HTMLButtonElement
+    expect(confirmCancelButton).toBeTruthy()
+    act(() => { confirmCancelButton.click() })
+    await flush()
+
     expect(mocks.api.scheduledCancel).toHaveBeenCalledWith({
       scheduledId: scheduledSummary.id,
       expectedRevision: 1,
       restoreDraft: true,
     })
+  })
+
+  it("filters active vs all scheduled items, keeps reschedule dialog open on backend error, and supports copying unknown items to a new draft", async () => {
+    const sentSummary = {
+      ...scheduledSummary,
+      id: "ms_11111111-4db1-4a0a-8f87-9027d116e194",
+      state: "sent" as const,
+      subject: "历史已发送",
+      sentAt: "2026-11-25T03:10:00.000Z",
+    }
+    const unknownSummary = {
+      ...scheduledSummary,
+      id: "ms_22222222-4db1-4a0a-8f87-9027d116e194",
+      state: "unknown" as const,
+      subject: "待核验定时邮件",
+      operationId: "mo_unknown",
+    }
+    const unknownDetail = {
+      ...unknownSummary,
+      attachments: [],
+      bodyRef: "mas_22222222-4db1-4a0a-8f87-9027d116e194",
+      receipt: null,
+    }
+    mocks.api.accountList.mockResolvedValue({ items: [{ ...account, aliases: [] }], nextCursor: null })
+    mocks.api.scheduledList.mockResolvedValue({ items: [sentSummary, unknownSummary, scheduledSummary], nextCursor: null })
+    mocks.api.scheduledGet.mockImplementation(async ({ scheduledId }: { scheduledId: string }) => scheduledId === unknownSummary.id ? unknownDetail : scheduledDetail)
+    mocks.api.scheduledUpdate.mockRejectedValueOnce(new Error("版本冲突"))
+    mocks.api.draftCreate.mockResolvedValue({ id: "md_copy", accountId: "ma_one", revision: 1 })
+    mocks.api.scheduledBody.mockResolvedValue({
+      html: '<p>带图正文<img src="cid:img1" /></p>',
+      text: "带图正文",
+      cid: { img1: { mime: "image/png", base64: "iVBORw0KGgo=" } },
+    })
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scheduled-img-1")
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+
+    mount(<ExternalMailModule />)
+    await flush()
+
+    const navButton = [...document.querySelectorAll("nav button")].find(btn => btn.textContent?.includes("定时发送")) as HTMLButtonElement
+    // Sidebar badge displays active count (2: unknown + pending)
+    expect(navButton.textContent).toContain("2")
+    act(() => { navButton.click() })
+    await flush()
+
+    // Default filter is 待处理: sent item is hidden, unknown item is sorted before pending
+    expect(document.body.textContent).not.toContain("历史已发送")
+    const listButtons = [...document.querySelectorAll('button[data-track="mail.scheduled.open"]')].map(btn => btn.textContent ?? "")
+    expect(listButtons[0]).toContain("待核验定时邮件")
+    expect(listButtons[1]).toContain("明年年中汇报")
+
+    // Switching to 全部 reveals sent history
+    const allFilterButton = [...document.querySelectorAll('[aria-label="状态筛选"] button')].find(btn => btn.textContent?.includes("全部")) as HTMLButtonElement
+    act(() => { allFilterButton.click() })
+    await flush()
+    expect(document.body.textContent).toContain("历史已发送")
+
+    // Select pending item and test reschedule error keeping dialog open
+    const pendingRow = [...document.querySelectorAll("button")].find(btn => btn.textContent?.includes("明年年中汇报")) as HTMLButtonElement
+    act(() => { pendingRow.click() })
+    await flush()
+    const iframe = document.querySelector("iframe")
+    expect(iframe?.getAttribute("srcdoc")).toContain("blob:scheduled-img-1")
+    expect(createObjectUrl).toHaveBeenCalledTimes(1)
+    revokeObjectUrl.mockClear()
+
+    const rescheduleBtn = [...document.querySelectorAll("button")].find(btn => btn.textContent?.trim() === "修改时间") as HTMLButtonElement
+    act(() => { rescheduleBtn.click() })
+    await flush()
+    const form = document.body.querySelector("form") as HTMLFormElement
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+    await flush()
+    // Dialog stays open with inline error message
+    expect(document.body.querySelector("form")).toBeTruthy()
+    expect(document.body.textContent).toContain("版本冲突")
+
+    // Close picker dialog, select unknown item, click 另存为新草稿
+    const cancelDialogBtn = [...document.body.querySelectorAll("button")].find(btn => btn.textContent?.trim() === "取消") as HTMLButtonElement
+    act(() => { cancelDialogBtn.click() })
+    await flush()
+
+    const unknownRow = [...document.querySelectorAll("button")].find(btn => btn.textContent?.includes("待核验定时邮件")) as HTMLButtonElement
+    act(() => { unknownRow.click() })
+    await flush()
+
+    const copyBtn = [...document.querySelectorAll("button")].find(btn => btn.textContent?.trim() === "另存为新草稿") as HTMLButtonElement
+    expect(copyBtn).toBeTruthy()
+    act(() => { copyBtn.click() })
+    await flush()
+    expect(mocks.api.draftCreate).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "ma_one",
+      subject: "待核验定时邮件",
+      text: "带图正文",
+    }))
+    expect(mocks.openCompose).toHaveBeenCalledWith({ draftId: "md_copy" })
   })
 })

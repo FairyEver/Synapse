@@ -62,9 +62,20 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
   const operationError = model.error === model.addressError?.message ? null : model.error
   const contentError = operationError ?? composer.error ?? attachments.error
   const save = () => { void model.save().catch(() => undefined) }
+  const openSchedulePicker = () => { if (model.validateAddresses()) setScheduleOpen(true) }
+  const scheduledMutable = !!model.scheduled && (model.scheduled.state === "pending" || model.scheduled.state === "missed" || model.scheduled.state === "failed")
+  const scheduledTitle: Record<NonNullable<typeof model.scheduled>["state"], string> = {
+    pending: "已设置定时发送",
+    sending: "正在自动发送…",
+    sent: "定时邮件已发送",
+    missed: "定时邮件已错过发送时间",
+    failed: "定时邮件发送失败",
+    unknown: "定时邮件发送结果待核验",
+    cancelled: "已取消定时发送",
+  }
   return <><SystemAppWindowShell left={<div className="flex items-center">
     <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => void model.send()} data-track="mail.send"><Send />{model.sending ? "发送中…" : "发送"}</SystemAppTopBarActionButton>
-    <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => setScheduleOpen(true)} data-track="mail.schedule"><Clock />{model.scheduling ? "预约中…" : "定时发送"}</SystemAppTopBarActionButton>
+    <SystemAppTopBarActionButton disabled={sendDisabled} onClick={openSchedulePicker} data-track="mail.schedule"><Clock />{model.scheduling ? "预约中…" : "定时发送"}</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled || model.saving} onClick={save} data-track="mail.draft.save"><Save />保存草稿</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled} onClick={() => void model.pickAttachments()}><Paperclip />附件</SystemAppTopBarActionButton>
   </div>} actions={<div className="flex min-w-0 items-center gap-3"><span title={account?.email} className="max-w-32 truncate text-sm text-muted-foreground sm:max-w-48 lg:max-w-72">{account?.email}</span><span role="status" className="w-14 shrink-0 text-right text-xs text-muted-foreground">{model.saving ? "保存中…" : draft?.state === "consumed" ? "已发送" : draft?.state === "scheduled" ? "已定时" : model.dirty ? "未保存" : draft?.localSaved ? "已保存" : ""}</span></div>}>
@@ -94,13 +105,17 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
       {draft?.state === "conflict" && <p role="alert" className="px-4 py-3 text-sm text-destructive">草稿存在冲突，内容已保留，可另存为新草稿。</p>}
       {model.scheduled && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-t p-4 text-sm">
         <div className="space-y-0.5">
-          <p className="font-medium">已设置定时发送</p>
-          <p className="tabular-nums text-muted-foreground">预定时间：{formatDateTime(model.scheduled.sendAt)}</p>
+          <p className="font-medium">{scheduledTitle[model.scheduled.state]}</p>
+          <p className="tabular-nums text-muted-foreground">
+            {model.scheduled.sentAt ? `实际发送：${formatDateTime(model.scheduled.sentAt)}` : `预定时间：${formatDateTime(model.scheduled.sendAt)}`}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={model.scheduling} onClick={() => setRescheduleOpen(true)}>修改时间</Button>
-          <Button variant="outline" disabled={model.scheduling} onClick={() => void model.cancelScheduledAndEdit()}>取消定时并继续编辑</Button>
-        </div>
+        {scheduledMutable && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={model.scheduling} onClick={() => setRescheduleOpen(true)}>修改时间</Button>
+            <Button variant="outline" disabled={model.scheduling} onClick={() => void model.cancelScheduledAndEdit()}>取消定时并继续编辑</Button>
+          </div>
+        )}
       </div>}
       {model.receipt && <div role="status" className="space-y-1 border-t p-4 text-sm"><p className="font-medium">{receiptStates[model.receipt.state]}</p>{model.receipt.accepted.length > 0 && <p className="break-all">已接受：{model.receipt.accepted.join(", ")}</p>}{model.receipt.rejected.length > 0 && <p className="break-all">已拒绝：{model.receipt.rejected.join(", ")}</p>}<p className="text-muted-foreground">已发送副本：{model.receipt.sentCopyState === "saved" ? "已保存" : model.receipt.sentCopyState === "pending" ? "待核验" : "未确认"}</p>{model.canRetrySentCopy ? <Button variant="outline" disabled={model.reconciling} onClick={() => void model.retrySentCopy()}>{model.reconciling ? "保存中…" : "重试保存已发送副本"}</Button> : (model.receipt.state === "unknown" || ["accepted", "partial"].includes(model.receipt.state) && model.receipt.sentCopyState !== "saved") && <Button variant="outline" disabled={model.reconciling} onClick={() => void model.reconcile()}>{model.reconciling ? "核验中…" : model.receipt.state === "unknown" ? "核验发送结果" : "核验已发送副本"}</Button>}</div>}
       {draft && (draft.state === "consumed" || draft.state === "conflict" || model.receipt) && <div className="p-3"><Button variant="outline" onClick={() => void model.copyDraft()} disabled={model.sending || model.scheduling}>另存为新草稿</Button></div>}

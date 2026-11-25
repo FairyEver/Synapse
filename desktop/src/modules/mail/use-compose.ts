@@ -158,6 +158,39 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     }
     window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent)
   }, [])
+  const validateAddresses = () => {
+    try {
+      const to = parseMailAddresses(addressRef.current.to)
+      const cc = parseMailAddresses(addressRef.current.cc, "抄送")
+      if (!to.length && !cc.length) {
+        setError("请填写收件人")
+        return false
+      }
+      setAddressError(null)
+      setError(null)
+      return true
+    } catch (cause) {
+      reportError(cause)
+      return false
+    }
+  }
+  useEffect(() => {
+    const scheduledId = scheduled?.id
+    if (!scheduledId || !owner || scheduled.state === "sent" || scheduled.state === "cancelled") return
+    const e = epoch.current
+    const off = mailApi().onChanged(event => {
+      if (event.ids.length && !event.ids.includes(scheduledId)) return
+      void mailApi().scheduledGet({ scheduledId }).then(latest => {
+        if (!active.current || epoch.current !== e) return
+        setScheduled(latest)
+        if (latest.state === "sent" && value.current) {
+          replace({ ...value.current, state: "consumed" })
+          if (latest.receipt) setReceipt(latest.receipt)
+        }
+      }).catch(() => undefined)
+    })
+    return () => { off() }
+  }, [scheduled?.id, scheduled?.state, owner])
   useEffect(() => registerNavigationGuard(() => !sendLock.current && !savingTask.current && !unsavedContent.current), [owner])
   const preparePreview = async () => {
     const e = epoch.current
@@ -282,6 +315,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, scheduling, loading, reconciling, canRetrySentCopy, dirty, preview, receipt, scheduled, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, scheduleSend, rescheduleScheduled, cancelScheduledAndEdit, reconcile, retrySentCopy, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, scheduling, loading, reconciling, canRetrySentCopy, dirty, preview, receipt, scheduled, editVersion, open, edit, changeAddress, validateAddresses, addDepartmentRecipients, save, close, preparePreview, send, scheduleSend, rescheduleScheduled, cancelScheduledAndEdit, reconcile, retrySentCopy, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

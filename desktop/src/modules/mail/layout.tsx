@@ -88,7 +88,13 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
             onCompose={recipient => onCompose({ accountId: mail.scheduledDetail!.accountId, recipient })}
             onDownload={id => void download(id)}
             onLink={url => void openLink(url)}
-            onReschedule={async sendAt => { await performScheduledAction(() => mail.rescheduleScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, sendAt), "已修改发送时间") }}
+            onReschedule={async sendAt => {
+              setBusy(true)
+              try {
+                await mail.rescheduleScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, sendAt)
+                toast("已修改发送时间")
+              } finally { setBusy(false) }
+            }}
             onCancel={async () => { await performScheduledAction(() => mail.cancelScheduled(mail.scheduledDetail!.id, mail.scheduledDetail!.revision, true), "已取消定时发送并退回草稿箱") }}
             onCancelAndEdit={async () => {
               const targetDraftId = mail.scheduledDetail!.draftId
@@ -97,6 +103,10 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
             }}
             onSendNow={async () => { await performScheduledAction(() => mail.sendScheduledNow(mail.scheduledDetail!.id, mail.scheduledDetail!.revision), "已提交发送") }}
             onReconcile={async operationId => { await performScheduledAction(() => mail.reconcileScheduled(mail.scheduledDetail!.id, operationId), "已刷新发送结果") }}
+            onCopyToDraft={async () => {
+              const draft = await performScheduledAction(() => mail.copyScheduledToDraft(mail.scheduledDetail!))
+              if (draft) onCompose({ draftId: draft.id })
+            }}
           />
         ) : mail.detail ? <MailDetail onCompose={recipient => onCompose({ accountId: mail.detail!.accountId, recipient })} detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} onQuickReplySent={mail.refresh} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
       </div>
