@@ -24,7 +24,7 @@ const status = ref<CopyStatus>('idle')
 let resetTimer: ReturnType<typeof setTimeout> | undefined
 
 const copyMarkdownText = computed(
-  () => (page.value as MarkdownPageData).copyMarkdown ?? ''
+  () => (page.value as MarkdownPageData).copyMarkdown?.replace(/<\\\/script/gi, '</script') ?? ''
 )
 
 const buttonText = computed(() => {

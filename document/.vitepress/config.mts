@@ -92,6 +92,10 @@ export default defineConfig({
             {
               text: '使用 API 发送消息',
               link: '/open-api/guide/send-message'
+            },
+            {
+              text: '开放 SDK 与版本发现',
+              link: '/open-api/sdk'
             }
           ]
         },
@@ -101,6 +105,7 @@ export default defineConfig({
           items: [
             { text: '云端数据表', link: '/open-api/api/cloud-tables' },
             { text: '频道', link: '/open-api/api/channels' },
+            { text: '状态同步', link: '/open-api/api/state-sync' },
             {
               text: '获取公共链接文件',
               link: '/open-api/api/share-link-download'

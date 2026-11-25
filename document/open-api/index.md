@@ -26,6 +26,8 @@ OpenAPI 3.1 契约由服务端提供：
 
 实时信号与多端联动：[频道](/open-api/api/channels)。支持原生 WebSocket 双向收发、HTTP POST 无状态触发、轻量在线感知（Presence）、断线补发与可选 Retain 状态快照；浏览器端使用单频道分角色专属凭证（`syc_`），无需登录 SY。
 
+实时可变状态树与多人协同：[状态同步](/open-api/api/state-sync)。支持 Space -> dynamic Doc 模型、细粒度路径读写与订阅、CAS 乐观并发控制、原子事务（`room.transaction`）、离线遗愿清理（`onDisconnect`）与在线感知；浏览器端使用单空间专属凭证（`sys_`），免登录 SY。配套提供免 npm 安装的官方客户端：[开放 SDK 与版本发现](/open-api/sdk)。
+
 下载示例：[获取公共链接文件](/open-api/api/share-link-download)。先创建下载地址，再于十分钟内执行响应中的 `GET` 地址。
 
 发送消息步骤：[使用 API 发送消息](/open-api/guide/send-message)。此接口需要单独的 `notification.send` 权限。
@@ -43,6 +45,8 @@ drive.public_link.download
 云表使用独立的 `tables.manage`、`tables.records.read/create/update/delete` 五项 scope，并额外检查密钥的表资源和表授权。已有密钥不会自动获得云表权限。
 
 频道使用独立的 `channels.manage`、`channels.publish`、`channels.subscribe` 三项 scope 及频道资源范围；已有密钥同样不会自动获得频道权限。浏览器网页请使用在频道页签发的单频道专属凭证（`syc_`），避免暴露个人 API 密钥。
+
+状态同步使用独立的 `state_sync.manage`、`state_sync.write`、`state_sync.read` 三项 scope 及空间资源范围；已有密钥同样不会自动获得同步空间权限。浏览器网页请使用在空间管理签发的单空间专属凭证（`sys_`），避免暴露个人 API 密钥。
 
 完整密钥只显示一次。创建后可以编辑或清空 API 权限，不会轮换密钥；撤销密钥后无法恢复。移除下载权限或撤销密钥会使新请求以及尚未开始的临时下载失效。
 
@@ -83,6 +87,11 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 | `mutateCloudTableRecords` | `POST` | `/tables/{id}/records/batch` | 逐操作检查 scope、表资源及表授权，或显式开放的匿名操作 | [批量写入](/open-api/api/cloud-tables#批量新增、修改与删除) |
 | `publishChannelEvent` | `POST` | `/channels/{channelId}/events` | 频道专属凭证（`publish`/`pubsub`）或 `channels.publish` 密钥 | [频道](/open-api/api/channels#http-open-rest-api) |
 | `getChannelPresence` | `GET` | `/channels/{channelId}/presence` | 任意有效频道凭证或频道运行态密钥 | [频道](/open-api/api/channels#http-open-rest-api) |
+| `createStateSyncSpace` | `POST` | `/state-sync/spaces` | Bearer + `state_sync.manage` + 自己的全部空间 | [状态同步](/open-api/api/state-sync#http-open-rest-api) |
+| `createStateSyncDoc` | `POST` | `/state-sync/spaces/{spaceId}/docs` | 空间专属凭证（`create_write`）或 `state_sync.write` 密钥 | [状态同步](/open-api/api/state-sync#http-open-rest-api) |
+| `getStateSyncDoc` | `GET` | `/state-sync/spaces/{spaceId}/docs/{docId}` | 任意有效空间凭证或 `state_sync.read` 密钥 | [状态同步](/open-api/api/state-sync#http-open-rest-api) |
+| `mutateStateSyncDoc` | `PATCH` | `/state-sync/spaces/{spaceId}/docs/{docId}` | `write`/`create_write` 凭证或 `state_sync.write` 密钥 | [状态同步](/open-api/api/state-sync#http-open-rest-api) |
+| `getStateSyncPresence` | `GET` | `/state-sync/spaces/{spaceId}/docs/{docId}/presence` | 任意有效空间凭证或运行态密钥 | [状态同步](/open-api/api/state-sync#http-open-rest-api) |
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
 | `createPublicLinkArticleMessage` | `POST` | `/drive/public-links/messages` | `Authorization: Bearer` 与 `drive.public_link.message.create` | [给分享文章留言](/open-api/api/article-message-create) |
 | `sendNotification` | `POST` | `/notifications` | 请求体 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#整体式) |
