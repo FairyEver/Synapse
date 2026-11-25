@@ -864,6 +864,30 @@ describe("StateSyncService", () => {
       credentialId: expect.stringMatching(/^dbg_[a-f0-9]+$/),
       role: "read",
       isObserver: true,
+      docSnapshot: expect.objectContaining({
+        spaceId: sp2.id,
+        docId: doc2.docId,
+        rev: 0n,
+      }),
+    })
+  })
+
+  it("returns HTTP 413 PAYLOAD_TOO_LARGE when a 70 KiB write exceeds the 64 KiB single-write limit", async () => {
+    const { service } = createHarness()
+    const consoleActor = { kind: "console" as const, userId: "u1" }
+    const space = await service.createSpace(consoleActor, { name: "载荷上限空间" })
+    const doc = await service.createDoc(consoleActor, space.id, { docId: "payload-limit-doc" })
+
+    const seventyKiB = "x".repeat(70 * 1024)
+    await expect(
+      service.mutateDoc(consoleActor, space.id, doc.docId, {
+        op: "set",
+        path: "/blob",
+        value: seventyKiB,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 413,
+      code: "PAYLOAD_TOO_LARGE",
     })
   })
 })

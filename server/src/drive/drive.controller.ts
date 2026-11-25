@@ -66,7 +66,7 @@ import { sendDriveZip } from "./drive-download-stream"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
-const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock;"
+const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https: wss:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock;"
 const DRIVE_SITE_HTML_RENDER_CSP = DRIVE_HTML_RENDER_CSP
 const PUBLIC_ASSET_CACHE_CONTROL = "no-cache, must-revalidate"
 const PUBLIC_ASSET_CROSS_ORIGIN_RESOURCE_POLICY = "cross-origin"
@@ -3141,7 +3141,7 @@ async function sendDriveRenderedAsset(response: Response, asset: {
   response.setHeader("Referrer-Policy", "no-referrer")
   response.setHeader(
     "Content-Security-Policy",
-    asset.csp ?? "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:;",
+    asset.csp ?? "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:;",
   )
   if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
   await pipeline(asset.stream, createResponseWritable(response))

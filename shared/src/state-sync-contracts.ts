@@ -402,6 +402,9 @@ export const stateSyncDocCreateSchema = z.object({
       ctx.addIssue({
         code: "custom",
         message: res.message,
+        params: {
+          errorCode: res.code === "PAYLOAD_TOO_LARGE" ? "DOC_TOO_LARGE" : res.code,
+        },
       })
     }
   }),
@@ -447,6 +450,7 @@ export function refineStateSyncMutation(
         code: "custom",
         path: ["value"],
         message: valRes.message,
+        params: { errorCode: valRes.code },
       })
     }
   }
@@ -569,6 +573,7 @@ const wsReadyServerFrameSchema = z.object({
   rev: z.number().int().min(0),
   expiresAt: z.string().nullable().optional(),
   replayTruncated: z.boolean(),
+  replayedCount: z.number().int().min(0).optional(),
   presence: z.array(stateSyncPresenceMemberSchema),
   snapshots: z.array(z.object({
     path: z.string(),

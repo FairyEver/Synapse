@@ -790,8 +790,21 @@ describe("server deployment configuration", () => {
     expect(httpBlock).toContain("access_log off;")
     expect(httpBlock).toContain("error_log /dev/null crit;")
     expect(httpBlock).toContain("client_max_body_size 256k;")
+    expect(httpBlock).toContain("error_page 413 = @state_sync_too_large;")
     expect(httpBlock).toContain('proxy_set_header Upgrade "";')
     expect(httpBlock).toContain('proxy_set_header Connection "";')
+
+    expect(nginx).toMatch(/map \$uri \$state_sync_allow_origin \{[\s\S]*?default "";[\s\S]*?~\*\^\/api\/open\/v1\/state-sync\(\?:\/\|\$\) "\*";\s*\}/u)
+    const tooLargeIndex = nginx.indexOf("location @state_sync_too_large {")
+    expect(tooLargeIndex).toBeGreaterThan(-1)
+    const tooLargeBlock = nginx.slice(tooLargeIndex).split("\n  }")[0] ?? ""
+    expect(tooLargeBlock).toContain("internal;")
+    expect(tooLargeBlock).toContain("default_type application/json;")
+    expect(tooLargeBlock).toContain('add_header X-Request-Id "req_$request_id" always;')
+    expect(tooLargeBlock).toContain('add_header Cache-Control "no-store" always;')
+    expect(tooLargeBlock).toContain("add_header Access-Control-Allow-Origin $state_sync_allow_origin always;")
+    expect(tooLargeBlock).toContain('add_header Access-Control-Expose-Headers "X-Request-Id" always;')
+    expect(tooLargeBlock).toContain('return 413 \'{"requestId":"req_$request_id","error":{"code":"REQUEST_TOO_LARGE","message":"请求不能超过 256 KiB。"}}\';')
 
     const sdkExpectations = [
       {
@@ -832,7 +845,7 @@ describe("server deployment configuration", () => {
     expect(dockerfile).toContain("--filter @synapse/sdk...")
     expect(dockerfile).toContain("COPY --from=deps /app/sdk/node_modules ./sdk/node_modules")
     expect(dockerfile).toContain("COPY sdk/ sdk/")
-    expect(dockerfile).toContain("RUN pnpm --filter @synapse/sdk build")
+    expect(dockerfile).toContain("RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/sdk build")
     expect(dockerfile).toContain("COPY --from=build /app/sdk/dist ./sdk")
 
     expect(deployScript).toContain("--exclude='sdk/node_modules'")

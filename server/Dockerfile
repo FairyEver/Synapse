@@ -45,7 +45,7 @@ RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
 RUN pnpm --filter @synapse/dashboard build
 RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/document build
-RUN pnpm --filter @synapse/sdk build
+RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/sdk build
 
 FROM base AS production
 ENV NODE_ENV=production

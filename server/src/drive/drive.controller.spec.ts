@@ -2587,7 +2587,7 @@ function expectDriveHtmlRenderCsp(value: string | undefined, options: { readonly
   const allowSameOrigin = options.allowSameOrigin ?? true
   expect(value).not.toContain("frame-ancestors")
   expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
-  expect(value).toContain("connect-src 'self' https:")
+  expect(value).toContain("connect-src 'self' https: wss:")
   expect(value).toContain(allowSameOrigin
     ? "sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock"
     : "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock")

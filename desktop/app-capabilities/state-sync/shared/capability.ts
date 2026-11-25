@@ -28,6 +28,10 @@ const docPathId = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/u).refine
 
 const stateSyncDocCreateBodySchema = z.object({
   docId: stateSyncCustomDocIdSchema
+    .refine(
+      (value) => value !== "." && value !== ".." && !value.includes(".."),
+      "房间 ID 不能包含路径穿越段。",
+    )
     .optional()
     .describe("Optional custom room/document ID (3-64 chars: letters, digits, . _ : -). Omit to let the server generate an ssd_ ID."),
   initialData: z.record(z.string(), z.unknown())

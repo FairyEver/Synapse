@@ -410,7 +410,7 @@ class MockStateSyncServer {
           snapshots = paths.map((p) => ({ path: p, ...readTreePath(doc.data, p) }))
         } else {
           replayed = doc.history
-            .filter((h) => h.rev > sinceRev)
+            .filter((h) => h.rev > sinceRev && paths.some((p) => isAncestorOrEqual(p, h.path)))
             .map((h) => ({
               type: "mutation",
               rev: h.rev,
@@ -432,6 +432,7 @@ class MockStateSyncServer {
           rev: doc.rev,
           expiresAt: doc.expiresAt,
           replayTruncated: false,
+          replayedCount: replayed.length,
           presence: this.presenceList(spaceId, docId),
           snapshots,
         }))
@@ -1153,6 +1154,74 @@ describe("@synapse/sdk state-sync client", () => {
     await waitForCondition(() => room.status === "connected" && room.rev === serverDoc.rev, 3000)
     // Board in mirror should only contain { a: 1 }, without leftover b
     expect(room.get("/board")).toEqual({ a: 1 })
+  })
+
+  it("advances rev on partial-path incremental reconnect when intervening writes hit unsubscribed paths", async () => {
+    const server = new MockStateSyncServer()
+    servers.push(server)
+    const baseUrl = await server.start()
+
+    const client = createClient({
+      baseUrl,
+      spaceId: "ss_partial",
+      token: "sys_test_token",
+      WebSocket: NodeWebSocket,
+      reconnectBaseDelayMs: 30,
+      reconnectMaxDelayMs: 60,
+    })
+
+    const { docId, room } = await client.createRoom({
+      initialData: { board: { score: 1 }, chat: { last: "hi" } },
+      clientId: "p_board",
+      paths: ["/board"],
+    })
+    rooms.push(room)
+
+    expect(room.rev).toBe(0)
+    const docKey = `ss_partial:${docId}`
+    const serverDoc = server.docs.get(docKey)!
+
+    // Case 1: Disconnect while ONLY unsubscribed /chat mutations occur (replayedCount: 0, ready.rev: 2)
+    const conn1 = [...server.conns].find((c) => c.connectionId === room.connectionId)!
+    conn1.skipOnDisconnect = true
+    conn1.ws.close(1001, "Drop before unsubscribed writes")
+    await waitForCondition(() => room.status === "reconnecting", 2000)
+
+    serverDoc.data.chat = { last: "msg-1" }
+    serverDoc.rev = 1
+    serverDoc.history.push({ rev: 1, op: "set", path: "/chat/last", value: "msg-1", ts: new Date().toISOString() })
+    serverDoc.data.chat = { last: "msg-2" }
+    serverDoc.rev = 2
+    serverDoc.history.push({ rev: 2, op: "set", path: "/chat/last", value: "msg-2", ts: new Date().toISOString() })
+
+    await waitForCondition(() => room.status === "connected", 3000)
+    expect(room.rev).toBe(2)
+
+    // Subsequent transaction on /board must send expectedRev: 2 and commit on first try without REV_CONFLICT
+    const mutateFramesBefore = server.mutateFrames.length
+    const tx1 = await room.transaction<number>("/board/score", (curr) => (curr ?? 0) + 1, { maxRetries: 0 })
+    expect(tx1).toEqual({ committed: true, rev: 3, value: 2 })
+    expect(server.mutateFrames.length).toBe(mutateFramesBefore + 1)
+    expect(server.mutateFrames[server.mutateFrames.length - 1]?.expectedRev).toBe(2)
+
+    // Case 2: Disconnect while rev 4 mutates subscribed /board and rev 5 mutates unsubscribed /chat (replayedCount: 1, ready.rev: 5)
+    const conn2 = [...server.conns].find((c) => c.connectionId === room.connectionId)!
+    conn2.skipOnDisconnect = true
+    conn2.ws.close(1001, "Drop before mixed writes")
+    await waitForCondition(() => room.status === "reconnecting", 2000)
+
+    ;(serverDoc.data.board as Record<string, unknown>).score = 10
+    serverDoc.rev = 4
+    serverDoc.history.push({ rev: 4, op: "set", path: "/board/score", value: 10, ts: new Date().toISOString() })
+    serverDoc.data.chat = { last: "msg-3" }
+    serverDoc.rev = 5
+    serverDoc.history.push({ rev: 5, op: "set", path: "/chat/last", value: "msg-3", ts: new Date().toISOString() })
+
+    await waitForCondition(() => room.status === "connected" && room.rev === 5, 3000)
+    expect(room.get("/board/score")).toBe(10)
+
+    const tx2 = await room.transaction<number>("/board/score", (curr) => (curr ?? 0) + 5, { maxRetries: 0 })
+    expect(tx2).toEqual({ committed: true, rev: 6, value: 15 })
   })
 })
 

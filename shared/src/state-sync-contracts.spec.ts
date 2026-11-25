@@ -770,4 +770,45 @@ describe("Fix Round 1: Contract tightening and edge-case validation", () => {
     expect(readStateSyncPath(root, "/items/3")).toEqual({ exists: false, value: undefined })
     expect(readStateSyncPath(root, "/items/length")).toEqual({ exists: false, value: undefined })
   })
+
+  it("tags oversized >64 KiB mutations with PAYLOAD_TOO_LARGE issue params and accepts optional ready.replayedCount", () => {
+    const seventyKiB = "a".repeat(70 * 1024)
+    const httpParsed = stateSyncMutateHttpSchema.safeParse({
+      op: "set",
+      path: "/blob",
+      value: seventyKiB,
+    })
+    expect(httpParsed.success).toBe(false)
+    if (!httpParsed.success) {
+      const issue = httpParsed.error.issues[0] as { params?: Record<string, unknown> } | undefined
+      expect(issue?.params?.errorCode).toBe("PAYLOAD_TOO_LARGE")
+    }
+
+    const wsParsed = stateSyncWsClientFrameSchema.safeParse({
+      type: "mutate",
+      id: "m-big",
+      op: "set",
+      path: "/blob",
+      value: seventyKiB,
+    })
+    expect(wsParsed.success).toBe(false)
+    if (!wsParsed.success) {
+      const issue = wsParsed.error.issues[0] as { params?: Record<string, unknown> } | undefined
+      expect(issue?.params?.errorCode).toBe("PAYLOAD_TOO_LARGE")
+    }
+
+    expect(stateSyncWsServerFrameSchema.safeParse({
+      type: "ready",
+      spaceId: "ss_1",
+      docId: "ssd_1",
+      connectionId: "conn_1",
+      clientId: "p1",
+      role: "write",
+      rev: 5,
+      replayTruncated: false,
+      replayedCount: 0,
+      presence: [],
+      snapshots: [],
+    }).success).toBe(true)
+  })
 })

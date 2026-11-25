@@ -160,6 +160,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
 
       const bearer = extractUpgradeBearer(request)
       if (bearer) {
+        const versionToken = this.stateSync.hub.getDocVersionToken(target.spaceId, target.docId)
         void this.stateSync.authenticateWsToken(target.spaceId, target.docId, bearer)
           .then((credential) => {
             if (socket.destroyed) return
@@ -173,7 +174,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
               return
             }
             server.handleUpgrade(request, socket, head, (ws) => {
-              this.bindSocket(ws, target.spaceId, target.docId, credential)
+              this.bindSocket(ws, target.spaceId, target.docId, credential, versionToken)
             })
           })
           .catch((error: unknown) => {
@@ -238,6 +239,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
     spaceId: string,
     docId: string,
     preAuthenticated: ResolvedStateSyncWsCredential | null,
+    preAuthVersionToken?: string,
   ): void {
     const limits = this.stateSync.hub.getLimits()
     const state: ActiveSocketState = {
@@ -257,6 +259,9 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
 
     ws.on("pong", () => {
       state.missedPongs = 0
+      if (state.connection && !state.connection.isObserver) {
+        this.stateSync.hub.touchDocActivity(state.connection.spaceId, state.connection.docId)
+      }
     })
 
     ws.on("close", () => {
@@ -280,7 +285,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
     })
 
     if (preAuthenticated) {
-      void this.completeAuthentication(state, preAuthenticated, {})
+      void this.completeAuthentication(state, preAuthenticated, {}, preAuthVersionToken)
         .catch((error: unknown) => {
           this.logger.warn({
             spaceId,
@@ -361,11 +366,15 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
         const requestId = typeof rawId === "string" && rawId.length >= 1 && rawId.length <= 128
           ? rawId
           : undefined
+        const firstIssue = parsed.error.issues[0] as { message?: string; params?: Record<string, unknown> } | undefined
+        const errorCode = firstIssue?.params?.errorCode === "PAYLOAD_TOO_LARGE"
+          ? "PAYLOAD_TOO_LARGE"
+          : "INVALID_FRAME"
         sendJson(state.ws, {
           type: "error",
           ...(requestId ? { id: requestId } : {}),
-          code: "INVALID_FRAME",
-          message: parsed.error.issues[0]?.message ?? "消息帧格式无效。",
+          code: errorCode,
+          message: firstIssue?.message ?? "消息帧格式无效。",
         })
         return
       }
@@ -380,6 +389,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
         }
         state.authenticating = true
         try {
+          const versionToken = this.stateSync.hub.getDocVersionToken(state.spaceId, state.docId)
           const credential = await this.stateSync.authenticateWsToken(state.spaceId, state.docId, frame.token)
           if (state.closed || state.ws.readyState !== WebSocket.OPEN) {
             return
@@ -395,7 +405,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
             meta: frame.meta,
             paths: frame.paths,
             sinceRev: frame.sinceRev,
-          })
+          }, versionToken)
         } catch (error: unknown) {
           this.logger.warn({
             spaceId: state.spaceId,
@@ -420,6 +430,9 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
           sendJson(state.ws, { type: "error", code: "ALREADY_AUTHENTICATED", message: "连接已完成认证。" })
           return
         case "ping":
+          if (!conn.isObserver) {
+            this.stateSync.hub.touchDocActivity(conn.spaceId, conn.docId)
+          }
           sendJson(state.ws, { type: "pong", serverTime: new Date().toISOString() })
           return
         case "presence.update":
@@ -633,6 +646,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
       readonly paths?: readonly string[]
       readonly sinceRev?: number
     },
+    expectedVersionToken?: string,
   ): Promise<void> {
     if (state.authTimer) {
       clearTimeout(state.authTimer)
@@ -640,7 +654,8 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
     }
     if (state.closed || state.ws.readyState !== WebSocket.OPEN) return
 
-    const docSnapshot = await this.stateSync.loadDocForGateway(credential.spaceId, credential.docId)
+    const versionToken = expectedVersionToken ?? this.stateSync.hub.getDocVersionToken(credential.spaceId, credential.docId)
+    const docSnapshot = credential.docSnapshot ?? (await this.stateSync.loadDocForGateway(credential.spaceId, credential.docId))
     if (state.closed || state.ws.readyState !== WebSocket.OPEN) return
     if (!docSnapshot) {
       sendJson(state.ws, { type: "error", code: "DOC_NOT_FOUND", message: "房间不存在或已过期。" })
@@ -668,6 +683,7 @@ export class StateSyncGateway implements OnApplicationShutdown, OnModuleDestroy 
       sinceRev: options.sinceRev,
       socket: createWsAdapter(state.ws),
       docSnapshot,
+      expectedVersionToken: versionToken,
     })
 
     if (!registered.ok) {

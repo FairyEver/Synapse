@@ -99,6 +99,7 @@ export type ReadyStateSyncPayload = {
   readonly rev: number
   readonly expiresAt: string | null
   readonly replayTruncated: boolean
+  readonly replayedCount: number
   readonly presence: StateSyncPresenceMember[]
   readonly snapshots: SnapshotItem[]
 }
@@ -137,6 +138,7 @@ export type RegisterStateSyncConnectionInput = {
   readonly sinceRev?: number | bigint
   readonly socket: StateSyncSocketAdapter
   readonly docSnapshot?: LoadedDocSnapshot
+  readonly expectedVersionToken?: string
   readonly now?: number
 }
 
@@ -245,8 +247,10 @@ type ActiveDocState = {
   readonly docWriteRate: TokenBucket
   writeChain: Promise<void>
   dirty: boolean
+  expiresDirty: boolean
   dirtySinceMs: number | null
   persistedRev: bigint
+  persistedExpiresAtMs: number | null
   flushInFlight: Promise<void> | null
   debounceTimer: ReturnType<typeof setTimeout> | null
   maxWaitTimer: ReturnType<typeof setTimeout> | null
@@ -351,6 +355,9 @@ export class StateSyncHub {
   private readonly productionCountBySpace = new Map<string, number>()
   private readonly productionCountByAccount = new Map<string, number>()
   private readonly docCreateRateBySpace = new Map<string, TokenBucket>()
+  private readonly docDeleteEpoch = new Map<string, number>()
+  private readonly spaceDeleteEpoch = new Map<string, number>()
+  private deleteEpochSeq = 0
   private globalProductionCount = 0
   private readonly config: StateSyncLimitsConfig
   private persister: StateSyncDocPersister | null = null
@@ -373,12 +380,26 @@ export class StateSyncHub {
     this.persistErrorHandler = onError ?? null
   }
 
+  getDocVersionToken(spaceId: string, docId: string): string {
+    const spaceEpoch = this.spaceDeleteEpoch.get(spaceId) ?? 0
+    const docEpoch = this.docDeleteEpoch.get(makeDocKey(spaceId, docId)) ?? 0
+    return `${spaceEpoch}:${docEpoch}`
+  }
+
+  touchDocActivity(spaceId: string, docId: string, now = Date.now()): Date | null {
+    if (this.shuttingDown) return null
+    const state = this.docs.get(makeDocKey(spaceId, docId))
+    if (!state || state.deleted) return null
+    this.applyDocActivity(state, now)
+    return state.expiresAt ? new Date(state.expiresAt.getTime()) : null
+  }
+
   loadOrAttachDoc(snapshot: LoadedDocSnapshot): ActiveDocHandle {
     const key = makeDocKey(snapshot.spaceId, snapshot.docId)
     const existing = this.docs.get(key)
     if (existing && !existing.deleted) {
       this.clearIdleEvictTimer(existing)
-      if (existing.connections.size === 0 && !existing.dirty && !this.shuttingDown) {
+      if (existing.connections.size === 0 && !existing.dirty && !existing.expiresDirty && !this.shuttingDown) {
         this.scheduleIdleEvict(existing)
       }
       return toDocHandle(existing)
@@ -386,6 +407,7 @@ export class StateSyncHub {
 
     const rev = BigInt(snapshot.rev)
     const now = Date.now()
+    const initialExpiresAt = snapshot.expiresAt ? new Date(snapshot.expiresAt.getTime()) : null
     const state: ActiveDocState = {
       key,
       spaceId: snapshot.spaceId,
@@ -394,7 +416,7 @@ export class StateSyncHub {
       rev,
       evictedUpToRev: rev,
       ttlSeconds: snapshot.ttlSeconds,
-      expiresAt: snapshot.expiresAt ? new Date(snapshot.expiresAt.getTime()) : null,
+      expiresAt: initialExpiresAt,
       connections: new Map(),
       trie: new StateSyncSubscriptionTrie(),
       buffer: [],
@@ -403,8 +425,10 @@ export class StateSyncHub {
       docWriteRate: { tokens: this.config.docWriteBurst, lastRefillMs: now },
       writeChain: Promise.resolve(),
       dirty: false,
+      expiresDirty: false,
       dirtySinceMs: null,
       persistedRev: rev,
+      persistedExpiresAtMs: initialExpiresAt ? initialExpiresAt.getTime() : null,
       flushInFlight: null,
       debounceTimer: null,
       maxWaitTimer: null,
@@ -455,6 +479,18 @@ export class StateSyncHub {
         code: "SHUTTING_DOWN",
         closeCode: STATE_SYNC_WS_CLOSE_CODES.GOING_AWAY,
         message: "服务正在关闭，请稍后重连。",
+      }
+    }
+
+    if (
+      input.expectedVersionToken !== undefined
+      && this.getDocVersionToken(input.spaceId, input.docId) !== input.expectedVersionToken
+    ) {
+      return {
+        ok: false,
+        code: "DOC_NOT_FOUND",
+        closeCode: STATE_SYNC_WS_CLOSE_CODES.REVOKED,
+        message: "房间不存在或已删除。",
       }
     }
 
@@ -550,7 +586,7 @@ export class StateSyncHub {
     this.pruneReplayBuffer(state, now)
 
     if (!input.isObserver && state.ttlSeconds !== null) {
-      state.expiresAt = new Date(now + state.ttlSeconds * 1000)
+      this.applyDocActivity(state, now)
     }
 
     const connection: LiveStateSyncConnection = {
@@ -657,6 +693,7 @@ export class StateSyncHub {
       rev: Number(state.rev),
       expiresAt: state.expiresAt ? state.expiresAt.toISOString() : null,
       replayTruncated,
+      replayedCount: replayedMutations.length,
       presence: this.buildPresenceList(state),
       snapshots,
     }
@@ -717,10 +754,10 @@ export class StateSyncHub {
     }
 
     if (!state.deleted && !this.shuttingDown) {
-      if (!connection.isObserver && state.productionCount === 0 && state.dirty) {
+      if (!connection.isObserver && state.productionCount === 0 && (state.dirty || state.expiresDirty)) {
         await this.flushDoc(state)
       }
-      if (state.connections.size === 0 && !state.dirty) {
+      if (state.connections.size === 0 && !state.dirty && !state.expiresDirty) {
         this.scheduleIdleEvict(state)
       }
     }
@@ -909,6 +946,9 @@ export class StateSyncHub {
     closeCode: number = STATE_SYNC_WS_CLOSE_CODES.REVOKED,
     reasonText = "Space deleted",
   ): number {
+    if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
+      this.bumpSpaceDeleteEpoch(spaceId)
+    }
     const reason = closeCodeToDisconnectReason(closeCode)
     const targetDocs = [...this.docs.values()].filter((doc) => doc.spaceId === spaceId)
     const targets: LiveStateSyncConnection[] = []
@@ -944,6 +984,9 @@ export class StateSyncHub {
     reasonText = "Document deleted",
   ): number {
     const key = makeDocKey(spaceId, docId)
+    if (closeCode === STATE_SYNC_WS_CLOSE_CODES.REVOKED) {
+      this.bumpDocDeleteEpoch(key)
+    }
     const doc = this.docs.get(key)
     if (!doc) return 0
 
@@ -1051,7 +1094,7 @@ export class StateSyncHub {
         .filter((doc) => !doc.deleted)
         .map(async (doc) => {
           await doc.writeChain
-          if (doc.dirty && !doc.deleted && this.persister) {
+          if ((doc.dirty || doc.expiresDirty) && !doc.deleted && this.persister) {
             await this.flushDoc(doc)
           }
         }),
@@ -1186,7 +1229,7 @@ export class StateSyncHub {
         } catch (error) {
           persistFailed = true
           persistError = error
-          if (state.dirty && !state.deleted && !this.shuttingDown) {
+          if ((state.dirty || state.expiresDirty) && !state.deleted && !this.shuttingDown) {
             this.scheduleFlush(state)
           }
           return
@@ -1201,7 +1244,9 @@ export class StateSyncHub {
         state.rev = nextRev
         state.expiresAt = nextExpiresAt
         state.persistedRev = nextRev
+        state.persistedExpiresAtMs = nextExpiresAt ? nextExpiresAt.getTime() : null
         state.dirty = false
+        state.expiresDirty = false
         state.dirtySinceMs = null
       }
 
@@ -1283,7 +1328,7 @@ export class StateSyncHub {
       input.sourceConnectionId,
     )
 
-    if (!state.dirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
+    if (!state.dirty && !state.expiresDirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
       this.scheduleIdleEvict(state)
     }
 
@@ -1423,17 +1468,18 @@ export class StateSyncHub {
   }
 
   private flushDoc(state: ActiveDocState): Promise<void> {
-    if (!this.persister || state.deleted || !state.dirty) {
+    if (!this.persister || state.deleted || (!state.dirty && !state.expiresDirty)) {
       this.clearFlushTimers(state)
       return Promise.resolve()
     }
 
     const run = async (): Promise<void> => {
-      while (state.dirty && !state.deleted && this.persister) {
+      while ((state.dirty || state.expiresDirty) && !state.deleted && this.persister) {
         this.clearFlushTimers(state)
         const targetRev = state.rev
         const snapshotData = structuredClone(state.data)
         const targetExpiresAt = state.expiresAt ? new Date(state.expiresAt.getTime()) : null
+        const targetExpiresAtMs = targetExpiresAt ? targetExpiresAt.getTime() : null
 
         try {
           await this.persister({
@@ -1449,10 +1495,16 @@ export class StateSyncHub {
           }
 
           state.persistedRev = targetRev
+          state.persistedExpiresAtMs = targetExpiresAtMs
           if (state.rev === targetRev) {
             state.dirty = false
             state.dirtySinceMs = null
-          } else if (!this.shuttingDown && state.productionCount > 0) {
+          }
+          const currentExpiresAtMs = state.expiresAt ? state.expiresAt.getTime() : null
+          if (currentExpiresAtMs === targetExpiresAtMs) {
+            state.expiresDirty = false
+          }
+          if ((state.dirty || state.expiresDirty) && !this.shuttingDown && state.productionCount > 0) {
             this.scheduleFlush(state)
             break
           }
@@ -1465,7 +1517,7 @@ export class StateSyncHub {
         }
       }
 
-      if (!state.dirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
+      if (!state.dirty && !state.expiresDirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
         this.scheduleIdleEvict(state)
       }
     }
@@ -1475,7 +1527,7 @@ export class StateSyncHub {
       if (state.flushInFlight === tracked) {
         state.flushInFlight = null
       }
-      if (!state.dirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
+      if (!state.dirty && !state.expiresDirty && state.connections.size === 0 && !state.deleted && !this.shuttingDown) {
         this.scheduleIdleEvict(state)
       }
     })
@@ -1485,12 +1537,12 @@ export class StateSyncHub {
 
   private scheduleIdleEvict(state: ActiveDocState): void {
     this.clearIdleEvictTimer(state)
-    if (state.connections.size > 0 || state.dirty || state.deleted || this.shuttingDown) {
+    if (state.connections.size > 0 || state.dirty || state.expiresDirty || state.deleted || this.shuttingDown) {
       return
     }
     state.idleEvictTimer = setTimeout(() => {
       state.idleEvictTimer = null
-      if (state.connections.size === 0 && !state.dirty && !state.flushInFlight && !state.deleted) {
+      if (state.connections.size === 0 && !state.dirty && !state.expiresDirty && !state.flushInFlight && !state.deleted) {
         this.clearAllTimers(state)
         if (this.docs.get(state.key) === state) {
           this.docs.delete(state.key)
@@ -1498,6 +1550,47 @@ export class StateSyncHub {
       }
     }, this.config.idleEvictMs)
     state.idleEvictTimer.unref?.()
+  }
+
+  private applyDocActivity(state: ActiveDocState, now: number): void {
+    if (state.ttlSeconds === null) return
+    const nextExpiresAtMs = now + state.ttlSeconds * 1000
+    const prevExpiresAtMs = state.expiresAt ? state.expiresAt.getTime() : 0
+    if (nextExpiresAtMs > prevExpiresAtMs) {
+      state.expiresAt = new Date(nextExpiresAtMs)
+    }
+    const currentExpiresAtMs = state.expiresAt ? state.expiresAt.getTime() : null
+    if (
+      currentExpiresAtMs !== null
+      && (state.persistedExpiresAtMs === null || currentExpiresAtMs > state.persistedExpiresAtMs)
+    ) {
+      state.expiresDirty = true
+      const persistThresholdMs = Math.min(state.ttlSeconds * 1000 * 0.25, 60_000)
+      if (
+        state.persistedExpiresAtMs === null
+        || currentExpiresAtMs - state.persistedExpiresAtMs >= persistThresholdMs
+      ) {
+        this.scheduleFlush(state)
+      }
+    }
+  }
+
+  private bumpDocDeleteEpoch(key: string): void {
+    if (this.docDeleteEpoch.size >= 50_000) {
+      const oldest = this.docDeleteEpoch.keys().next().value
+      if (oldest !== undefined) this.docDeleteEpoch.delete(oldest)
+    }
+    this.deleteEpochSeq += 1
+    this.docDeleteEpoch.set(key, this.deleteEpochSeq)
+  }
+
+  private bumpSpaceDeleteEpoch(spaceId: string): void {
+    if (this.spaceDeleteEpoch.size >= 50_000) {
+      const oldest = this.spaceDeleteEpoch.keys().next().value
+      if (oldest !== undefined) this.spaceDeleteEpoch.delete(oldest)
+    }
+    this.deleteEpochSeq += 1
+    this.spaceDeleteEpoch.set(spaceId, this.deleteEpochSeq)
   }
 
   private clearFlushTimers(state: ActiveDocState): void {
@@ -1696,11 +1789,11 @@ export class StateSyncHub {
     if (!this.shuttingDown) {
       for (const [state, info] of affectedDocs) {
         if (state.deleted) continue
-        if (info.hadProductionDisconnect && state.productionCount === 0 && state.dirty) {
+        if (info.hadProductionDisconnect && state.productionCount === 0 && (state.dirty || state.expiresDirty)) {
           void this.flushDoc(state).catch((error: unknown) => {
             this.persistErrorHandler?.(error, state.spaceId, state.docId)
           })
-        } else if (state.connections.size === 0 && !state.dirty) {
+        } else if (state.connections.size === 0 && !state.dirty && !state.expiresDirty) {
           this.scheduleIdleEvict(state)
         }
       }

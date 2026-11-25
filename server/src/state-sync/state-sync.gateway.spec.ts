@@ -843,4 +843,91 @@ describe("StateSyncGateway", () => {
     ws.close()
     await waitClose(ws)
   })
+
+  it("returns WS PAYLOAD_TOO_LARGE error frame for a 70 KiB mutate exceeding the 64 KiB write cap", async () => {
+    const { wsUrl, service } = await startGateway()
+    vi.mocked(service.authenticateWsToken).mockResolvedValue({
+      spaceId: "ss_1",
+      docId: "doc_1",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_1",
+      role: "write",
+      isObserver: false,
+    })
+
+    const ws = new WebSocket(wsUrl(), { headers: { Authorization: "Bearer sys_tok" } })
+    const q = createMessageQueue(ws)
+    await q.next() // ready
+
+    // 70 KiB value exceeds 64 KiB STATE_SYNC_WRITE_MAX_BYTES while staying below 128 KiB WS frame cap
+    const seventyKiB = "x".repeat(70 * 1024)
+    ws.send(JSON.stringify({
+      type: "mutate",
+      id: "m-70k",
+      op: "set",
+      path: "/blob",
+      value: seventyKiB,
+    }))
+    const resp = await q.next()
+    expect(resp).toMatchObject({
+      type: "error",
+      id: "m-70k",
+      code: "PAYLOAD_TOO_LARGE",
+    })
+
+    ws.close()
+    await waitClose(ws)
+  })
+
+  it("rejects in-flight WS auth with DOC_NOT_FOUND (4003) instead of resurrecting a concurrently deleted doc", async () => {
+    const { wsUrl, service, hub } = await startGateway()
+    let resolveAuth!: (val: ResolvedStateSyncWsCredential | null) => void
+    vi.mocked(service.authenticateWsToken).mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolveAuth = resolve
+      })
+    })
+
+    const ws = new WebSocket(wsUrl())
+    const q = createMessageQueue(ws)
+    await waitOpen(ws)
+    ws.send(JSON.stringify({ type: "auth", token: "sys_tok" }))
+
+    await vi.waitFor(() => {
+      expect(service.authenticateWsToken).toHaveBeenCalledTimes(1)
+    })
+
+    // Simulate deleteDoc running while authenticateWsToken / DB load is in flight (even on a cold doc)
+    hub.disconnectByDoc("ss_1", "doc_1", STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document deleted")
+
+    resolveAuth({
+      spaceId: "ss_1",
+      docId: "doc_1",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "tok_1",
+      role: "write",
+      isObserver: false,
+      docSnapshot: {
+        spaceId: "ss_1",
+        docId: "doc_1",
+        data: { stale: true },
+        rev: 0n,
+        ttlSeconds: 3600,
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    })
+
+    const errFrame = await q.next()
+    expect(errFrame).toMatchObject({
+      type: "error",
+      code: "DOC_NOT_FOUND",
+    })
+    const closed = await waitClose(ws)
+    expect(closed.code).toBe(STATE_SYNC_WS_CLOSE_CODES.REVOKED)
+    // Phantom room must NOT be resurrected in Hub, and duplicate loadDocForGateway must be avoided
+    expect(hub.getDocHandle("ss_1", "doc_1")).toBeNull()
+    expect(service.loadDocForGateway).not.toHaveBeenCalled()
+  })
 })

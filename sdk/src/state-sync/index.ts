@@ -290,6 +290,8 @@ class StateSyncRoomImpl implements StateSyncRoom {
   private mirror: Record<string, unknown> = {}
   private _rev = 0
   private appliedMirrorRev = 0
+  private pendingReplayRemaining = 0
+  private pendingReplayTargetRev: number | null = null
   private _connectionId = ""
   private _clientId: string
   private clientName?: string
@@ -623,6 +625,8 @@ class StateSyncRoomImpl implements StateSyncRoom {
   }
 
   private handleTransportClose(info: { readonly code: number; readonly reason: string; readonly willReconnect: boolean }): void {
+    this.pendingReplayRemaining = 0
+    this.pendingReplayTargetRev = null
     this.rejectAllPending(
       new StateSyncError("CONNECTION_CLOSED", info.reason || `WebSocket 已关闭 (code ${info.code})。`),
     )
@@ -691,6 +695,9 @@ class StateSyncRoomImpl implements StateSyncRoom {
       ? (frame.snapshots as Array<{ path: string; exists: boolean; value: unknown }>)
       : []
 
+    this.pendingReplayRemaining = 0
+    this.pendingReplayTargetRev = null
+
     if (snapshots.length > 0) {
       const beforeStates = isReconnect ? this.captureListenerSnapshots([...this.listeners]) : null
       let nextMirror: Record<string, unknown> = {}
@@ -703,12 +710,21 @@ class StateSyncRoomImpl implements StateSyncRoom {
       if (beforeStates) {
         this.notifyChangedListeners(beforeStates, this._rev)
       }
+    } else if (!isReconnect) {
+      this._rev = Math.max(this._rev, readyRev)
+      this.appliedMirrorRev = readyRev
     } else {
-      // Incremental replay mode: do not advance this._rev ahead of this.appliedMirrorRev.
-      // Replayed mutation frames will advance both appliedMirrorRev and _rev as they arrive.
-      if (!isReconnect) {
+      const replayTruncated = Boolean(frame.replayTruncated)
+      const replayedCount =
+        typeof frame.replayedCount === "number" && Number.isInteger(frame.replayedCount) && frame.replayedCount >= 0
+          ? frame.replayedCount
+          : undefined
+      if (!replayTruncated && replayedCount === 0) {
+        this.appliedMirrorRev = Math.max(this.appliedMirrorRev, readyRev)
         this._rev = Math.max(this._rev, readyRev)
-        this.appliedMirrorRev = readyRev
+      } else if (!replayTruncated && replayedCount !== undefined && replayedCount > 0) {
+        this.pendingReplayRemaining = replayedCount
+        this.pendingReplayTargetRev = readyRev
       }
     }
 
@@ -742,21 +758,41 @@ class StateSyncRoomImpl implements StateSyncRoom {
     const path = typeof frame.path === "string" ? frame.path : "/"
     if (op !== "set" && op !== "patch" && op !== "delete") return
 
-    if (rev <= this.appliedMirrorRev) {
-      return
+    const isReplayed = frame.replayed === true
+    let advanced = false
+
+    if (rev > this.appliedMirrorRev) {
+      const candidates = this.collectAffectedListeners(path)
+      const beforeStates = this.captureListenerSnapshots(candidates)
+
+      this.mirror = applyMutationToMirror(this.mirror, op, path, frame.value)
+      this.appliedMirrorRev = rev
+      if (rev > this._rev) {
+        this._rev = rev
+      }
+      advanced = true
+      this.notifyChangedListeners(beforeStates, this._rev)
     }
 
-    const candidates = this.collectAffectedListeners(path)
-    const beforeStates = this.captureListenerSnapshots(candidates)
-
-    this.mirror = applyMutationToMirror(this.mirror, op, path, frame.value)
-    this.appliedMirrorRev = rev
-    if (rev > this._rev) {
-      this._rev = rev
+    if (isReplayed && this.pendingReplayRemaining > 0) {
+      this.pendingReplayRemaining -= 1
+      if (this.pendingReplayRemaining === 0 && this.pendingReplayTargetRev !== null) {
+        const targetRev = this.pendingReplayTargetRev
+        this.pendingReplayTargetRev = null
+        if (targetRev > this.appliedMirrorRev) {
+          this.appliedMirrorRev = targetRev
+          advanced = true
+        }
+        if (targetRev > this._rev) {
+          this._rev = targetRev
+          advanced = true
+        }
+      }
     }
 
-    this.notifyChangedListeners(beforeStates, this._rev)
-    this.notifyRevWaiters()
+    if (advanced) {
+      this.notifyRevWaiters()
+    }
   }
 
   private handleSnapshotFrame(frame: Record<string, unknown>): void {

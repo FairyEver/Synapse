@@ -1831,4 +1831,72 @@ describe("StateSyncHub debounced flush, slow consumer, hidden observers, quotas 
 
     await hub.shutdown()
   })
+
+  it("slides expiresAt on heartbeats for read-only active connections and persists via throttled flush and disconnect", async () => {
+    vi.useFakeTimers()
+    const baseMs = 1_700_000_000_000
+    vi.setSystemTime(baseMs)
+
+    const hub = new StateSyncHub(loadStateSyncConfig({}))
+    const persisted: PersistDocInput[] = []
+    hub.configurePersister(async (doc) => {
+      persisted.push(doc)
+    })
+
+    const ttlSeconds = 3600
+    hub.loadOrAttachDoc({
+      spaceId: "ss_1",
+      docId: "ssd_sliding_ttl",
+      data: { ok: true },
+      rev: 0n,
+      ttlSeconds,
+      expiresAt: new Date(baseMs + ttlSeconds * 1000),
+    })
+
+    const readerSock = createFakeSocket()
+    const reg = hub.registerConnection({
+      spaceId: "ss_1",
+      docId: "ssd_sliding_ttl",
+      ownerId: "u1",
+      credentialType: "space_token",
+      credentialId: "t_read",
+      role: "read",
+      isObserver: false,
+      clientId: "reader-1",
+      clientName: null,
+      meta: {},
+      socket: readerSock.socket,
+      now: baseMs,
+    })
+    if (!reg.ok) throw new Error("register failed")
+
+    // Heartbeat after 25s (< 60s throttle threshold): slides expiresAt in memory, not flushed yet
+    const t25 = baseMs + 25_000
+    hub.touchDocActivity("ss_1", "ssd_sliding_ttl", t25)
+    expect(hub.getDocHandle("ss_1", "ssd_sliding_ttl")?.expiresAt?.getTime()).toBe(t25 + ttlSeconds * 1000)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(persisted).toHaveLength(0)
+
+    // Heartbeat after 70s (>= 60s throttle threshold): triggers debounced flush to persister
+    const t70 = baseMs + 70_000
+    hub.touchDocActivity("ss_1", "ssd_sliding_ttl", t70)
+    expect(hub.getDocHandle("ss_1", "ssd_sliding_ttl")?.expiresAt?.getTime()).toBe(t70 + ttlSeconds * 1000)
+    await vi.advanceTimersByTimeAsync(600)
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]?.expiresAt?.getTime()).toBe(t70 + ttlSeconds * 1000)
+    expect(persisted[0]?.rev).toBe(0n)
+
+    // Another heartbeat 20s later (< 60s threshold since last persist): marks expiresDirty without immediate flush
+    const t90 = baseMs + 90_000
+    hub.touchDocActivity("ss_1", "ssd_sliding_ttl", t90)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(persisted).toHaveLength(1)
+
+    // Last production connection disconnects: flushes renewed expiresAt immediately
+    await hub.unregisterConnection("ss_1", "ssd_sliding_ttl", reg.connection.connectionId, "normal")
+    expect(persisted).toHaveLength(2)
+    expect(persisted[1]?.expiresAt?.getTime()).toBe(t90 + ttlSeconds * 1000)
+
+    await hub.shutdown()
+  })
 })

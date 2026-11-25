@@ -85,6 +85,7 @@ export type ResolvedStateSyncWsCredential = {
   readonly credentialId: string
   readonly role: StateSyncRole
   readonly isObserver: boolean
+  readonly docSnapshot?: LoadedDocSnapshot
 }
 
 export type StateSyncSpaceDto = {
@@ -190,13 +191,22 @@ function apiKeyCanAccessSpace(
 }
 
 function parseBody<T>(
-  schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error?: { issues?: Array<{ message?: string }> } } },
+  schema: {
+    safeParse(v: unknown):
+      | { success: true; data: T }
+      | { success: false; error?: { issues?: Array<{ message?: string; params?: Record<string, unknown> }> } }
+  },
   input: unknown,
   fallbackMessage: string,
 ): T {
   const parsed = schema.safeParse(input)
   if (!parsed.success) {
-    const detail = parsed.error?.issues?.[0]?.message
+    const firstIssue = parsed.error?.issues?.[0]
+    const detail = firstIssue?.message
+    const errorCode = firstIssue?.params?.errorCode
+    if (errorCode === "PAYLOAD_TOO_LARGE" || errorCode === "DOC_TOO_LARGE") {
+      throw new OpenApiHttpError(413, errorCode, detail || fallbackMessage)
+    }
     throw new OpenApiHttpError(400, "INVALID_REQUEST", detail || fallbackMessage)
   }
   return parsed.data
@@ -302,6 +312,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
         credentialId: `dbg_${randomUUID().replaceAll("-", "")}`,
         role: "read",
         isObserver: true,
+        docSnapshot: doc,
       }
     }
 
@@ -320,6 +331,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
         credentialId: actor.tokenId,
         role: actor.role,
         isObserver: false,
+        docSnapshot: doc,
       }
     }
 
@@ -345,6 +357,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
         credentialId: actor.apiKeyId,
         role,
         isObserver: false,
+        docSnapshot: doc,
       }
     }
 
@@ -841,8 +854,9 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
         throw new OpenApiHttpError(404, "DOC_NOT_FOUND", "房间不存在或已过期。")
       }
     } else {
+      const versionToken = this.hub.getDocVersionToken(spaceId, docId)
       const snapshot = await this.loadDocForGateway(spaceId, docId)
-      if (!snapshot) {
+      if (!snapshot || this.hub.getDocVersionToken(spaceId, docId) !== versionToken) {
         throw new OpenApiHttpError(404, "DOC_NOT_FOUND", "房间不存在或已过期。")
       }
       this.hub.loadOrAttachDoc(snapshot)
@@ -982,9 +996,7 @@ export class StateSyncService implements OnModuleInit, OnModuleDestroy {
       })
       if (deleted.count > 0) {
         deletedCount += deleted.count
-        if (handle !== null) {
-          this.hub.disconnectByDoc(row.spaceId, row.id, STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document expired")
-        }
+        this.hub.disconnectByDoc(row.spaceId, row.id, STATE_SYNC_WS_CLOSE_CODES.REVOKED, "Document expired")
       }
     }
 

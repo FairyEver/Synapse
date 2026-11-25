@@ -274,6 +274,7 @@ describe("state_sync MCP capability", () => {
       ["app.state_sync.doc.mutate", { spaceId: "sp_1", docId: "room-1", op: "delete", path: "/" }],
       ["app.state_sync.doc.mutate", { spaceId: "sp_1", docId: "room-1", op: "patch", path: "/a", value: "not-object" }],
       ["app.state_sync.doc.create", { spaceId: "sp_1", docId: "x" }],
+      ["app.state_sync.doc.create", { spaceId: "sp_1", docId: "room..1" }],
     ] as const) {
       expect(await f.dispatch(action, args, caller), action).toMatchObject({
         ok: false,
