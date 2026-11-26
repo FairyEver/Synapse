@@ -80,6 +80,9 @@ describe("model capability catalog", () => {
     ["https://api.deepseek.com/anthropic", "deepseek-flash[1M]"],
     ["https://api.deepseek.com/anthropic", "deepseek-flash[1m]"],
     ["https://api.deepseek.com/anthropic", "deepseek-v4-pro[1M]"],
+    ["https://api.deepseek.com/anthropic", "deepseek-v4.1-flash[1M]"],
+    ["https://dashscope.aliyuncs.com/apps/anthropic", "deepseek-v4.1-flash[1M]"],
+    ["https://dashscope.aliyuncs.com/apps/anthropic", "deepseek-v4.1-flash-1017[1m]"],
     ["https://dashscope.aliyuncs.com/apps/anthropic", "qwen3.8-max[1M]"],
     ["https://api.anthropic.com", "claude-opus-4-8[1m]"],
   ])("resolves the 1M declaration spelling of %s %s", (baseUrl, modelId) => {

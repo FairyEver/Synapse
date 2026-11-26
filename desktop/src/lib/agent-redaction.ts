@@ -10,6 +10,12 @@ const SK_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
 // Match by credential content as well as field name (e.g. shell SY= / PT=).
 const JWT_PATTERN = /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*(?![A-Za-z0-9_-])/g
 const CIRCULAR_MARKER = "[Circular]"
+const SAFE_TOKEN_DETAILS_KEY_PATTERN = /^(?:prompt|output|completion|input)tokensdetails$/i
+
+function isSafeTokenDetailsContainer(key: string, value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    && SAFE_TOKEN_DETAILS_KEY_PATTERN.test(key.replace(/[-_]/g, ""))
+}
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
@@ -69,7 +75,8 @@ function redactCookieHeaderValue(value: string): string {
 }
 
 function redactSensitiveValue(value: unknown, key = "", ancestors = new WeakSet<object>()): unknown {
-  if (isSensitiveKey(key)) return REDACTED
+  if (isSafeTokenMeasurement(key, value)) return value
+  if (!isSafeTokenDetailsContainer(key, value) && isSensitiveKey(key)) return REDACTED
   if (typeof value === "string") return redactSensitiveText(value)
   if (!value || typeof value !== "object") return value
   if (ancestors.has(value)) return CIRCULAR_MARKER
@@ -97,6 +104,7 @@ function redactSessionKey(sessionKey: string | undefined): string | undefined {
 }
 
 export {
+  isSafeTokenDetailsContainer,
   isSensitiveKey,
   isSensitiveTextKey,
   redactSessionKey,
@@ -109,5 +117,5 @@ export {
 /** Exact numeric diagnostic fields only; a string token is still sensitive. */
 export function isSafeTokenMeasurement(key: string, value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
-    && /^(?:usedtokens|maxtokens|inputtokens|outputtokens|totaltokens|cacheReadInputTokens|cacheCreationInputTokens|reasoningOutputTokens|estimatedRequestTokens|autoCompactThresholdTokens|modelMaxContextTokens|autoCompactWindowTokens|contextWindowTokens|toolResultTokens|cacheReadTokens|cacheCreationTokens|unknownTokenCosts|tokenEstimate|tokenLimit)$/i.test(key.replace(/[-_]/g, ""))
+    && /^(?:usedtokens|maxtokens|maxoutputtokens|inputtokens|outputtokens|totaltokens|thinkingtokens|cachedtokens|prompttokens|completiontokens|audiotokens|reasoningtokens|acceptedpredictiontokens|rejectedpredictiontokens|ephemeral1hinputtokens|ephemeral5minputtokens|cacheReadInputTokens|cacheCreationInputTokens|reasoningOutputTokens|estimatedRequestTokens|autoCompactThresholdTokens|modelMaxContextTokens|autoCompactWindowTokens|contextWindowTokens|toolResultTokens|cacheReadTokens|cacheCreationTokens|unknownTokenCosts|tokenEstimate|tokenLimit)$/i.test(key.replace(/[-_]/g, ""))
 }

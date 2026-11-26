@@ -688,6 +688,145 @@ describe("AgentConversationExportService", () => {
     expect(chooseSavePath.mock.calls[0]?.[0]).not.toContain(TEST_SESSION_KEY)
   })
 
+  it("produces compact cross-tool-safe export names for long fallback titles with CJK punctuation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      name: "1.1【人力数字化管理系统】 1.1.1 建设现状和应用价值 截至2026年，围绕“1+6+1”新…",
+    })
+    const chooseSavePath = vi.fn().mockResolvedValue(null)
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath,
+      createZipArchive: vi.fn(),
+      now: () => new Date("2026-11-25T14:33:42.000Z"),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).resolves.toEqual({ success: false })
+
+    const suggestedName = chooseSavePath.mock.calls[0]?.[0] as string
+    expect(suggestedName).toMatch(/^synapse-agent-conversation-.+-20261125-143342Z\.zip$/)
+    expect(suggestedName).not.toMatch(/[【】“”…]/)
+    expect(Buffer.byteLength(suggestedName, "utf8")).toBeLessThanOrEqual(120)
+    const segment = suggestedName.replace(/^synapse-agent-conversation-/, "").replace(/-20261125-143342Z\.zip$/, "")
+    expect(Array.from(segment).length).toBeLessThanOrEqual(40)
+    expect(Buffer.byteLength(segment, "utf8")).toBeLessThanOrEqual(64)
+  })
+
+  it("reports captureDroppedEventCount, deduplicates stream frames, and preserves safe token detail objects", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-export-stream-metrics-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    await conversations.upsert(createConversation())
+    await agentEvents.upsert({
+      id: "conv-1:turn-1:1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      eventType: "stream",
+      payload: {
+        type: "stream",
+        event: {
+          type: "message_delta",
+          usage: {
+            input_tokens: 120,
+            prompt_tokens_details: { cached_tokens: 80, authToken: "secret-leak" },
+          },
+        },
+      },
+      createdAt: "2026-11-25T13:50:15.000Z",
+    })
+    await agentEvents.upsert({
+      id: "conv-1:turn-1:stream-diagnostics",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      eventType: "streamDiagnostics",
+      payload: {
+        type: "streamDiagnostics",
+        schemaVersion: 1,
+        source: "claude-agent-sdk-stream-event",
+        observedEventCount: 1_438,
+        capturedEventCount: 1,
+        droppedEventCount: 1_437,
+        capturedBytes: 512,
+        truncated: true,
+        limits: { maxEventsPerTurn: 1_000, maxBytesPerTurn: 524_288 },
+        frames: [{
+          sequence: 1,
+          createdAt: "2026-11-25T13:50:15.000Z",
+          payload: {
+            type: "stream",
+            event: {
+              type: "message_delta",
+              usage: {
+                input_tokens: 120,
+                prompt_tokens_details: { cached_tokens: 80, authToken: "secret-leak" },
+              },
+            },
+          },
+        }],
+      },
+      createdAt: "2026-11-25T13:50:43.000Z",
+    })
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
+      const sdkStream = JSON.parse(await readFile(path.join(sourceDirectoryPath, "sdk-stream-events.json"), "utf8")) as {
+        capture: {
+          observedEventCount: number
+          capturedEventCount: number
+          captureDroppedEventCount: number
+          exportDroppedEventCount: number
+          truncatedTurnCount: number
+          capturedBytes: number
+          exportedBytes: number
+        }
+        events: Array<{ payload: { event?: { usage?: { prompt_tokens_details?: Record<string, unknown> } } } }>
+      }
+      expect(sdkStream.capture).toMatchObject({
+        observedEventCount: 1_438,
+        capturedEventCount: 1,
+        captureDroppedEventCount: 1_437,
+        exportDroppedEventCount: 0,
+        truncatedTurnCount: 1,
+        capturedBytes: 512,
+      })
+      expect(sdkStream.capture.exportedBytes).toBeGreaterThan(0)
+      expect(sdkStream.events).toHaveLength(1)
+      expect(sdkStream.events[0]?.payload.event?.usage?.prompt_tokens_details).toEqual({
+        cached_tokens: 80,
+        authToken: "[redacted]",
+      })
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents,
+      agentUsage,
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      createZipArchive,
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({ projectId: "project-1", conversationId: "conv-1" }))
+      .resolves.toMatchObject({ success: true })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
+
   it("exports every stored assistant message when rebuilding transcript from history", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-transcript-test-"))
     tempRoots.push(tempRoot)

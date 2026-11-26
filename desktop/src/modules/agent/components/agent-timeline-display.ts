@@ -141,16 +141,32 @@ function appendTurnNodes(
   let anchorId = hasUserAnchor && first ? first.item.id : "root"
   let pendingProcessEntries: TimelineDisplayEntry[] = []
   const postludeEntries: TimelineDisplayEntry[] = []
-  const finalAssistantIndex = context.lifecycle === "completed" && !turnDidNotComplete(entries)
+  const promoteCompletedAssistantMessages = context.lifecycle === "completed" && !turnDidNotComplete(entries)
+  const finalAssistantIndex = promoteCompletedAssistantMessages
     ? findLastAssistantIndex(entries)
     : -1
-  const completedTurnStartedAtMs = (finalAssistantIndex >= 0 || turnWasCancelled(entries)) && hasUserAnchor && first
+  const userTurnStartedAtMs = (finalAssistantIndex >= 0 || turnWasCancelled(entries)) && hasUserAnchor && first
     ? parseProcessTimestamp(first.item.timestamp)
     : undefined
+  let anchoredAtUser = hasUserAnchor
+  const trailingCompletedResults: TimelineDisplayEntry[] = []
+  if (finalAssistantIndex >= 0) {
+    for (let index = finalAssistantIndex + 1; index < entries.length; index += 1) {
+      const candidate = entries[index]
+      if (candidate && isCompletedResultEntry(candidate)) {
+        trailingCompletedResults.push(candidate)
+      }
+    }
+  }
 
   const flushProcessEntries = () => {
     if (pendingProcessEntries.length === 0) return
-    nodes.push(createProcessGroup(pendingProcessEntries, anchorId, context, completedTurnStartedAtMs))
+    nodes.push(createProcessGroup(
+      pendingProcessEntries,
+      anchorId,
+      context,
+      anchoredAtUser ? userTurnStartedAtMs : undefined,
+    ))
     pendingProcessEntries = []
   }
 
@@ -160,26 +176,34 @@ function appendTurnNodes(
 
   for (let index = hasUserAnchor ? 1 : 0; index < entries.length; index += 1) {
     const entry = entries[index]
-    if (!entry || index === finalAssistantIndex) continue
+    if (!entry) continue
+    if (finalAssistantIndex >= 0 && index > finalAssistantIndex && isCompletedResultEntry(entry)) {
+      continue
+    }
     if (entry.item.kind === "fileCheckpoint") {
       postludeEntries.push(entry)
       continue
     }
-    if (isRequiredMainlineEntry(entry, context)) {
+    if (
+      isRequiredMainlineEntry(entry, context)
+      || (promoteCompletedAssistantMessages && isAssistantMessage(entry))
+    ) {
       if (isCancelledTerminalEntry(entry)) {
         pendingProcessEntries = markLastCancelledTool(pendingProcessEntries)
+      }
+      if (index === finalAssistantIndex && trailingCompletedResults.length > 0) {
+        pendingProcessEntries.push(...trailingCompletedResults)
       }
       flushProcessEntries()
       nodes.push({ kind: "item", entry })
       anchorId = entry.item.id
+      anchoredAtUser = false
       continue
     }
     pendingProcessEntries.push(entry)
   }
 
   flushProcessEntries()
-  const finalAssistant = finalAssistantIndex >= 0 ? entries[finalAssistantIndex] : undefined
-  if (finalAssistant) nodes.push({ kind: "item", entry: finalAssistant })
   for (const entry of postludeEntries) nodes.push({ kind: "item", entry })
 }
 
@@ -220,6 +244,16 @@ function isUserDeclinedToolResult(result: SynapseAgentToolResultTimelineItem): b
 
 function isUserMessage(entry: TimelineDisplayEntry): boolean {
   return entry.item.kind === "message" && entry.item.role === "user"
+}
+
+function isAssistantMessage(entry: TimelineDisplayEntry): boolean {
+  return entry.item.kind === "message" && entry.item.role === "assistant"
+}
+
+function isCompletedResultEntry(entry: TimelineDisplayEntry): boolean {
+  if (entry.item.kind !== "result") return false
+  const status = entry.item.metadata?.turnOutcome?.status
+  return status === undefined || status === "completed"
 }
 
 function findLastAssistantIndex(entries: readonly TimelineDisplayEntry[]): number {

@@ -1106,8 +1106,8 @@ describe("AgentMessageEvent", () => {
     })
 
     expect(container.textContent).toContain("用量统计")
-    expect(container.textContent).toContain("¥0.18")
-    expect(container.textContent).toContain("¥1.42")
+    expect(container.textContent).not.toContain("¥0.18")
+    expect(container.textContent).not.toContain("¥1.42")
     expect(container.textContent).not.toContain("费用 $0.05")
     expect(container.textContent).toContain("10,248")
     expect(container.querySelector("[aria-label='Token 消耗']")).toBeNull()

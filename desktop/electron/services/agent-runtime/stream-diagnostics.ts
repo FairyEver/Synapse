@@ -12,8 +12,10 @@ export interface StreamDiagnosticFrame {
 
 export interface StreamDiagnosticCapture {
   frames: StreamDiagnosticFrame[]
+  frameBytes: number[]
   capturedBytes: number
   observedEventCount: number
+  droppedEventCount: number
   truncated: boolean
 }
 
@@ -24,6 +26,7 @@ export interface StreamDiagnosticChunkPayload extends Record<string, unknown> {
   readonly frames: readonly StreamDiagnosticFrame[]
   readonly observedEventCount: number
   readonly capturedEventCount: number
+  readonly droppedEventCount?: number
   readonly capturedBytes: number
   readonly truncated: boolean
   readonly limits: {

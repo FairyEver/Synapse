@@ -134,6 +134,7 @@ function directModels() {
     direct("deepseek-official", "deepseek-flash", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("deepseek-official", "deepseek-v4-flash", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("deepseek-official", "deepseek-v4-pro", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
+    direct("deepseek-official", "deepseek-v4.1-flash", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("gemini-official", "gemini-3-flash-preview", 1_048_576, "Google", "gemini-models", {
       aliases: ["gemini-3-flash"],
       maxInputTokens: 1_048_576,

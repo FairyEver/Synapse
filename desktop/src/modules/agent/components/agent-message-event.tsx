@@ -336,11 +336,6 @@ function AssistantMessageBody({
         <AgentUsageCard
           totalUsage={item.metadata?.usage}
           turnUsage={item.metadata?.turnUsage}
-          turnCostCny={item.metadata?.costCny}
-          totalCostCny={item.metadata?.totalCostCny}
-          turnCostBreakdownCny={item.metadata?.costBreakdownCny}
-          totalCostBreakdownCny={item.metadata?.totalCostBreakdownCny}
-          estimatedCost={item.metadata?.estimatedCost}
           timestamp={item.timestamp}
         />
       ) : null}

@@ -9,7 +9,13 @@ import type {
   AgentToolResultImageBlock,
   AgentToolResultImageDiagnostic,
 } from "./types"
-import { isSensitiveKey, redactSensitiveText, REDACTED } from "./redaction"
+import {
+  isSafeTokenDetailsContainer,
+  isSafeTokenMeasurement,
+  isSensitiveKey,
+  redactSensitiveText,
+  REDACTED,
+} from "./redaction"
 
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 const EMBEDDED_IMAGE_DATA_URL_PATTERN = /data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi
@@ -550,7 +556,11 @@ function sanitizeJsonValue(value: unknown, seen: WeakSet<object>, parentKey?: st
       if (sanitized !== undefined) record[key] = sanitized
       continue
     }
-    if (isSensitivePayloadKey(key)) {
+    if (
+      !isSafeTokenMeasurement(key, item)
+      && !isSafeTokenDetailsContainer(key, item)
+      && isSensitivePayloadKey(key)
+    ) {
       record[key] = REDACTED
       continue
     }

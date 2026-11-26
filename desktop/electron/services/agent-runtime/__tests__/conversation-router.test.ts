@@ -1062,8 +1062,186 @@ describe("ConversationRouter", () => {
     expect(diagnostic?.payload).toMatchObject({
       observedEventCount: 1_001,
       capturedEventCount: 1_000,
+      droppedEventCount: 1,
       truncated: true,
       limits: { maxEventsPerTurn: 1_000, maxBytesPerTurn: 524_288 },
+    })
+  })
+
+  it("evicts oldest delta frames while preserving structural stream frames and tail deltas", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const streamEvents: AgentEvent[] = [
+      {
+        type: "stream",
+        sdkSessionId: "sdk-1",
+        event: { type: "message_start", message: { id: "msg-1", model: "deepseek-v4.1-flash" } },
+      },
+      ...Array.from({ length: 1_005 }, (_, index): AgentEvent => ({
+        type: "stream",
+        text: `d${index}`,
+        deltaType: "text_delta",
+        sdkSessionId: "sdk-1",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: `d${index}` },
+        },
+      })),
+      {
+        type: "stream",
+        sdkSessionId: "sdk-1",
+        event: { type: "message_delta", delta: { stop_reason: "end_turn" } },
+      },
+      {
+        type: "stream",
+        sdkSessionId: "sdk-1",
+        event: { type: "message_stop" },
+      },
+    ]
+    const { router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        ...streamEvents,
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("hello"))
+
+    const allEvents = await agentEvents.list()
+    const diagnostic = allEvents.find((entry) => entry.eventType === "streamDiagnostics")
+    const boundaryStreamTypes = allEvents
+      .filter((entry) => entry.eventType === "stream")
+      .map((entry) => (entry.payload as { event?: { type?: string } }).event?.type)
+    const payload = diagnostic?.payload as {
+      observedEventCount: number
+      capturedEventCount: number
+      droppedEventCount: number
+      truncated: boolean
+      frames: Array<{ payload: { event?: { type?: string }; text?: string } }>
+    }
+    expect(payload).toMatchObject({
+      observedEventCount: 1_005,
+      capturedEventCount: 1_000,
+      droppedEventCount: 5,
+      truncated: true,
+    })
+    expect(boundaryStreamTypes).toEqual(["message_start", "message_delta", "message_stop"])
+    expect(payload.frames[0]?.payload.text).toBe("d5")
+    expect(payload.frames.at(-1)?.payload.text).toBe("d1004")
+  })
+
+  it("merges case-split canonical models, strips unknown SDK costUsd, and preserves safe token telemetry without redacting undefined", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router } = createRouter({
+      agentEvents,
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "deepseek-v4.1-flash[1M]" },
+      session: new ScriptedSession([
+        {
+          type: "stream",
+          sdkSessionId: "sdk-1",
+          event: {
+            type: "message_delta",
+            usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              prompt_tokens_details: { cached_tokens: 50, secretToken: "sk-leak" },
+            },
+          },
+        },
+        {
+          type: "result",
+          content: "ok",
+          done: true,
+          sdkResultUuid: "res-merge-1",
+          sdkSessionId: "sdk-1",
+          costUsd: 0.404088,
+          usage: {
+            input_tokens: 36_199,
+            output_tokens: 4_640,
+            cache_read_input_tokens: 161_536,
+            cache_creation_input_tokens: 0,
+            output_tokens_details: { reasoning_tokens: 120 },
+            cache_creation: { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 },
+          },
+          modelUsage: {
+            "deepseek-v4.1-flash[1M]": {
+              inputTokens: 4_350,
+              outputTokens: 183,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              maxOutputTokens: 32_000,
+              thinkingTokens: 0,
+              canonicalModel: "deepseek-v4.1-flash[1m]",
+              costBasis: "unknown",
+              costUSD: 0.026325,
+            },
+            "deepseek-v4.1-flash[1m]": {
+              inputTokens: 36_199,
+              outputTokens: 4_640,
+              cacheReadInputTokens: 161_536,
+              cacheCreationInputTokens: 0,
+              maxOutputTokens: 32_000,
+              thinkingTokens: 0,
+              canonicalModel: "deepseek-v4.1-flash[1m]",
+              costBasis: "unknown",
+              costUSD: 0.377763,
+            },
+          },
+          payload: { total_cost_usd: 0.404088 },
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const saved = await conversations.get(result.conversationId)
+    const assistant = saved?.history.find((entry) => entry.role === "assistant")
+    const usageRows = await agentUsage.list()
+    const allPersistedEvents = await agentEvents.list()
+    const persistedResult = allPersistedEvents.find((entry) => entry.eventType === "result")
+    const persistedStream = allPersistedEvents.find((entry) => entry.eventType === "stream")
+
+    expect(result.costUsd).toBeUndefined()
+    expect(saved?.costUsd).toBeUndefined()
+    expect(assistant?.metadata?.costUsd).toBeUndefined()
+    expect(assistant?.metadata?.modelUsage).toEqual({
+      "deepseek-v4.1-flash[1m]": expect.objectContaining({
+        inputTokens: 40_549,
+        outputTokens: 4_823,
+        cacheReadInputTokens: 161_536,
+        maxOutputTokens: 32_000,
+        thinkingTokens: 0,
+      }),
+    })
+    expect(usageRows[0]?.usageSummary).toEqual({
+      inputTokens: 40_549,
+      outputTokens: 4_823,
+      cacheReadInputTokens: 161_536,
+      cacheCreationInputTokens: 0,
+      totalTokens: 206_908,
+    })
+    const resultPayload = persistedResult?.payload as {
+      usage?: Record<string, unknown>
+      modelUsage?: Record<string, Record<string, unknown>>
+      metadata?: { usage?: Record<string, unknown> }
+    }
+    expect(resultPayload?.usage?.output_tokens_details).toEqual({ reasoning_tokens: 120 })
+    expect(resultPayload?.usage?.cache_creation).toEqual({
+      ephemeral_1h_input_tokens: 0,
+      ephemeral_5m_input_tokens: 0,
+    })
+    expect(resultPayload?.modelUsage?.["deepseek-v4.1-flash[1m]"]).toMatchObject({
+      maxOutputTokens: 32_000,
+      thinkingTokens: 0,
+    })
+    expect(resultPayload?.metadata?.usage?.reasoningOutputTokens).toBeUndefined()
+    const streamUsage = (persistedStream?.payload as { event?: { usage?: Record<string, unknown> } })
+      ?.event?.usage
+    expect(streamUsage?.prompt_tokens_details).toEqual({
+      cached_tokens: 50,
+      secretToken: "[redacted]",
     })
   })
 

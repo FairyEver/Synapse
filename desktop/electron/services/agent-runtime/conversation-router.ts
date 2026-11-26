@@ -1,5 +1,5 @@
 import { createGeneratedUiMetadata } from "./generated-ui-service"
-import { isSafeTokenMeasurement } from "./redaction"
+import { isSafeTokenDetailsContainer, isSafeTokenMeasurement } from "./redaction"
 import { randomUUID } from "node:crypto"
 
 import type {
@@ -2116,21 +2116,24 @@ export class ConversationRouter {
     readonly costCurrency: "CNY" | undefined
   }> {
     const usage = resultUsageFromEvent(input.event)
-    const modelUsage = resultModelUsageFromEvent(input.event)
+    const rawModelUsage = resultModelUsageFromEvent(input.event)
+    const modelUsage = mergeCanonicalModelUsage(rawModelUsage)
     const turnUsage = this.normalizedTurnUsage(
       input.conversation,
       usage,
       modelUsage,
       input.sdkSessionId,
+      rawModelUsage,
     )
     let metadata = resultHistoryMetadata(input.event)
     metadata = mergeHistoryMetadata(
       { model: input.state.effectiveModel },
       metadata,
+      modelUsage ? { modelUsage } : undefined,
       turnUsage.modelUsage && turnUsage.summary ? { turnUsage: turnUsage.summary } : undefined,
     )
     metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadata(input.conversation))
-    metadata = this.withNormalizedSdkCostMetadata(input.conversation, input.event, metadata)
+    metadata = this.withNormalizedSdkCostMetadata(input.conversation, input.event, metadata, rawModelUsage)
     metadata = this.withLocalCostMetadata(
       input.state,
       usage,
@@ -2155,6 +2158,7 @@ export class ConversationRouter {
     return {
       event: {
         ...input.event,
+        ...(modelUsage ? { modelUsage } : {}),
         metadata,
         costUsd,
         costCny,
@@ -2182,19 +2186,24 @@ export class ConversationRouter {
     readonly costCny: number | undefined
     readonly costCurrency: "CNY" | undefined
   }> {
-    const turnCostUsd = this.normalizedEventCostUsd(
-      input.conversation,
-      input.event.costUsd,
-      input.event.payload,
-    )
+    const rawModelUsage = input.event.modelUsage
+    const modelUsage = mergeCanonicalModelUsage(rawModelUsage)
+    const turnCostUsd = hasUnknownSdkCostBasis(rawModelUsage)
+      ? undefined
+      : this.normalizedEventCostUsd(
+          input.conversation,
+          input.event.costUsd,
+          input.event.payload,
+        )
     const usage = sdkResultUsageFromError(input.event)
     let turnCostCny: number | undefined
     if (usage) {
       const turnUsage = this.normalizedTurnUsage(
         input.conversation,
         usage,
-        input.event.modelUsage,
+        modelUsage,
         input.sdkSessionId,
+        rawModelUsage,
       )
       turnCostCny = this.estimateLocalCostCny(
         input.state,
@@ -2208,7 +2217,7 @@ export class ConversationRouter {
         sdkSessionId: input.sdkSessionId,
         usage,
         usageSummary: turnUsage.summary,
-        modelUsage: input.event.modelUsage,
+        modelUsage,
         userMeta: input.userMeta ?? input.conversation.userMeta,
       })
     }
@@ -2310,8 +2319,9 @@ export class ConversationRouter {
     usage: Record<string, unknown> | undefined,
     modelUsage: Record<string, unknown> | undefined,
     sdkSessionId: string | undefined,
+    rawModelUsage?: Record<string, unknown>,
   ): NormalizedTurnUsage {
-    const normalizedModelUsage = this.modelUsageForTurn(conversation, usage, modelUsage, sdkSessionId)
+    const normalizedModelUsage = this.modelUsageForTurn(conversation, usage, modelUsage, sdkSessionId, rawModelUsage)
     return {
       modelUsage: normalizedModelUsage,
       summary: normalizedModelUsage
@@ -2325,16 +2335,22 @@ export class ConversationRouter {
     usage: Record<string, unknown> | undefined,
     modelUsage: Record<string, unknown> | undefined,
     sdkSessionId: string | undefined,
+    rawModelUsage?: Record<string, unknown>,
   ): Record<string, Record<string, unknown>> | undefined {
     const current = normalizedModelUsageRecords(modelUsage)
     if (!current) return undefined
+    const rawCurrent = rawModelUsage ? normalizedRawModelUsageRecords(rawModelUsage) : undefined
     const turnBreakdown = usageTokenBreakdownFromRecord(usage)
     const previous = this.previousModelUsageForSdkSession(conversation, sdkSessionId)
 
     const currentSum = sumModelUsageBreakdowns(current)
     if (turnBreakdown && usageBreakdownsEqual(currentSum, turnBreakdown)) return modelUsageRecordsFromBreakdowns(current)
     if (!previous) {
-      if (!turnBreakdown || hasMatchingModelUsageBreakdown(current, turnBreakdown)) {
+      if (
+        !turnBreakdown
+        || hasMatchingModelUsageBreakdown(current, turnBreakdown)
+        || (rawCurrent !== undefined && hasMatchingModelUsageBreakdown(rawCurrent, turnBreakdown))
+      ) {
         return modelUsageRecordsFromBreakdowns(current)
       }
       return undefined
@@ -2376,9 +2392,17 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     event: Extract<AgentEvent, { type: "result" }>,
     metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
+    rawModelUsage?: Record<string, unknown>,
   ): ConversationEntryV1["history"][number]["metadata"] | undefined {
     const costUsd = metadataNumber(metadata, "costUsd")
-    if (costUsd === undefined || !isSdkTotalCostPayload(event.payload)) return metadata
+    if (costUsd === undefined) return metadata
+    if (hasUnknownSdkCostBasis(rawModelUsage)) {
+      const next = { ...(metadata ?? {}) }
+      delete next.costUsd
+      delete next.totalCostUsd
+      return Object.keys(next).length > 0 ? next : undefined
+    }
+    if (!isSdkTotalCostPayload(event.payload)) return metadata
     const normalized = this.normalizedEventCostUsd(conversation, costUsd, event.payload)
     if (normalized === undefined) {
       const next = { ...(metadata ?? {}) }
@@ -2575,27 +2599,45 @@ export class ConversationRouter {
   private captureStreamDiagnostic(turnId: string, sequence: number, event: AgentEvent): void {
     const capture = this.streamDiagnostics.get(turnId) ?? {
       frames: [],
+      frameBytes: [],
       capturedBytes: 0,
       observedEventCount: 0,
+      droppedEventCount: 0,
       truncated: false,
     }
     capture.observedEventCount += 1
-    if (capture.truncated) return
 
     const payload = sanitizeEventPayload(event)
     const createdAt = this.isoNow()
     const frame = { sequence, createdAt, payload }
     const frameBytes = Buffer.byteLength(JSON.stringify(frame), "utf8")
-    if (
-      capture.frames.length >= MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN
-      || capture.capturedBytes + frameBytes > MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN
-    ) {
+    if (frameBytes > MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN) {
       capture.truncated = true
+      capture.droppedEventCount += 1
       this.streamDiagnostics.set(turnId, capture)
       return
     }
 
+    while (
+      capture.frames.length >= MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN
+      || capture.capturedBytes + frameBytes > MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN
+    ) {
+      const evictIndex = findEvictableStreamDiagnosticIndex(capture.frames)
+      if (evictIndex < 0) {
+        capture.truncated = true
+        capture.droppedEventCount += 1
+        this.streamDiagnostics.set(turnId, capture)
+        return
+      }
+      capture.frames.splice(evictIndex, 1)
+      const [removedBytes = 0] = capture.frameBytes.splice(evictIndex, 1)
+      capture.capturedBytes = Math.max(0, capture.capturedBytes - removedBytes)
+      capture.droppedEventCount += 1
+      capture.truncated = true
+    }
+
     capture.frames.push(frame)
+    capture.frameBytes.push(frameBytes)
     capture.capturedBytes += frameBytes
     this.streamDiagnostics.set(turnId, capture)
   }
@@ -2610,6 +2652,7 @@ export class ConversationRouter {
       frames: capture.frames,
       observedEventCount: capture.observedEventCount,
       capturedEventCount: capture.frames.length,
+      droppedEventCount: capture.droppedEventCount,
       capturedBytes: capture.capturedBytes,
       truncated: capture.truncated,
       limits: {
@@ -3373,7 +3416,98 @@ function sumAssistantMetadataCostBreakdown(
   }, undefined)
 }
 
-function normalizedModelUsageRecords(
+function canonicalModelUsageKey(modelName: string, rawUsage: Record<string, unknown>): string {
+  const canonical = typeof rawUsage.canonicalModel === "string" && rawUsage.canonicalModel.trim().length > 0
+    ? rawUsage.canonicalModel.trim()
+    : modelName.trim()
+  return canonical.toLowerCase()
+}
+
+const SUMMED_MODEL_USAGE_NUMBER_FIELDS = new Set([
+  "inputTokens",
+  "input_tokens",
+  "outputTokens",
+  "output_tokens",
+  "cacheReadInputTokens",
+  "cache_read_input_tokens",
+  "cacheCreationInputTokens",
+  "cache_creation_input_tokens",
+  "reasoningOutputTokens",
+  "reasoning_output_tokens",
+  "thinkingTokens",
+  "thinking_tokens",
+  "webSearchRequests",
+  "web_search_requests",
+  "costUSD",
+])
+
+function mergeCanonicalModelUsage(
+  modelUsage: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!modelUsage) return undefined
+  const entries = Object.entries(modelUsage)
+  if (entries.length <= 1) return modelUsage
+
+  const grouped = new Map<string, Array<readonly [string, Record<string, unknown>]>>()
+  for (const [modelName, rawUsage] of entries) {
+    if (!isRecord(rawUsage)) continue
+    const key = canonicalModelUsageKey(modelName, rawUsage)
+    const bucket = grouped.get(key) ?? []
+    bucket.push([modelName, rawUsage])
+    grouped.set(key, bucket)
+  }
+
+  let hasDuplicates = false
+  for (const bucket of grouped.values()) {
+    if (bucket.length > 1) {
+      hasDuplicates = true
+      break
+    }
+  }
+  if (!hasDuplicates) return modelUsage
+
+  const merged: Record<string, unknown> = {}
+  for (const [canonicalKey, bucket] of grouped.entries()) {
+    if (bucket.length === 1) {
+      const [singleName, singleUsage] = bucket[0]!
+      merged[singleName] = singleUsage
+      continue
+    }
+    const targetKey = bucket.find(([name]) => name.toLowerCase() === canonicalKey && name === canonicalKey)?.[0]
+      ?? canonicalKey
+    const combined: Record<string, unknown> = {}
+    for (const [, rawUsage] of bucket) {
+      for (const [field, value] of Object.entries(rawUsage)) {
+        if (SUMMED_MODEL_USAGE_NUMBER_FIELDS.has(field) && typeof value === "number" && Number.isFinite(value)) {
+          const previous = typeof combined[field] === "number" ? combined[field] : 0
+          combined[field] = field === "costUSD" ? roundCost(previous + value) : previous + value
+          continue
+        }
+        if (!(field in combined) && value !== undefined) {
+          combined[field] = value
+        }
+      }
+    }
+    merged[targetKey] = combined
+  }
+  return merged
+}
+
+function hasUnknownSdkCostBasis(modelUsage: Record<string, unknown> | undefined): boolean {
+  if (!modelUsage) return false
+  return Object.values(modelUsage).some((rawUsage) =>
+    isRecord(rawUsage) && typeof rawUsage.costBasis === "string" && rawUsage.costBasis.toLowerCase() === "unknown")
+}
+
+function findEvictableStreamDiagnosticIndex(frames: readonly { readonly payload: Record<string, unknown> }[]): number {
+  for (let index = 0; index < frames.length; index += 1) {
+    const event = frames[index]?.payload.event
+    if (isRecord(event) && event.type === "content_block_delta") return index
+  }
+  return frames.length > 0 ? 0 : -1
+}
+
+function normalizedRawModelUsageRecords(
   modelUsage: Record<string, unknown> | undefined,
 ): Record<string, ModelUsageBreakdown> | undefined {
   if (!modelUsage) return undefined
@@ -3383,6 +3517,34 @@ function normalizedModelUsageRecords(
     return breakdown ? [[modelName, breakdown] as const] : []
   })
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function normalizedModelUsageRecords(
+  modelUsage: Record<string, unknown> | undefined,
+): Record<string, ModelUsageBreakdown> | undefined {
+  if (!modelUsage) return undefined
+  const byCanonical = new Map<string, { name: string; breakdown: ModelUsageBreakdown }>()
+  for (const [modelName, rawUsage] of Object.entries(modelUsage)) {
+    if (!isRecord(rawUsage)) continue
+    const breakdown = usageTokenBreakdownFromRecord(rawUsage)
+    if (!breakdown) continue
+    const canonicalKey = canonicalModelUsageKey(modelName, rawUsage)
+    const existing = byCanonical.get(canonicalKey)
+    if (!existing) {
+      byCanonical.set(canonicalKey, { name: modelName, breakdown })
+      continue
+    }
+    existing.name = existing.name === canonicalKey ? existing.name : canonicalKey
+    existing.breakdown = {
+      input: existing.breakdown.input + breakdown.input,
+      output: existing.breakdown.output + breakdown.output,
+      cacheRead: existing.breakdown.cacheRead + breakdown.cacheRead,
+      cacheWrite: existing.breakdown.cacheWrite + breakdown.cacheWrite,
+      reasoning: existing.breakdown.reasoning + breakdown.reasoning,
+    }
+  }
+  if (byCanonical.size === 0) return undefined
+  return Object.fromEntries(Array.from(byCanonical.values(), (entry) => [entry.name, entry.breakdown]))
 }
 
 function modelUsageRecordsFromBreakdowns(
@@ -3562,8 +3724,13 @@ function sanitizeValue(
     if (!isRecord(value)) return value
     const output: Record<string, unknown> = {}
     for (const [key, entry] of Object.entries(value)) {
+      if (entry === undefined) continue
       const lower = key.toLowerCase()
       if (isSafeTokenMeasurement(key, entry)) { output[key] = entry; continue }
+      if (isSafeTokenDetailsContainer(key, entry)) {
+        output[key] = sanitizeValue(entry, ancestors, depth + 1)
+        continue
+      }
       if (key === "imageBlocks") continue
       if (lower.includes("raw")) continue
       if (

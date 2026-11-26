@@ -1,4 +1,5 @@
 export {
+  isSafeTokenDetailsContainer,
   isSensitiveKey,
   isSafeTokenMeasurement,
   isSensitiveTextKey,

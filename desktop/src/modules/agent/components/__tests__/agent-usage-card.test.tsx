@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 describe("AgentUsageCard", () => {
-  it("renders compact usage rows and costs", async () => {
+  it("renders compact token usage rows without any price or cost labels", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -55,26 +55,22 @@ describe("AgentUsageCard", () => {
             cache_creation_input_tokens: 0,
             reasoning_output_tokens: 180,
           }}
-          turnCostCny={0.18}
-          totalCostCny={1.42}
-          estimatedCost
         />
       )
     })
 
     expect(container.textContent).toContain("用量统计")
-    expect(container.textContent).toContain("本轮")
-    expect(container.textContent).toContain("¥0.18")
-    expect(container.textContent).toContain("累计")
-    expect(container.textContent).toContain("¥1.42")
     expect(container.textContent).toContain("输入")
     expect(container.textContent).toContain("10,248")
     expect(container.textContent).toContain("+2,104")
     expect(container.textContent).toContain("21%")
+    expect(container.textContent).not.toContain("¥")
+    expect(container.textContent).not.toContain("$")
+    expect(container.textContent).not.toContain("估算")
     expect(container.textContent).not.toContain("最近 5 轮")
   })
 
-  it("renders per-type total and delta CNY costs", async () => {
+  it("renders per-type token tooltips without cost labels", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -96,28 +92,10 @@ describe("AgentUsageCard", () => {
             cache_read_input_tokens: 205678,
             cache_creation_input_tokens: 0,
           }}
-          turnCostBreakdownCny={{
-            input: 0.03,
-            output: 0.02,
-            cacheRead: 0.01,
-            cacheWrite: 0,
-          }}
-          totalCostBreakdownCny={{
-            input: 0.21,
-            output: 0.08,
-            cacheRead: 0.35,
-            cacheWrite: 0,
-          }}
         />
       )
     })
 
-    expect(container.textContent).toContain("25,611¥0.21")
-    expect(container.textContent).toContain("+3,661（¥0.03）")
-    expect(container.textContent).toContain("616¥0.08")
-    expect(container.textContent).toContain("+677（¥0.02）")
-    expect(container.textContent).toContain("0¥0.00")
-    expect(container.textContent).toContain("+0（¥0.00）")
     const inputTotal = container.querySelector<HTMLElement>("[aria-label='累计输入 token：25,611']")
     const inputDelta = container.querySelector<HTMLElement>("[aria-label='本轮新增输入 token：3,661']")
     const cacheWriteTotal = container.querySelector<HTMLElement>("[aria-label='累计缓存写 token：0']")
@@ -130,6 +108,7 @@ describe("AgentUsageCard", () => {
     expect(cacheWriteTotal?.textContent).toBe("0")
     expect(cacheWriteDelta).not.toBeNull()
     expect(cacheWriteDelta?.textContent).toBe("+0")
+    expect(container.textContent).not.toContain("¥")
     expect(container.querySelector("[aria-label*='费用']")).toBeNull()
   })
 
@@ -241,9 +220,6 @@ describe("AgentUsageCard", () => {
             totalTokens: 58136,
           }}
           turnUsage={{ input_tokens: 2104 }}
-          turnCostCny={0.18}
-          totalCostCny={1.42}
-          estimatedCost
         />
       )
     })
@@ -255,11 +231,13 @@ describe("AgentUsageCard", () => {
 
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("用量统计"))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Token 累计"))
+    expect(writeText.mock.calls[0]?.[0]).not.toContain("费用")
+    expect(writeText.mock.calls[0]?.[0]).not.toContain("价格")
     expect(writeText.mock.calls[0]?.[0]).not.toContain("undefined")
     expect(writeText.mock.calls[0]?.[0]).not.toContain("NaN")
   })
 
-  it("renders token rows without cost labels when no CNY cost is available", async () => {
+  it("renders token rows without cost labels", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -275,7 +253,6 @@ describe("AgentUsageCard", () => {
             cacheCreationInputTokens: 0,
             totalTokens: 1100,
           }}
-          estimatedCost
         />
       )
     })
@@ -309,8 +286,6 @@ describe("AgentUsageCard", () => {
             output_tokens: 41,
             cache_creation_input_tokens: 53289,
           }}
-          turnCostCny={2.52}
-          estimatedCost
         />
       )
     })
@@ -334,8 +309,6 @@ describe("AgentUsageCard", () => {
             cacheCreationInputTokens: 53631,
             totalTokens: 213347,
           }}
-          turnCostCny={3.553562}
-          estimatedCost
         />
       )
     })
@@ -345,8 +318,7 @@ describe("AgentUsageCard", () => {
     expect(card?.className).toContain("max-w-full")
     expect(card?.className).not.toContain("w-[76ch]")
     expect(card?.className).not.toContain("min-w-[760px]")
-    expect(container.textContent).toContain("¥3.55")
-    expect(container.textContent).not.toContain("3.553562")
+    expect(container.textContent).not.toContain("¥")
   })
 
   it("switches usage stats to two columns from its own narrow container", async () => {

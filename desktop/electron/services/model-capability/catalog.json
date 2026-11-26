@@ -649,6 +649,69 @@
     },
     {
       "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v4.1-flash",
+      "aliases": [
+        "deepseek-v4.1-flash[1m]",
+        "deepseek-v4.1-flash[1M]"
+      ],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "deepseek-v4.1-flash-1017",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-11-26T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v4.1-flash-1017",
+      "aliases": [
+        "deepseek-v4.1-flash-1017[1m]",
+        "deepseek-v4.1-flash-1017[1M]"
+      ],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-11-26T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
       "modelId": "glm-4.5",
       "aliases": [],
       "contextWindowTokens": 128000,
@@ -2898,6 +2961,34 @@
       "status": "online",
       "sourceId": "deepseek-v4",
       "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "deepseek-official",
+      "modelId": "deepseek-v4.1-flash",
+      "aliases": [
+        "deepseek-v4.1-flash[1m]",
+        "deepseek-v4.1-flash[1M]"
+      ],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "DeepSeek",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "deepseek-v4",
+      "verifiedAt": "2026-11-26T00:00:00.000Z"
     },
     {
       "providerScopeId": "gemini-official",

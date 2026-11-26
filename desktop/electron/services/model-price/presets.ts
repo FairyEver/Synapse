@@ -35,6 +35,7 @@ const ANTHROPIC_RULES: readonly ModelPriceRuleInput[] = [
 ]
 
 const DEEPSEEK_OFFICIAL_RULES: readonly ModelPriceRuleInput[] = [
+  { modelPattern: "deepseek-v4.1-flash", inputPer1M: 2, outputPer1M: 8, cacheReadPer1M: 0.04, reasoningPer1M: 8 },
   { modelPattern: "deepseek-v4-flash", inputPer1M: 1, outputPer1M: 2, cacheReadPer1M: 0.02, reasoningPer1M: 2 },
   { modelPattern: "deepseek-v4-pro", inputPer1M: 3, outputPer1M: 6, cacheReadPer1M: 0.025, reasoningPer1M: 6 },
 ]
@@ -107,6 +108,8 @@ const ALIYUN_BAILIAN_RULES: readonly ModelPriceRuleInput[] = [
   { modelPattern: "qwen3-coder-30b-a3b-instruct", inputPer1M: 3.75, outputPer1M: 15, reasoningPer1M: 15 },
   { modelPattern: "qwen-coder-plus", inputPer1M: 3.5, outputPer1M: 7, reasoningPer1M: 7 },
   { modelPattern: "qwen-coder-turbo", inputPer1M: 2, outputPer1M: 6, reasoningPer1M: 6 },
+  withAliyunImplicitContextCache({ modelPattern: "deepseek-v4.1-flash", inputPer1M: 2, outputPer1M: 8, reasoningPer1M: 8 }),
+  withAliyunImplicitContextCache({ modelPattern: "deepseek-v4.1-flash-1017", inputPer1M: 2, outputPer1M: 8, reasoningPer1M: 8 }),
   { modelPattern: "deepseek-v4-pro", inputPer1M: 12, outputPer1M: 24, cacheReadPer1M: 1, reasoningPer1M: 24 },
   { modelPattern: "deepseek-v4-flash", inputPer1M: 1, outputPer1M: 2, cacheReadPer1M: 0.2, reasoningPer1M: 2 },
   withAliyunExplicitContextCache({ modelPattern: "deepseek-v3.2", inputPer1M: 2, outputPer1M: 3, reasoningPer1M: 3 }),

@@ -947,7 +947,7 @@ describe("AgentTimeline", () => {
       ?.getAttribute("aria-expanded")).toBe("false")
   })
 
-  it("folds intermediate assistant messages and keeps only the final answer on the mainline", () => {
+  it("keeps every assistant message on the mainline in a completed turn while folding process segments between them", () => {
     const entries = timelineDisplayEntries([
       {
         id: "user-a",
@@ -996,14 +996,80 @@ describe("AgentTimeline", () => {
       pendingPermissionRequestIds: new Set(),
     })
 
-    expect(nodes.map((node) => node.kind)).toEqual(["item", "processGroup", "item"])
-    expect(nodes.filter((node) => node.kind === "item").map((node) => node.entry.item.id)).toEqual([
+    expect(nodes.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
       "user-a",
+      "answer-a",
+      "process:answer-a",
+      "answer-b",
+      "process:answer-b",
       "answer-c",
     ])
-    expect(nodes.find((node) => node.kind === "processGroup")).toEqual(expect.objectContaining({
-      id: "process:user-a",
-      itemCount: 4,
+    expect(nodes.filter((node) => node.kind === "processGroup")).toEqual([
+      expect.objectContaining({ id: "process:answer-a", itemCount: 1, lifecycle: "completed" }),
+      expect.objectContaining({ id: "process:answer-b", itemCount: 1, lifecycle: "completed" }),
+    ])
+  })
+
+  it("keeps the substantive answer visible when post-answer tools like sy-worklog run before a short closing reply", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-summary",
+        kind: "message",
+        role: "user",
+        content: "总结提炼200字的概况",
+        timestamp: "2026-11-25T13:50:12.000Z",
+      },
+      {
+        id: "thinking-1",
+        kind: "thinking",
+        content: "Drafting summary",
+        startedAt: "2026-11-25T13:50:15.000Z",
+        timestamp: "2026-11-25T13:50:30.000Z",
+      },
+      {
+        id: "answer-summary",
+        kind: "message",
+        role: "assistant",
+        content: "**概况（约200字）**\n\n六大系统核心模块建成……",
+        timestamp: "2026-11-25T13:50:34.000Z",
+      },
+      {
+        id: "tool-worklog",
+        kind: "toolCall",
+        toolUseId: "toolu-worklog",
+        toolName: "Skill",
+        toolInput: "{\"skill\":\"sy-worklog\"}",
+        startedAt: "2026-11-25T13:50:35.000Z",
+        timestamp: "2026-11-25T13:50:35.000Z",
+      },
+      {
+        id: "tool-worklog-result",
+        kind: "toolResult",
+        toolUseId: "toolu-worklog",
+        toolName: "Skill",
+        content: "Launching skill: sy-worklog",
+        success: true,
+        timestamp: "2026-11-25T13:50:41.000Z",
+      },
+      {
+        id: "answer-closing",
+        kind: "message",
+        role: "assistant",
+        content: "已记录工作日志（条目 447）。",
+        timestamp: "2026-11-25T13:50:43.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
+      "user-summary",
+      "process:user-summary",
+      "answer-summary",
+      "process:answer-summary",
+      "answer-closing",
+    ])
+    const postAnswerGroup = nodes.find((node) => node.kind === "processGroup" && node.id === "process:answer-summary")
+    expect(postAnswerGroup).toEqual(expect.objectContaining({
+      durationLabel: "6s",
       lifecycle: "completed",
     }))
   })
@@ -1018,9 +1084,8 @@ describe("AgentTimeline", () => {
         timestamp: "2026-06-27T00:00:00.000Z",
       },
       {
-        id: "progress-a",
-        kind: "message",
-        role: "assistant",
+        id: "thinking-a",
+        kind: "thinking",
         content: "Working on A",
         timestamp: "2026-06-27T00:00:01.000Z",
       },
@@ -2129,16 +2194,17 @@ describe("AgentTimeline", () => {
     const text = textFromMarkup(html)
 
     expect(text).toContain("Question")
+    expect(text).toContain("First answer.")
+    expect(text).toContain("Second answer.")
     expect(text).toContain("Third answer.")
-    expect(text).not.toContain("First answer.")
-    expect(text).not.toContain("Second answer.")
+    expect(text.indexOf("First answer.")).toBeLessThan(text.indexOf("已处理"))
     expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Third answer."))
-    expect(html.match(/已处理/g)).toHaveLength(1)
+    expect(html.match(/已处理/g)).toHaveLength(2)
     expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
   })
 
-  it("folds streamed progress text after a tool boundary and keeps the final result visible", () => {
+  it("keeps assistant text before a tool boundary visible and folds the tool segment between answers", () => {
     const streamed = appendAgentTimelineEvent([], {
       type: "stream",
       deltaType: "text_delta",
@@ -2159,14 +2225,15 @@ describe("AgentTimeline", () => {
     const html = renderTimeline({ items })
     const text = textFromMarkup(html)
 
+    expect(text).toContain("I will inspect it.")
     expect(text).toContain("Final answer.")
-    expect(text).not.toContain("I will inspect it.")
+    expect(text.indexOf("I will inspect it.")).toBeLessThan(text.indexOf("已处理"))
     expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Final answer."))
     expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
   })
 
-  it("respects manual collapse while an active turn grows and resets to collapsed when it completes", () => {
+  it("respects manual collapse while an active turn grows and keeps completed assistant replies visible while folding tools", () => {
     const initialItems: SynapseAgentTimelineItem[] = [
       {
         id: "user-1",
@@ -2239,12 +2306,13 @@ describe("AgentTimeline", () => {
     rerender({ items: completedItems, sending: false })
 
     expect(processButton()?.getAttribute("aria-expanded")).toBe("false")
+    expect(container.textContent).toContain("I found something.")
     expect(container.textContent).toContain("Final answer.")
-    expect(container.textContent).not.toContain("I found something.")
+    expect(container.textContent).not.toContain("package contents")
 
     act(() => processButton()?.click())
     expect(processButton()?.getAttribute("aria-expanded")).toBe("true")
-    expect(container.textContent).toContain("I found something.")
+    expect(container.textContent).toContain("Read")
 
     rerender({ items: [...completedItems], sending: false })
     expect(processButton()?.getAttribute("aria-expanded")).toBe("true")

@@ -32,7 +32,8 @@ import {
 } from "./stream-diagnostics"
 
 const EXPORT_SOURCE = "agent.exportConversationBundle"
-const MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH = 80
+const MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH = 40
+const MAX_EXPORT_FILE_NAME_SEGMENT_BYTES = 64
 const STREAM_DIAGNOSTIC_EXPORT_METADATA_RESERVE_BYTES = 16 * 1024
 const STRUCTURED_ABSOLUTE_PATH_FIELD_NAMES = new Set(["cwd", "fileurl", "workdir"])
 
@@ -161,6 +162,7 @@ interface SdkStreamExport {
     readonly sourceStatus: "captured" | "not-recorded" | "read-failed"
     readonly observedEventCount: number | null
     readonly capturedEventCount: number
+    readonly captureDroppedEventCount: number
     readonly exportedEventCount: number
     /** @deprecated Export-budget drops only. Use exportDroppedEventCount. */
     readonly droppedEventCount: number
@@ -171,6 +173,7 @@ interface SdkStreamExport {
     readonly truncatedTurnCount: number
     readonly exportTruncated: boolean
     readonly capturedBytes: number
+    readonly exportedBytes: number
     readonly diagnosticTurnCount: number
     readonly streamOnlyTurnCount: number
     readonly limits: {
@@ -545,28 +548,48 @@ function buildSdkStreamExport(
   readFailed: boolean,
 ): SdkStreamExport {
   const candidates: SdkStreamExportEvent[] = []
+  const diagnosticFrameKeys = new Set<string>()
   let observedEventCount = 0
+  let captureDroppedEventCount = 0
+  let diagnosticCapturedBytes = 0
   let truncatedTurnCount = 0
   const diagnosticTurnIds = new Set<string>()
   const streamTurnIds = new Set<string>()
 
   for (const row of rows) {
-    if (isStreamDiagnosticEntry(row)) {
-      diagnosticTurnIds.add(row.turnId)
-      observedEventCount += finiteNumber(row.payload.observedEventCount)
-      if (row.payload.truncated) truncatedTurnCount += 1
-      for (const frame of row.payload.frames) {
-        const normalized = normalizeStreamDiagnosticFrame(frame, row.turnId)
-        if (normalized) candidates.push(normalized)
+    if (!isStreamDiagnosticEntry(row)) continue
+    diagnosticTurnIds.add(row.turnId)
+    const rowObserved = finiteNumber(row.payload.observedEventCount)
+    observedEventCount += rowObserved
+    diagnosticCapturedBytes += finiteNumber(row.payload.capturedBytes)
+    if (row.payload.truncated) truncatedTurnCount += 1
+    let rowCaptured = 0
+    for (const frame of row.payload.frames) {
+      const normalized = normalizeStreamDiagnosticFrame(frame, row.turnId)
+      if (!normalized) continue
+      candidates.push(normalized)
+      rowCaptured += 1
+      if (normalized.sequence !== undefined) {
+        diagnosticFrameKeys.add(`${row.turnId}:${normalized.sequence}`)
       }
+    }
+    const reportedDropped = typeof row.payload.droppedEventCount === "number" && Number.isFinite(row.payload.droppedEventCount)
+      ? Math.max(0, row.payload.droppedEventCount)
+      : Math.max(0, rowObserved - rowCaptured)
+    captureDroppedEventCount += reportedDropped
+  }
+
+  for (const row of rows) {
+    if (row.eventType !== "stream") continue
+    const sequence = eventSequence(row.id)
+    if (sequence !== undefined && diagnosticFrameKeys.has(`${row.turnId}:${sequence}`)) {
       continue
     }
-    if (row.eventType !== "stream") continue
     streamTurnIds.add(row.turnId)
     observedEventCount += 1
     candidates.push({
       turnId: row.turnId,
-      sequence: eventSequence(row.id),
+      sequence,
       createdAt: row.createdAt,
       payload: row.payload,
     })
@@ -574,20 +597,20 @@ function buildSdkStreamExport(
 
   candidates.sort(compareSdkStreamEvents)
   const selected: SdkStreamExportEvent[] = []
-  let capturedBytes = 0
+  let exportedBytes = 0
   let droppedEventCount = 0
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const event = candidates[index]
     if (!event) continue
     const eventBytes = Buffer.byteLength(JSON.stringify(sanitizeExportValue(event)), "utf8") + 1
     if (
-      capturedBytes + eventBytes
+      exportedBytes + eventBytes
       > MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES - STREAM_DIAGNOSTIC_EXPORT_METADATA_RESERVE_BYTES
     ) {
       droppedEventCount += 1
       continue
     }
-    capturedBytes += eventBytes
+    exportedBytes += eventBytes
     selected.push(event)
   }
   selected.reverse()
@@ -596,7 +619,7 @@ function buildSdkStreamExport(
     schemaVersion: 1,
     source: "Claude Agent SDK StreamEvent.event",
     rawHttpIncluded: false,
-    description: "Events are sanitized SDK StreamEvent payloads, not wire-level HTTP responses or literal SSE lines. Correlate turnId, sequence, sdkSessionId, message id, and content block index with agent-events.json. streamOnlyTurnCount identifies turns whose historical deltas were not retained. droppedEventCount and exportDroppedEventCount describe export-size filtering only. Historical end-to-end delivery drop counts were not recorded; the current main-process queue preserves per-conversation order without intentionally dropping events, but renderer delivery is not acknowledged or replayed.",
+    description: "Events are sanitized SDK StreamEvent payloads, not wire-level HTTP responses or literal SSE lines. Correlate turnId, sequence, sdkSessionId, message id, and content block index with agent-events.json. streamOnlyTurnCount identifies turns whose historical deltas were not retained. captureDroppedEventCount counts events evicted by per-turn capture limits (maxEventsPerTurn / maxBytesPerTurn); droppedEventCount and exportDroppedEventCount count export-budget (maxExportBytes) filtering only. Historical end-to-end delivery drop counts were not recorded; the current main-process queue preserves per-conversation order without intentionally dropping events, but renderer delivery is not acknowledged or replayed.",
     runtime: {
       agentType: conversation.agentType ?? "unknown",
       platform: conversation.platform ?? "unknown",
@@ -618,6 +641,7 @@ function buildSdkStreamExport(
       observedEventCount: readFailed || diagnosticTurnIds.size + streamTurnIds.size === 0
         ? null : observedEventCount,
       capturedEventCount: candidates.length,
+      captureDroppedEventCount,
       exportedEventCount: selected.length,
       droppedEventCount,
       exportDroppedEventCount: droppedEventCount,
@@ -626,7 +650,8 @@ function buildSdkStreamExport(
       deliveryPolicy: "ordered-no-drop-main-process-queue",
       truncatedTurnCount,
       exportTruncated: droppedEventCount > 0,
-      capturedBytes,
+      capturedBytes: diagnosticTurnIds.size > 0 ? diagnosticCapturedBytes : exportedBytes,
+      exportedBytes,
       diagnosticTurnCount: diagnosticTurnIds.size,
       streamOnlyTurnCount: [...streamTurnIds].filter((turnId) => !diagnosticTurnIds.has(turnId)).length,
       limits: {
@@ -876,15 +901,29 @@ function createDefaultFileName(rawName: string, now: Date): string {
 }
 
 function createSafeFileNameSegment(rawName: string): string {
-  const safeName = rawName
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\p{Cc}/gu, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    || "conversation"
-  const chars = Array.from(safeName)
-  if (chars.length <= MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH) return safeName
-  return chars.slice(0, MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH).join("").trim() || "conversation"
+  const cleaned = rawName
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-._]+|[-._]+$/g, "")
+  if (!cleaned) return "conversation"
+
+  let result = ""
+  let charCount = 0
+  let byteCount = 0
+  for (const char of cleaned) {
+    const nextBytes = Buffer.byteLength(char, "utf8")
+    if (
+      charCount + 1 > MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH
+      || byteCount + nextBytes > MAX_EXPORT_FILE_NAME_SEGMENT_BYTES
+    ) {
+      break
+    }
+    result += char
+    charCount += 1
+    byteCount += nextBytes
+  }
+  return result.replace(/^[-._]+|[-._]+$/g, "") || "conversation"
 }
 
 function sanitizeExportValue<T>(value: T): unknown {
