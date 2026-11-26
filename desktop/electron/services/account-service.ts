@@ -1822,10 +1822,13 @@ export class AccountService {
       signal?.throwIfAborted()
       // 仅在写入云端前遇到 429 限流/本地冷却时等待后重试；云端已提交后的校验错误已包装为非 HTTP 429 Error，不会重复写入。
       if (!isAccountHttpError(firstError) || firstError.status !== 429) throw firstError
-      const rawDelayMs = firstError.retryAfterMs !== undefined
-        ? Math.max(1, firstError.retryAfterMs) + 50
-        : DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50
-      await delay(Math.min(rawDelayMs, DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50), signal)
+      const retryAfterMs = firstError.retryAfterMs
+      let waitMs = DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50
+      if (typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs)) {
+        if (retryAfterMs > 0) waitMs = Math.min(retryAfterMs + 50, DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50)
+        else if (retryAfterMs === 0) waitMs = 1_000
+      }
+      await delay(waitMs, signal)
       await replaceFile(input)
     }
   }

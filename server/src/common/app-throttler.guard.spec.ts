@@ -1,5 +1,5 @@
 import "reflect-metadata"
-import { Controller, Get, Req, UnauthorizedException, UseGuards } from "@nestjs/common"
+import { Controller, Get, Logger, Module, Post, Req, UnauthorizedException, UseGuards } from "@nestjs/common"
 import { APP_GUARD } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
 import { Throttle, ThrottlerModule } from "@nestjs/throttler"
@@ -17,6 +17,13 @@ class TestThrottleController {
   @Throttle({ default: { ttl: 60_000, limit: 2 } })
   @Get("/protected")
   protectedEndpoint(@Req() req: AuthenticatedUserRequest) {
+    return { userId: req.user!.id }
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 2 } })
+  @Post("/protected-write")
+  protectedWriteEndpoint(@Req() req: AuthenticatedUserRequest) {
     return { userId: req.user!.id }
   }
 
@@ -144,6 +151,83 @@ describe("AppThrottlerGuard", () => {
       await request(server).get("/api/test-throttle/public").auth("token-a", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(200)
       await request(server).get("/api/test-throttle/public").auth("token-b", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(200)
       await request(server).get("/api/test-throttle/public").auth("token-b", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(429)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("does not spend the victim user's quota or query DB on untrusted cross-origin cookie writes", async () => {
+    const { app, resolveWebSessionUserId } = await createTestApp()
+    try {
+      const server = app.getHttpServer()
+      await request(server).post("/api/test-throttle/protected-write").set("Cookie", `${userSessionCookieName}=cookie-a`).set("Origin", "https://evil.test").set("X-Forwarded-For", "198.51.100.20").expect(403)
+      await request(server).post("/api/test-throttle/protected-write").set("Cookie", `${userSessionCookieName}=cookie-a`).set("Origin", "https://evil.test").set("X-Forwarded-For", "198.51.100.20").expect(403)
+      await request(server).post("/api/test-throttle/protected-write").set("Cookie", `${userSessionCookieName}=cookie-a`).set("Origin", "https://evil.test").set("X-Forwarded-For", "198.51.100.20").expect(429)
+      expect(resolveWebSessionUserId).not.toHaveBeenCalled()
+
+      // Victim's own legitimate same-origin requests keep their full quota.
+      await request(server).post("/api/test-throttle/protected-write").set("Cookie", `${userSessionCookieName}=cookie-a`).set("Origin", "https://synapse.test").set("X-Forwarded-For", "198.51.100.20").expect(201)
+      await request(server).post("/api/test-throttle/protected-write").set("Cookie", `${userSessionCookieName}=cookie-a`).set("Origin", "https://synapse.test").set("X-Forwarded-For", "198.51.100.20").expect(201)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("logs a warning and falls back to IP throttling when web session lookup throws", async () => {
+    const { app, resolveWebSessionUserId } = await createTestApp()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    resolveWebSessionUserId.mockRejectedValue(new Error("db connection lost"))
+    try {
+      const server = app.getHttpServer()
+      await request(server).get("/api/test-throttle/protected").set("Cookie", `${userSessionCookieName}=cookie-a`).set("X-Forwarded-For", "198.51.100.30").expect(200)
+      await request(server).get("/api/test-throttle/protected").set("Cookie", `${userSessionCookieName}=cookie-b`).set("X-Forwarded-For", "198.51.100.30").expect(200)
+      await request(server).get("/api/test-throttle/protected").set("Cookie", `${userSessionCookieName}=cookie-b`).set("X-Forwarded-For", "198.51.100.30").expect(429)
+      expect(warnSpy).toHaveBeenCalled()
+    } finally {
+      warnSpy.mockRestore()
+      await app.close()
+    }
+  })
+
+  it("resolves exported UserAuthService from an imported auth module as APP_GUARD", async () => {
+    @Module({
+      providers: [
+        UserAuthGuard,
+        {
+          provide: UserAuthService,
+          useValue: {
+            resolveAccessTokenSubject: (token: string) => (token === "token-a" ? "user-a" : token === "token-b" ? "user-b" : null),
+            verifyAccessToken: async (token: string) => ({ userId: token === "token-a" ? "user-a" : "user-b" }),
+            resolveWebSessionUserId: async () => null,
+            verifyWebSession: async () => null,
+          },
+        },
+      ],
+      exports: [UserAuthService, UserAuthGuard],
+    })
+    class MockUserAuthModule {}
+
+    @Module({
+      imports: [
+        ThrottlerModule.forRoot([{ name: "default", ttl: 60_000, limit: 1 }]),
+        MockUserAuthModule,
+      ],
+      controllers: [TestThrottleController],
+      providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
+    })
+    class RootModule {}
+
+    const moduleRef = await Test.createTestingModule({ imports: [RootModule] }).compile()
+    const app = moduleRef.createNestApplication()
+    app.getHttpAdapter().getInstance().set("trust proxy", "loopback")
+    await app.init()
+    await app.listen(0, "127.0.0.1")
+    try {
+      const server = app.getHttpServer()
+      await request(server).get("/api/test-throttle/protected").auth("token-a", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(200)
+      await request(server).get("/api/test-throttle/protected").auth("token-a", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(200)
+      await request(server).get("/api/test-throttle/protected").auth("token-a", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(429)
+      await request(server).get("/api/test-throttle/protected").auth("token-b", { type: "bearer" }).set("X-Forwarded-For", "61.50.102.122").expect(200)
     } finally {
       await app.close()
     }

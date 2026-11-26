@@ -747,6 +747,24 @@ describe("AccountService", () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  it("aborts file replacement rate-limit wait immediately when cancelled", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-reviewed-abort-"))
+    const filePath = path.join(dir, "a.png")
+    await writeFile(filePath, "aaa")
+    const { service } = await createTestAccountService()
+    const controller = new AbortController()
+    const replaceFile = vi.fn(async () => {
+      setTimeout(() => controller.abort(new DOMException("Aborted", "AbortError")), 20)
+      throw Object.assign(new Error("云盘请求过于频繁，等待后自动重试。"), { status: 429, retryAfterMs: 60_000 })
+    })
+
+    await expect(service.uploadDriveLocalItems({
+      items: [{ kind: "file", path: filePath, name: "a.png", expectedItemId: "item-a", replacementToken: "token-a" }],
+    }, { replaceFile, signal: controller.signal })).rejects.toThrow("Aborted")
+    expect(replaceFile).toHaveBeenCalledTimes(1)
+    await rm(dir, { recursive: true, force: true })
+  })
+
   it("returns the completed Drive item for sync uploads", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-"))
     const filePath = path.join(dir, "report.txt")

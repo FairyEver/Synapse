@@ -303,6 +303,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const reviewedReplacements = new Map<string, { fingerprint: string; expiresAt: number }>()
   const reviewedRemovals = new Map<string, { fingerprint: string; expiresAt: number }>()
   const replacementAncestorCache = new Map<string, { item: DriveItemDto; expiresAt: number }>()
+  const replacementPreviewedItemIds = new Set<string>()
   const replacingBindings = new Set<string>()
   const cleaningBindings = new Set<string>()
   const pendingRemoteEchoes = new Map<string, PendingRemoteEcho[]>()
@@ -535,6 +536,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (!review || review.expiresAt < Date.now() || review.fingerprint !== fingerprint) throw new Error("内容或同步状态已变化，请重新预览并确认。")
   }
 
+  function clearReplacementAncestorCache(): void {
+    replacementAncestorCache.clear()
+    replacementPreviewedItemIds.clear()
+  }
+
   async function readReplacementAncestor(ownerUserId: string, itemId: string, bypassCache: boolean): Promise<DriveItemDto> {
     const cacheKey = `${ownerUserId}:${itemId}`
     const now = Date.now()
@@ -544,7 +550,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (cached) replacementAncestorCache.delete(cacheKey)
     }
     const item = await getDriveItemFromAccountService(deps.accountService, itemId)
-    if (item.type === "folder") {
+    if (!bypassCache && item.type === "folder") {
       if (replacementAncestorCache.size >= 256) {
         for (const [key, entry] of replacementAncestorCache) if (entry.expiresAt <= now) replacementAncestorCache.delete(key)
         if (replacementAncestorCache.size >= 256) replacementAncestorCache.clear()
@@ -610,6 +616,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function previewFileReplacement(input: DriveFileReplaceInput): Promise<DriveFileReplacePreviewDto> {
+    // 对同一文件再次预览通常意味着用户点击了“重新检查/重试”，必须清空短缓存实时核验祖先目录；
+    // 批量预览同目录下不同文件时复用 5 秒短缓存，避免重复查询固定祖先目录链。
+    if (replacementPreviewedItemIds.has(input.itemId) || replacementPreviewedItemIds.size >= 4096) {
+      clearReplacementAncestorCache()
+    }
+    replacementPreviewedItemIds.add(input.itemId)
     const captured = await replacementCapture(input)
     return { itemId: captured.item.id, name: captured.item.name, localName: path.basename(input.filePath),
       size: captured.size, previousSize: captured.item.size, versionId: captured.versionId,
@@ -617,8 +629,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function applyFileReplacement(input: DriveFileReplaceApplyInput): Promise<DriveFileReplaceResultDto> {
-    const captured = await replacementCapture(input)
-    requireReview(reviewedReplacements, input.confirmationToken, captured.fingerprint)
+    // 真正写入云端前必须实时穿透祖先缓存，避免 5 秒内父目录移入同步范围或被重命名时漏检冲突与暂停保护。
+    const captured = await replacementCapture(input, undefined, { bypassAncestorCache: true })
+    try {
+      requireReview(reviewedReplacements, input.confirmationToken, captured.fingerprint)
+    } catch (error) {
+      clearReplacementAncestorCache()
+      throw error
+    }
     if (captured.blockedReason) throw new Error(captured.blockedReason)
     if (captured.impacts.some((entry) => replacingBindings.has(entry.bindingId))) throw new Error("该文件正在更新，请稍后重新检查。")
     const originalBindings = await Promise.all(captured.impacts.map((entry) => requireBinding(entry.bindingId)))

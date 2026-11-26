@@ -498,7 +498,7 @@ describe("DriveSyncService", () => {
     } finally { await rm(dir, { recursive: true, force: true }) }
   })
 
-  it("reuses short-lived ancestor cache across batch replacement previews and bypasses it for bound post-pause verification", async () => {
+  it("reuses short-lived ancestor cache during batch previews while always bypassing cache on apply", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-ancestor-cache-"))
     try {
       const localRoot = path.join(dir, "other-sync")
@@ -519,15 +519,27 @@ describe("DriveSyncService", () => {
         accountService: { getDriveItem },
       })
       const service = createDriveSyncService(harness.deps)
-      await service.createBinding({ driveItemId: "unrelated-folder", driveItemName: "Other", kind: "folder", localPath: localRoot, deferWatcher: true })
+      await service.createBinding({ driveItemId: "synced-folder", driveItemName: "Synced", kind: "folder", localPath: localRoot, deferWatcher: true })
+
+      // Batch previews reuse the 5s ancestor folder cache (1 fetch per ancestor across both files).
       const previewA = await service.previewFileReplacement({ itemId: "file-a", filePath: fileA })
       const previewB = await service.previewFileReplacement({ itemId: "file-b", filePath: fileB })
-      await service.applyFileReplacement({ itemId: "file-a", filePath: fileA, confirmationToken: previewA.confirmationToken })
-      await service.applyFileReplacement({ itemId: "file-b", filePath: fileB, confirmationToken: previewB.confirmationToken })
-      const ancestorGets = getDriveItem.mock.calls.map(([id]) => id).filter((id) => id === "folder-image" || id === "folder-root")
-      expect(ancestorGets).toEqual(["folder-image", "folder-root"])
-      expect(getDriveItem.mock.calls.filter(([id]) => id === "file-a")).toHaveLength(2)
-      expect(getDriveItem.mock.calls.filter(([id]) => id === "file-b")).toHaveLength(2)
+      expect(getDriveItem.mock.calls.map(([id]) => id).filter((id) => id === "folder-image" || id === "folder-root"))
+        .toEqual(["folder-image", "folder-root"])
+
+      // Moving the parent folder into a synced folder within 5s must be caught by applyFileReplacement.
+      items["folder-image"] = { ...items["folder-image"]!, parentId: "synced-folder" }
+      items["synced-folder"] = { ...mockDriveItem("synced-folder"), type: "folder", name: "Synced", parentId: null }
+      await expect(service.applyFileReplacement({ itemId: "file-a", filePath: fileA, confirmationToken: previewA.confirmationToken }))
+        .rejects.toThrow("重新")
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+
+      // After moving back out, fresh preview + apply succeeds with live ancestor check.
+      items["folder-image"] = { ...items["folder-image"]!, parentId: "folder-root" }
+      const freshB = await service.previewFileReplacement({ itemId: "file-b", filePath: fileB })
+      await expect(service.applyFileReplacement({ itemId: "file-b", filePath: fileB, confirmationToken: freshB.confirmationToken }))
+        .resolves.toMatchObject({ item: { id: "file-b" }, syncPending: false })
+      expect(previewB.confirmationToken).toBeTruthy()
       service.stopLocalWatcher()
     } finally { await rm(dir, { recursive: true, force: true }) }
   })

@@ -1,4 +1,4 @@
-import { ExecutionContext, Inject, Injectable, Optional } from "@nestjs/common"
+import { ExecutionContext, Inject, Injectable, Logger, Optional } from "@nestjs/common"
 import { GUARDS_METADATA } from "@nestjs/common/constants"
 import { Reflector } from "@nestjs/core"
 import {
@@ -9,6 +9,7 @@ import {
   type ThrottlerRequest,
   type ThrottlerStorage,
 } from "@nestjs/throttler"
+import { isTrustedCookieOrigin } from "../auth/cookie-origin"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
 import { userSessionCookieName } from "../auth/user-web-session"
@@ -27,6 +28,8 @@ function readBearerToken(header: string | undefined): string | null {
  */
 @Injectable()
 export class AppThrottlerGuard extends ThrottlerGuard {
+  private readonly logger = new Logger(AppThrottlerGuard.name)
+
   constructor(
     @InjectThrottlerOptions() options: ThrottlerModuleOptions,
     @InjectThrottlerStorage() storageService: ThrottlerStorage,
@@ -66,12 +69,18 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     }
 
     const cookieToken = request.cookies?.[userSessionCookieName]
-    if (typeof cookieToken === "string" && cookieToken.length > 0 && this.userAuth) {
+    if (
+      typeof cookieToken === "string"
+      && cookieToken.length > 0
+      && this.userAuth
+      && isTrustedCookieOrigin(request, process.env.APP_PUBLIC_URL)
+    ) {
       try {
         const userId = await this.userAuth.resolveWebSessionUserId(cookieToken)
         if (userId) return `user:${userId}`
-      } catch {
-        // 限流键解析失败时安全回退到 IP 维度，避免阻塞后续认证或错误响应。
+      } catch (error) {
+        const errorName = error instanceof Error ? error.name : typeof error
+        this.logger.warn(`Failed to resolve web session user for throttling (${errorName}); falling back to IP tracker.`)
       }
     }
 
