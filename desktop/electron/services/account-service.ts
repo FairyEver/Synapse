@@ -1530,10 +1530,15 @@ export class AccountService {
       try {
         if (!item.replacementToken || !item.expectedItemId || !progress.replaceFile) throw new Error("同名文件需要预览后上传新版本。")
         emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
-        await progress.replaceFile({ itemId: item.expectedItemId, filePath: item.path, confirmationToken: item.replacementToken })
+        await this.replaceDriveFileWithRateLimitRetry(
+          progress.replaceFile,
+          { itemId: item.expectedItemId, filePath: item.path, confirmationToken: item.replacementToken },
+          progress.signal,
+        )
         emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
         return { completed: 1, failed: 0, skipped: 0 }
       } catch (error) {
+        if (progress.signal?.aborted) throw error
         const message = localUploadErrorMessage(error)
         emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
         return { completed: 0, failed: 1, skipped: 0, message }
@@ -1734,10 +1739,15 @@ export class AccountService {
           try {
             if (!file.replacementToken || !file.expectedItemId || !progress.replaceFile) throw new Error("同名文件需要预览后上传新版本。")
             emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
-            await progress.replaceFile({ itemId: file.expectedItemId, filePath: file.path, confirmationToken: file.replacementToken })
+            await this.replaceDriveFileWithRateLimitRetry(
+              progress.replaceFile,
+              { itemId: file.expectedItemId, filePath: file.path, confirmationToken: file.replacementToken },
+              progress.signal,
+            )
             emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
             completed += 1
           } catch (error) {
+            if (progress.signal?.aborted) throw error
             failed += 1
             const message = localUploadErrorMessage(error)
             firstError ??= message
@@ -1798,6 +1808,25 @@ export class AccountService {
       failed,
       skipped,
       ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
+  private async replaceDriveFileWithRateLimitRetry(
+    replaceFile: NonNullable<DriveLocalUploadProgressReporter["replaceFile"]>,
+    input: { readonly itemId: string; readonly filePath: string; readonly confirmationToken: string },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    try {
+      await replaceFile(input)
+    } catch (firstError) {
+      signal?.throwIfAborted()
+      // 仅在写入云端前遇到 429 限流/本地冷却时等待后重试；云端已提交后的校验错误已包装为非 HTTP 429 Error，不会重复写入。
+      if (!isAccountHttpError(firstError) || firstError.status !== 429) throw firstError
+      const rawDelayMs = firstError.retryAfterMs !== undefined
+        ? Math.max(1, firstError.retryAfterMs) + 50
+        : DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50
+      await delay(Math.min(rawDelayMs, DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS + 50), signal)
+      await replaceFile(input)
     }
   }
 

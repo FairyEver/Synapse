@@ -302,6 +302,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   let remotePollPromise: Promise<void> | null = null
   const reviewedReplacements = new Map<string, { fingerprint: string; expiresAt: number }>()
   const reviewedRemovals = new Map<string, { fingerprint: string; expiresAt: number }>()
+  const replacementAncestorCache = new Map<string, { item: DriveItemDto; expiresAt: number }>()
   const replacingBindings = new Set<string>()
   const cleaningBindings = new Set<string>()
   const pendingRemoteEchoes = new Map<string, PendingRemoteEcho[]>()
@@ -534,7 +535,30 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (!review || review.expiresAt < Date.now() || review.fingerprint !== fingerprint) throw new Error("内容或同步状态已变化，请重新预览并确认。")
   }
 
-  async function replacementCapture(input: DriveFileReplaceInput, statusOverrides?: ReadonlyMap<string, DriveSyncBindingStatus>) {
+  async function readReplacementAncestor(ownerUserId: string, itemId: string, bypassCache: boolean): Promise<DriveItemDto> {
+    const cacheKey = `${ownerUserId}:${itemId}`
+    const now = Date.now()
+    if (!bypassCache) {
+      const cached = replacementAncestorCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) return cached.item
+      if (cached) replacementAncestorCache.delete(cacheKey)
+    }
+    const item = await getDriveItemFromAccountService(deps.accountService, itemId)
+    if (item.type === "folder") {
+      if (replacementAncestorCache.size >= 256) {
+        for (const [key, entry] of replacementAncestorCache) if (entry.expiresAt <= now) replacementAncestorCache.delete(key)
+        if (replacementAncestorCache.size >= 256) replacementAncestorCache.clear()
+      }
+      replacementAncestorCache.set(cacheKey, { item, expiresAt: now + 5_000 })
+    }
+    return item
+  }
+
+  async function replacementCapture(
+    input: DriveFileReplaceInput,
+    statusOverrides?: ReadonlyMap<string, DriveSyncBindingStatus>,
+    options?: { readonly bypassAncestorCache?: boolean },
+  ) {
     const ownerUserId = requireOnlineOwnerUserId()
     if (!path.isAbsolute(input.filePath)) throw new Error("请选择绝对路径的本地文件。")
     await authorizeLocalPath({ action: "fs.read.outside-userdata", localPath: input.filePath, source: "drive.file.replace", metadata: { itemId: input.itemId } })
@@ -549,21 +573,24 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const localHash = await hashDriveSyncFile(input.filePath)
     const afterRead = await lstat(input.filePath)
     if (stat.dev !== afterRead.dev || stat.ino !== afterRead.ino || stat.size !== afterRead.size || stat.mtimeMs !== afterRead.mtimeMs) throw new Error("本地文件在检查期间变化，请重新预览。")
+    const activeBindings = (await listOwnerBindings()).filter((entry) => entry.status !== "removed")
     const ancestors = new Map<string, string>([[item.id, ""]])
-    let cursor = item
-    let relative = ""
-    const seen = new Set<string>([item.id])
-    while (cursor.parentId) {
-      if (seen.has(cursor.parentId)) throw new Error("云端目录结构无效。")
-      seen.add(cursor.parentId)
-      relative = relative ? path.posix.join(cursor.name, relative) : cursor.name
-      cursor = await getDriveItemFromAccountService(deps.accountService, cursor.parentId)
-      ancestors.set(cursor.id, relative)
+    if (activeBindings.some((entry) => entry.kind === "folder")) {
+      let cursor = item
+      let relative = ""
+      const seen = new Set<string>([item.id])
+      while (cursor.parentId) {
+        if (seen.has(cursor.parentId)) throw new Error("云端目录结构无效。")
+        seen.add(cursor.parentId)
+        relative = relative ? path.posix.join(cursor.name, relative) : cursor.name
+        cursor = await readReplacementAncestor(ownerUserId, cursor.parentId, options?.bypassAncestorCache === true)
+        ancestors.set(cursor.id, relative)
+      }
     }
     const impacts: DriveFileReplacePreviewDto["syncImpacts"][number][] = []
     const config: unknown[] = []
     let blockedReason: string | null = null
-    for (const binding of (await listOwnerBindings()).filter((entry) => entry.status !== "removed")) {
+    for (const binding of activeBindings) {
       const relativePath = ancestors.get(binding.driveItemId)
       if (relativePath === undefined || (relativePath && isDriveSyncExcluded(relativePath, binding.excludeRules, "file"))) continue
       const localPath = localPathForRelative(binding, relativePath)
@@ -599,10 +626,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     let cloudWritten = false
     let verified = false
     try {
-      for (const binding of originalBindings) await workCoordinator.cancelAndRun(binding.id, () => updateBindingStatus(binding.id, "paused"))
-      const checked = await replacementCapture(input, new Map(originalBindings.map((binding) => [binding.id, binding.status])))
-      requireReview(reviewedReplacements, input.confirmationToken, checked.fingerprint)
-      if (checked.blockedReason) throw new Error(checked.blockedReason)
+      if (originalBindings.length > 0) {
+        for (const binding of originalBindings) await workCoordinator.cancelAndRun(binding.id, () => updateBindingStatus(binding.id, "paused"))
+        const checked = await replacementCapture(
+          input,
+          new Map(originalBindings.map((binding) => [binding.id, binding.status])),
+          { bypassAncestorCache: true },
+        )
+        requireReview(reviewedReplacements, input.confirmationToken, checked.fingerprint)
+        if (checked.blockedReason) throw new Error(checked.blockedReason)
+      }
       // Read immutable staged bytes: edits to the user's file after this point cannot alter the reviewed upload.
       const directory = await createVerificationDirectory("file-replacement")
       try {

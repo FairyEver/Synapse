@@ -691,6 +691,62 @@ describe("AccountService", () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  it("waits and retries folder file replacement once when hitting a 429 rate-limit cooldown", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-reviewed-429-"))
+    const fileA = path.join(dir, "a.png")
+    const fileB = path.join(dir, "b.png")
+    await writeFile(fileA, "aaa")
+    await writeFile(fileB, "bbb")
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "root-1", type: "folder", name: "image" }),
+      rootCreated: false,
+      entries: [],
+    })
+    let attemptsA = 0
+    const replaceFile = vi.fn(async ({ itemId }: { itemId: string }) => {
+      if (itemId === "item-a" && attemptsA === 0) {
+        attemptsA += 1
+        throw Object.assign(new Error("云盘请求过于频繁，等待后自动重试。"), { status: 429, retryAfterMs: 10 })
+      }
+      return undefined
+    })
+
+    const result = await service.uploadDriveLocalItems({
+      items: [{
+        kind: "folder",
+        folderName: "image",
+        expectedRootItemId: "root-1",
+        files: [
+          { path: fileA, relativePath: "a.png", expectedItemId: "item-a", replacementToken: "token-a" },
+          { path: fileB, relativePath: "b.png", expectedItemId: "item-b", replacementToken: "token-b" },
+        ],
+      }],
+    }, { replaceFile })
+
+    expect(result).toMatchObject({ completed: 2, failed: 0, skipped: 0 })
+    expect(replaceFile).toHaveBeenCalledTimes(3)
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it("does not retry file replacement for non-429 errors such as post-commit verification failures", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-reviewed-no-retry-"))
+    const filePath = path.join(dir, "a.png")
+    await writeFile(filePath, "aaa")
+    const { service } = await createTestAccountService()
+    const replaceFile = vi.fn(async () => {
+      throw new Error("云端更新已提交；请检查云端与本机状态后再操作。")
+    })
+
+    const result = await service.uploadDriveLocalItems({
+      items: [{ kind: "file", path: filePath, name: "a.png", expectedItemId: "item-a", replacementToken: "token-a" }],
+    }, { replaceFile })
+
+    expect(result).toMatchObject({ completed: 0, failed: 1, skipped: 0 })
+    expect(replaceFile).toHaveBeenCalledTimes(1)
+    await rm(dir, { recursive: true, force: true })
+  })
+
   it("returns the completed Drive item for sync uploads", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-"))
     const filePath = path.join(dir, "report.txt")

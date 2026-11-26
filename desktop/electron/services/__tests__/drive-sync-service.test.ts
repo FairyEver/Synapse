@@ -481,6 +481,57 @@ describe("DriveSyncService", () => {
     } finally { await rm(dir, { recursive: true, force: true }) }
   })
 
+  it("skips ancestor traversal and redundant second capture when no folder sync binding applies", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-no-ancestors-"))
+    try {
+      const filePath = path.join(dir, "image.png")
+      await writeFile(filePath, "png-bytes")
+      const getDriveItem = vi.fn(async (id: string) => {
+        if (id === "file-1") return { ...mockDriveItem(id), name: "image.png", parentId: "folder-leaf" }
+        return { ...mockDriveItem(id), type: "folder" as const, name: id, parentId: id === "folder-leaf" ? "folder-root" : null }
+      })
+      const harness = createHarness({ accountService: { getDriveItem } })
+      const service = createDriveSyncService(harness.deps)
+      const preview = await service.previewFileReplacement({ itemId: "file-1", filePath })
+      await service.applyFileReplacement({ itemId: "file-1", filePath, confirmationToken: preview.confirmationToken })
+      expect(getDriveItem.mock.calls.map(([id]) => id)).toEqual(["file-1", "file-1"])
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("reuses short-lived ancestor cache across batch replacement previews and bypasses it for bound post-pause verification", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-ancestor-cache-"))
+    try {
+      const localRoot = path.join(dir, "other-sync")
+      const fileA = path.join(dir, "a.png")
+      const fileB = path.join(dir, "b.png")
+      await mkdir(localRoot)
+      await writeFile(fileA, "aaa")
+      await writeFile(fileB, "bbb")
+      const items: Record<string, DriveItemDto> = {
+        "file-a": { ...mockDriveItem("file-a"), name: "a.png", parentId: "folder-image" },
+        "file-b": { ...mockDriveItem("file-b"), name: "b.png", parentId: "folder-image" },
+        "folder-image": { ...mockDriveItem("folder-image"), type: "folder", name: "image", parentId: "folder-root" },
+        "folder-root": { ...mockDriveItem("folder-root"), type: "folder", name: "root", parentId: null },
+      }
+      const getDriveItem = vi.fn(async (id: string) => items[id]!)
+      const harness = createHarness({
+        watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+        accountService: { getDriveItem },
+      })
+      const service = createDriveSyncService(harness.deps)
+      await service.createBinding({ driveItemId: "unrelated-folder", driveItemName: "Other", kind: "folder", localPath: localRoot, deferWatcher: true })
+      const previewA = await service.previewFileReplacement({ itemId: "file-a", filePath: fileA })
+      const previewB = await service.previewFileReplacement({ itemId: "file-b", filePath: fileB })
+      await service.applyFileReplacement({ itemId: "file-a", filePath: fileA, confirmationToken: previewA.confirmationToken })
+      await service.applyFileReplacement({ itemId: "file-b", filePath: fileB, confirmationToken: previewB.confirmationToken })
+      const ancestorGets = getDriveItem.mock.calls.map(([id]) => id).filter((id) => id === "folder-image" || id === "folder-root")
+      expect(ancestorGets).toEqual(["folder-image", "folder-root"])
+      expect(getDriveItem.mock.calls.filter(([id]) => id === "file-a")).toHaveLength(2)
+      expect(getDriveItem.mock.calls.filter(([id]) => id === "file-b")).toHaveLength(2)
+      service.stopLocalWatcher()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
   it("requires a fresh review before destructive detachment and detaches before trash", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-remove-"))
     try {
