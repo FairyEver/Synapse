@@ -163,12 +163,30 @@ describe("同步管理阅读与恢复", () => {
   it("一跳进入详情，自动重试分类与正在执行分开", async () => {
     await render()
     const tabs = [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)
-    expect(tabs).toContain("进行中0")
-    expect(tabs).toContain("等待重试1")
+    expect(tabs).toEqual(["全部1", "进行中", "等待重试1", "需要处理", "已暂停"])
     await click("同步详情 需求.md")
     expect(document.querySelector('[aria-label="返回同步列表"]')).toBeTruthy()
     expect(document.querySelector('[aria-label="同步简要信息 需求.md"]')).toBeNull()
     expect(document.body.textContent).toContain("最近成功同步")
+  })
+  it("筛选数量为 0 时不显示数字", async () => {
+    snapshot = {
+      ...snapshot,
+      bindings: [],
+      operations: [],
+      conflicts: [],
+      summary: {
+        activeBindingCount: 0,
+        conflictCount: 0,
+        errorCount: 0,
+        runningOperationCount: 0,
+        retryWaitingOperationCount: 0,
+      },
+    }
+    controller = { ...controller, snapshot }
+    await render()
+    const tabs = [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)
+    expect(tabs).toEqual(["全部", "进行中", "等待重试", "需要处理", "已暂停"])
   })
   it("先显示限流原因和恢复计划，原始错误只按需展开一次且可复制", async () => {
     await render(true)

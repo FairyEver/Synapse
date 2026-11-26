@@ -51,12 +51,15 @@ export function DriveSyncFilterBar({
   return (
     <Tabs value={filter} onValueChange={(value) => onFilterChange(value as DriveSyncFilter)}>
       <TabsList aria-label="同步筛选">
-        {DRIVE_SYNC_FILTERS.map((item) => (
-          <TabsTrigger key={item.value} value={item.value}>
-            {item.label}
-            <span className="tabular-nums text-muted-foreground">{counts[item.value]}</span>
-          </TabsTrigger>
-        ))}
+        {DRIVE_SYNC_FILTERS.map((item) => {
+          const count = counts[item.value]
+          return (
+            <TabsTrigger key={item.value} value={item.value}>
+              {item.label}
+              {count > 0 ? <span className="tabular-nums text-muted-foreground">{count}</span> : null}
+            </TabsTrigger>
+          )
+        })}
       </TabsList>
     </Tabs>
   )
