@@ -49,7 +49,6 @@ import type {
   DriveFileContentChunkResult,
   DriveFileContentPatchInput,
   DriveFileContentPatchResult,
-  DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
@@ -1224,15 +1223,6 @@ export class AccountService {
       `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}`,
       undefined,
       "历史版本删除失败。",
-    )
-  }
-
-  async updateDriveFileVersionPin(itemId: string, versionId: string, isPinned: boolean): Promise<DriveFileVersionDto> {
-    return this.requestAuthenticatedJson<DriveFileVersionDto>(
-      "PATCH",
-      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}`,
-      { isPinned },
-      "历史版本保留状态保存失败。",
     )
   }
 

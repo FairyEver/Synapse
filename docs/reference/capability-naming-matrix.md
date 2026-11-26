@@ -138,7 +138,6 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.drive.file_version_download.create` | `app_drive_file_version_download_create` | `app.drive.file_version_download.create` | `driveFileVersionDownloadCreate` |
 | `app.drive.file_version.restore` | `app_drive_file_version_restore` | `app.drive.file_version.restore` | `driveFileVersionRestore` |
 | `app.drive.file_version.delete` | `app_drive_file_version_delete` | `app.drive.file_version.delete` | `driveFileVersionDelete` |
-| `app.drive.file_version_pin.update` | `app_drive_file_version_pin_update` | `app.drive.file_version_pin.update` | `driveFileVersionPinUpdate` |
 | `app.drive.folder_zip.create` | `app_drive_folder_zip_create` | `app.drive.folder_zip.create` | `driveFolderZipCreate` |
 | `app.drive.share.list` | `app_drive_share_list` | `app.drive.share.list` | `driveShareList` |
 | `app.drive.share.create` | `app_drive_share_create` | `app.drive.share.create` | `driveShareCreate` |

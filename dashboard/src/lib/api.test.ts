@@ -1396,7 +1396,6 @@ describe('driveFileVersionsApi', () => {
 
     await driveFileVersionsApi.list('item/id', { offset: 10, limit: 20 })
     await driveFileVersionsApi.restore('item/id', 'version/id')
-    await driveFileVersionsApi.updatePin('item/id', 'version/id', true)
     await driveFileVersionsApi.delete('item/id', 'version/id')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -1414,15 +1413,6 @@ describe('driveFileVersionsApi', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      '/api/drive/items/item%2Fid/versions/version%2Fid',
-      expect.objectContaining({
-        body: JSON.stringify({ isPinned: true }),
-        credentials: 'include',
-        method: 'PATCH',
-      })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
       '/api/drive/items/item%2Fid/versions/version%2Fid',
       expect.objectContaining({
         credentials: 'include',

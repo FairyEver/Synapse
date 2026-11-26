@@ -27,7 +27,6 @@ import type {
   DriveHostedDocumentImageDto,
   DriveFileContentUpdateResult,
   DriveFileTextUpdateInput,
-  DriveFileVersionDto,
   DriveFileVersionListPageDto,
   DriveItemDto,
   DriveItemListInput,
@@ -1511,11 +1510,6 @@ export const driveFileVersionsApi = {
   restore: (itemId: string, versionId: string) =>
     request<DriveItemDto>(`${driveFileVersionPath(itemId, versionId)}/restore`, {
       method: 'POST',
-    }),
-  updatePin: (itemId: string, versionId: string, isPinned: boolean) =>
-    request<DriveFileVersionDto>(driveFileVersionPath(itemId, versionId), {
-      method: 'PATCH',
-      body: JSON.stringify({ isPinned }),
     }),
   delete: (itemId: string, versionId: string) =>
     request<{ ok: true; deletePending?: boolean }>(driveFileVersionPath(itemId, versionId), {

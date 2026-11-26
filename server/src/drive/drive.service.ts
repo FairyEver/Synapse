@@ -854,7 +854,6 @@ export class DriveService implements OnApplicationBootstrap {
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
-    if (version.isPinned) throw new BadRequestException("请先取消保留后再删除历史版本。")
     const leaseCheckTime = new Date()
     const claimed = await this.prisma.$transaction(async (tx) => {
       await lockDriveItemMutation(tx, item.id)
@@ -865,7 +864,6 @@ export class DriveService implements OnApplicationBootstrap {
         userId,
         deletedAt: null,
         deletePending: false,
-        isPinned: false,
         openApiGrantEntries: { none: { grant: { leaseUntil: { gt: leaseCheckTime } } } },
         agentReadLeases: { none: { expiresAt: { gt: leaseCheckTime } } },
       },
@@ -912,26 +910,6 @@ export class DriveService implements OnApplicationBootstrap {
       ipAddress: auditContext.ipAddress,
     })
     return deletePending ? { ok: true, deletePending: true } : { ok: true }
-  }
-
-  async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
-    const item = await this.requireOwnedFile(userId, itemId)
-    const targetVersion = await this.requireOwnedFileVersion(userId, item.id, versionId)
-    this.assertFileVersionNotCleanupPending(targetVersion)
-    if (item.storageKey === targetVersion.storageKey) throw new BadRequestException("不能保留当前版本。")
-    const version = await this.prisma.driveFileVersion.update({
-      where: { id: versionId },
-      data: { isPinned },
-    })
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.file_version.pin_update",
-      targetType: "drive.fileVersion",
-      targetId: version.id,
-      detail: { userId, itemId: item.id, versionId: version.id, isPinned },
-      ipAddress: auditContext.ipAddress,
-    })
-    return toDriveFileVersionDto(version, item.storageKey)
   }
 
   async openFileVersionDownload(userId: string, itemId: string, versionId: string): Promise<DriveBrowserDownloadResult> {

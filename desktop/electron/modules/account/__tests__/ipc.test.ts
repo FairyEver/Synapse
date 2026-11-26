@@ -80,7 +80,6 @@ vi.mock("../../../services/account-service", () => ({
     downloadDriveFolderZip: vi.fn(async ({ outputPath }: { outputPath: string }) => ({ ok: true, path: outputPath })),
     restoreDriveFileVersion: vi.fn(async () => ({})),
     deleteDriveFileVersion: vi.fn(async () => ({ ok: true })),
-    updateDriveFileVersionPin: vi.fn(async () => ({})),
     shareDriveItem: vi.fn(async () => ({})),
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
@@ -1045,11 +1044,6 @@ describe("accountIpcModule", () => {
       itemId: "item-1",
       versionId: "version-1",
     })
-    await accountIpcModule.methods.updateDriveFileVersionPin.handler({} as IpcHandlerContext, {
-      itemId: "item-1",
-      versionId: "version-1",
-      isPinned: true,
-    })
 
     expect(accountService.listDriveFileVersions).toHaveBeenCalledWith("item-1", { offset: 10, limit: 5 })
     expect(accountService.downloadDriveFileVersion).toHaveBeenCalledWith({
@@ -1059,7 +1053,6 @@ describe("accountIpcModule", () => {
     })
     expect(accountService.restoreDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.deleteDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
-    expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
   })
 
   it("downloads files and folders to paths selected by the user", async () => {
@@ -1463,7 +1456,6 @@ describe("accountIpcModule", () => {
         mimeType: "text/plain",
         source: "upload",
         isCurrent: true,
-        isPinned: false,
         deletePending: false,
         restoredFromVersionId: null,
         createdAt: "2026-06-09T00:00:00.000Z",

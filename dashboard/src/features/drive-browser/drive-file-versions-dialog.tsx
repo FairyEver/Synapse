@@ -18,7 +18,7 @@ import type {
   DriveFileVersionDto,
   DriveFileVersionSource,
 } from '@synapse/shared'
-import { Download, Loader2, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react'
+import { Download, Loader2, RotateCcw, Trash2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RelativeTime } from '@/components/relative-time'
 import { trackedDriveFileVersionsApi as driveFileVersionsApi } from './shared/drive-telemetry-api'
@@ -95,23 +95,6 @@ export function DriveFileVersionsDialog({
     },
     onError: (error: Error) => toast.danger(error.message),
   })
-  const pinMutation = useMutation({
-    mutationFn: ({
-      versionId,
-      isPinned,
-    }: {
-      versionId: string
-      isPinned: boolean
-    }) =>
-      trackVersionOperation('web.drive.version.pin-update', () =>
-        driveFileVersionsApi.updatePin(itemId, versionId, isPinned)
-      ),
-    onSuccess: () => {
-      invalidateVersionState()
-      toast.success('已保存')
-    },
-    onError: (error: Error) => toast.danger(error.message),
-  })
   const confirming = restoreMutation.isPending || deleteMutation.isPending
   const restoreWillDiscardDraft =
     confirmTarget?.action === 'restore' && hasUnsavedChanges
@@ -158,8 +141,6 @@ export function DriveFileVersionsDialog({
                     ? versionsQuery.error.message
                     : null
                 }
-                pinningVersionId={pinMutation.variables?.versionId ?? null}
-                pinning={pinMutation.isPending}
                 hasMore={versionsQuery.hasNextPage}
                 loadingMore={versionsQuery.isFetchingNextPage}
                 onRetry={() => {
@@ -168,12 +149,6 @@ export function DriveFileVersionsDialog({
                 onLoadMore={() => {
                   void versionsQuery.fetchNextPage()
                 }}
-                onPin={(version) =>
-                  pinMutation.mutate({
-                    versionId: version.id,
-                    isPinned: !version.isPinned,
-                  })
-                }
                 onRestore={(version) =>
                   setConfirmTarget({ action: 'restore', version })
                 }
@@ -216,13 +191,10 @@ export function DriveFileVersionContent({
   loading,
   error,
   loadMoreError,
-  pinningVersionId,
-  pinning,
   hasMore,
   loadingMore,
   onRetry,
   onLoadMore,
-  onPin,
   onRestore,
   onDelete,
 }: {
@@ -231,13 +203,10 @@ export function DriveFileVersionContent({
   readonly loading: boolean
   readonly error: string | null
   readonly loadMoreError: string | null
-  readonly pinningVersionId: string | null
-  readonly pinning: boolean
   readonly hasMore: boolean
   readonly loadingMore: boolean
   readonly onRetry: () => void
   readonly onLoadMore: () => void
-  readonly onPin: (version: DriveFileVersionDto) => void
   readonly onRestore: (version: DriveFileVersionDto) => void
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
@@ -293,8 +262,6 @@ export function DriveFileVersionContent({
           key={version.id}
           itemId={itemId}
           version={version}
-          pinning={pinning && pinningVersionId === version.id}
-          onPin={onPin}
           onRestore={onRestore}
           onDelete={onDelete}
         />
@@ -367,15 +334,11 @@ function DriveFileVersionTableSkeleton() {
 function DriveFileVersionRow({
   itemId,
   version,
-  pinning,
-  onPin,
   onRestore,
   onDelete,
 }: {
   readonly itemId: string
   readonly version: DriveFileVersionDto
-  readonly pinning: boolean
-  readonly onPin: (version: DriveFileVersionDto) => void
   readonly onRestore: (version: DriveFileVersionDto) => void
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
@@ -426,27 +389,6 @@ function DriveFileVersionRow({
           ) : null}
           {canModify ? (
             <DriveVersionActionButton
-              telemetryEvent='web.drive.version.pin-toggle'
-              disabled={pinning}
-              label={
-                version.isPinned
-                  ? `取消保留 v${version.versionNumber}`
-                  : `保留 v${version.versionNumber}`
-              }
-              tooltip={version.isPinned ? '取消保留' : '保留'}
-              onClick={() => onPin(version)}
-            >
-              {pinning ? (
-                <Loader2 className='animate-spin' />
-              ) : version.isPinned ? (
-                <PinOff />
-              ) : (
-                <Pin />
-              )}
-            </DriveVersionActionButton>
-          ) : null}
-          {canModify && !version.isPinned ? (
-            <DriveVersionActionButton
               telemetryEvent='web.drive.version.delete-open'
               destructive
               label={`删除 v${version.versionNumber}`}
@@ -469,7 +411,6 @@ function DriveFileVersionBadges({
   return (
     <div className='flex min-w-0 items-center gap-1'>
       {version.isCurrent ? <Chip>当前</Chip> : null}
-      {version.isPinned ? <Chip variant='secondary'>保留</Chip> : null}
       {version.deletePending ? <Chip variant='soft'>待清理</Chip> : null}
     </div>
   )

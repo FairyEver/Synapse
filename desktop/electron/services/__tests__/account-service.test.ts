@@ -3195,7 +3195,6 @@ describe("AccountService", () => {
       mimeType: "text/html",
       source: "upload",
       isCurrent: true,
-      isPinned: false,
       deletePending: false,
       restoredFromVersionId: null,
       createdAt: "2026-06-09T00:00:00.000Z",
@@ -3261,9 +3260,6 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/drive/items/item-1/versions/version-1/download")) return new Response("<h1>v1</h1>")
         if (String(url).endsWith("/drive/items/item-1/versions/version-1/restore")) return jsonResponse(driveItemDto)
-        if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "PATCH") {
-          return jsonResponse({ ...fileVersion, isPinned: true })
-        }
         if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "DELETE") return jsonResponse({ ok: true, deletePending: true })
         if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
         if (String(url).endsWith("/drive/shares")) {
@@ -3300,10 +3296,6 @@ describe("AccountService", () => {
     })).resolves.toEqual({ ok: true, path: versionDownloadPath })
     await expect(readFile(versionDownloadPath, "utf8")).resolves.toBe("<h1>v1</h1>")
     await expect(service.restoreDriveFileVersion("item-1", "version-1")).resolves.toEqual(driveItemDto)
-    await expect(service.updateDriveFileVersionPin("item-1", "version-1", true)).resolves.toEqual({
-      ...fileVersion,
-      isPinned: true,
-    })
     await expect(service.deleteDriveFileVersion("item-1", "version-1")).resolves.toEqual({ ok: true, deletePending: true })
     await expect(service.listDriveShares()).resolves.toEqual({
       items: [expectedShare],
@@ -3324,7 +3316,6 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/drive/items/item-1/versions?offset=10&limit=5"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1/download"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1/restore"), method: "POST", body: undefined },
-      { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "PATCH", body: { isPinned: true } },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "DELETE", body: undefined },
       { url: expectedApiUrl("/drive/shares"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/shares/share-row-1"), method: "GET", body: undefined },

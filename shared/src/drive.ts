@@ -505,7 +505,6 @@ export interface DriveFileVersionDto {
   readonly mimeType: string | null
   readonly source: DriveFileVersionSource
   readonly isCurrent: boolean
-  readonly isPinned: boolean
   readonly deletePending: boolean
   readonly restoredFromVersionId: string | null
   readonly createdAt: string
@@ -622,10 +621,6 @@ export interface DriveSiteListInput {
   readonly limit?: number
   readonly search?: string
   readonly status?: DriveSiteStatus | "all"
-}
-
-export interface DriveFileVersionPinInput {
-  readonly isPinned: boolean
 }
 
 export interface DriveFileVersionDownloadResultDto {

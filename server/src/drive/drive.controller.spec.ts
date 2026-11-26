@@ -48,7 +48,6 @@ describe("DriveController", () => {
     hideTrashedItem: vi.fn(),
     listFileVersions: vi.fn(),
     restoreFileVersion: vi.fn(),
-    updateFileVersionPin: vi.fn(),
     deleteFileVersion: vi.fn(),
     openFileVersionDownload: vi.fn(),
     recordFileVersionDownloadAudit: vi.fn(),
@@ -185,7 +184,6 @@ describe("DriveController", () => {
     drive.hideTrashedItem.mockReset()
     drive.listFileVersions.mockReset()
     drive.restoreFileVersion.mockReset()
-    drive.updateFileVersionPin.mockReset()
     drive.deleteFileVersion.mockReset()
     drive.openFileVersionDownload.mockReset()
     drive.recordFileVersionDownloadAudit.mockReset()
@@ -808,7 +806,6 @@ describe("DriveController", () => {
     try {
       drive.listFileVersions.mockResolvedValue({ items: [], total: 0, page: { offset: 10, limit: 5, hasMore: false, nextOffset: null } })
       drive.restoreFileVersion.mockResolvedValue({ id: "file-1" })
-      drive.updateFileVersionPin.mockResolvedValue({ id: "ver-1", isPinned: true })
       drive.deleteFileVersion.mockResolvedValue({ ok: true })
       drive.openFileVersionDownload.mockResolvedValue({
         stream: Readable.from("old"),
@@ -821,7 +818,6 @@ describe("DriveController", () => {
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions?offset=10&limit=5").expect(200)
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions/ver-1/download").expect(200)
       await request(userApp.getHttpServer()).post("/api/drive/items/file-1/versions/ver-1/restore").expect(201)
-      await request(userApp.getHttpServer()).patch("/api/drive/items/file-1/versions/ver-1").send({ isPinned: true }).expect(200)
       await request(userApp.getHttpServer()).delete("/api/drive/items/file-1/versions/ver-1").expect(200)
 
       expect(drive.listFileVersions).toHaveBeenCalledWith("user-1", "file-1", { offset: 10, limit: 5 })
@@ -834,7 +830,6 @@ describe("DriveController", () => {
         auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
       expect(drive.restoreFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
-      expect(drive.updateFileVersionPin).toHaveBeenCalledWith("user-1", "file-1", "ver-1", true, expect.any(Object))
       expect(drive.deleteFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
     } finally {
       await userApp.close()

@@ -143,7 +143,6 @@ const documentImagePrepareUploadSchema = z.object({
   mimeType: z.string().trim().min(1).max(255),
 }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
-const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
 const driveFileTextUpdateSchema = z.object({
   contentType: z.literal("text"),
   text: z.string(),
@@ -651,12 +650,6 @@ export class DriveUserController {
   @Post("/items/:id/versions/:versionId/restore")
   restoreFileVersion(@Param("id") id: string, @Param("versionId") versionId: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.restoreFileVersion(request.user!.id, id, versionId, driveAuditContext(request))
-  }
-
-  @Patch("/items/:id/versions/:versionId")
-  updateFileVersion(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    const parsed = parseBody(versionPinSchema, body, "历史版本请求无效。")
-    return this.drive.updateFileVersionPin(request.user!.id, id, versionId, parsed.isPinned, driveAuditContext(request))
   }
 
   @Delete("/items/:id/versions/:versionId")

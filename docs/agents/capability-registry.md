@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-26 云盘历史版本移除「保留 / 取消保留」能力：因历史版本已长期保留且不再自动清理，移除 `app.drive.file_version_pin.update` capability / `app_drive_file_version_pin_update` MCP 索引、对应桌面 IPC（`synapse:app:drive:file_version_pin:update` / `drive.fileVersionPin.update`）、服务端 `PATCH /api/drive/items/:id/versions/:versionId` 与网页历史版本弹窗中的图钉保留操作及「保留」标记，同步移除 `deleteFileVersion` 对旧 `isPinned` 字段的删除阻断并更新系统 Skill（`drive/index.md`、`drive/api-reference.md`）。`drive` 域由 76 降至 75 项，全局 capability 由 396 降至 395 项，MCP 索引由 392 降至 391 项；公开路由工具仍仅 `search` / `invoke` 2 项，System App、默认 Dock、Workflow Node、Automation Action 与 Deep Link 数量不变。
+
 2026-11-26 邮件收信前置过滤与回复起草优化：`builtin.mail-received` 触发器配置新增可选的本地元数据前置过滤字段 `senderMatches`（发件域名或完整邮箱地址白名单）、`subjectContains`（主题关键词）和 `originalOnly`（按已索引 `References`/`In-Reply-To` 或回复/转发前缀排除非原发邮件），在拉取正文与启动执行器前基于本机索引判定，未命中直接记为跳过且不泄露过滤原文到公开摘要；`app.mail.draft.create` 的 `sourceMessageId` 兼容完整 `synapse://mail/em_<uuid>` 引用，并新增回复/转发模式可选的 `prependText` / `prependHtml`，可直接把回复内容置于原引用上方。同步更新系统 Skill（`mail` 与 `automation`），不新增 capability、MCP 工具、触发器、执行器、System App、Dock、Workflow Node、IPC 或 Deep Link，既有注册数量均不变。
 
 2026-11-26 状态同步（`state_sync`）：新增独立 `state_sync` MCP domain，共 14 项 capability / MCP 索引（`publish_preflight.get`、`space.list/get/create/update/delete`、`token.list/create/revoke`、`doc.list/create/get/mutate/delete`，对应 `app_state_sync_*`）。全局 capability 由 382 增至 396 项，MCP 索引由 378 增至 392 项；公开路由工具仍仅 `search` / `invoke` 2 项，System App、默认 Dock、Workflow Node、Automation Action、桌面 IPC 与 Deep Link 数量均不变。桌面 MCP 仅接受 `mcp-http` / `mcp-stdio` 调用，使用当前登录桌面账号访问 `/console/state-sync/*`，经 `PermissionGuard` / `AuditSink`（`network.connect` / `synapse-state-sync`）保护并在切号时中止；外部运行时 WebSocket / HTTP 开放接口独立使用空间专属凭证（`sys_...`）或个人 `UserApiKey`（状态同步范围），忽略 Cookie 且不接受 URL query 凭证。服务端同步提供开放 SDK 静态分发与 `/sdk/manifest.json` 版本发现；控制台新增「状态同步」管理页、实时 JSON 调试台与 API 密钥空间范围配置；系统 Skill 新增 `state-sync/index.md` 与 `state-sync/multiplayer-game.md`。
@@ -298,7 +300,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `automation` | 15 | 15 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 76 | 76 |
+| `drive` | 75 | 75 |
 | `mail_internal` | 18 | 18 |
 | `mail` | 50 | 50 |
 | `todos` | 6 | 6 |
@@ -306,11 +308,11 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `cloud_tables` | 21 | 21 |
 | `channels` | 12 | 12 |
 | `state_sync` | 14 | 14 |
-| 合计 | 396 | 392 |
+| 合计 | 395 | 391 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 392 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 391 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

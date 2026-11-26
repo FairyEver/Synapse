@@ -24,7 +24,6 @@ vi.mock('@/lib/api', async (importOriginal) => {
     driveFileVersionsApi: {
       list: vi.fn(),
       restore: vi.fn(),
-      updatePin: vi.fn(),
       delete: vi.fn(),
       downloadUrl: vi.fn(
         (itemId: string, versionId: string) =>
@@ -121,25 +120,16 @@ describe('DriveFileVersionContent', () => {
     expect(html).not.toContain('删除')
   })
 
-  it('shows restore, pin, and delete actions for older versions', () => {
+  it('shows restore and delete actions without pin for older versions', () => {
     const html = renderVersions([
       version({ id: 'version-old', versionNumber: 3 }),
     ])
 
     expect(html).toContain('下载')
     expect(html).toContain('恢复')
-    expect(html).toContain('保留')
     expect(html).toContain('删除')
-  })
-
-  it('hides delete for pinned older versions', () => {
-    const html = renderVersions([
-      version({ id: 'version-pinned', versionNumber: 3, isPinned: true }),
-    ])
-
-    expect(html).toContain('保留')
-    expect(html).toContain('取消保留')
-    expect(html).not.toContain('删除')
+    expect(html).not.toContain('保留')
+    expect(html).not.toContain('取消保留')
   })
 
   it('hides actions for versions pending cleanup', () => {
@@ -310,13 +300,10 @@ function renderVersionContent(
       loading: false,
       error: null,
       loadMoreError: null,
-      pinningVersionId: null,
-      pinning: false,
       hasMore: false,
       loadingMore: false,
       onRetry: vi.fn(),
       onLoadMore: vi.fn(),
-      onPin: vi.fn(),
       onRestore: vi.fn(),
       onDelete: vi.fn(),
       ...overrides,
@@ -399,7 +386,6 @@ function version(
     mimeType: 'text/markdown',
     source: 'upload',
     isCurrent: false,
-    isPinned: false,
     deletePending: false,
     restoredFromVersionId: null,
     createdAt: '2026-06-17T12:01:33.000Z',

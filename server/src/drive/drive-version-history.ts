@@ -86,7 +86,6 @@ export function toDriveFileVersionDto(version: {
   readonly size: bigint
   readonly mimeType: string | null
   readonly source: string
-  readonly isPinned: boolean
   readonly deletePending: boolean
   readonly restoredFromVersionId: string | null
   readonly createdAt: Date
@@ -101,7 +100,6 @@ export function toDriveFileVersionDto(version: {
     mimeType: version.mimeType,
     source: normalizeDriveFileVersionSource(version.source),
     isCurrent: currentStorageKey === version.storageKey,
-    isPinned: version.isPinned,
     deletePending: version.deletePending,
     restoredFromVersionId: version.restoredFromVersionId,
     createdAt: version.createdAt.toISOString(),

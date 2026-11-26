@@ -201,7 +201,6 @@ import type {
 import type {
   DashboardWebhookDto,
   DriveAccessSettingsUpdateInput,
-  DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
@@ -1353,7 +1352,6 @@ export type SynapseBridge = {
       delete: (input: { itemId: string; versionId: string }) => Promise<DriveFileVersionDeleteResult>
     }
     fileVersionDownload: { create: (input: { itemId: string; versionId: string; outputPath: string }) => Promise<{ ok: true; path: string }> }
-    fileVersionPin: { update: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto> }
     link: {
       resolve: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
       list: (input: DriveLinkListInput) => Promise<DriveLinkListDto>

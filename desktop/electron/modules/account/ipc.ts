@@ -138,9 +138,8 @@ const driveFileVersionSchema = z.object({
   versionNumber: z.number().int().positive(),
   size: z.string(),
   mimeType: z.string().nullable(),
-  source: z.enum(["upload", "online_edit", "restore"]),
+  source: z.enum(["upload", "online_edit", "restore", "collaboration"]),
   isCurrent: z.boolean(),
-  isPinned: z.boolean(),
   deletePending: z.boolean(),
   restoredFromVersionId: z.string().nullable(),
   createdAt: z.string(),
@@ -588,7 +587,6 @@ const driveFileVersionListSchema = driveItemIdSchema.extend({
 })
 const driveFileVersionIdSchema = driveItemIdSchema.extend({ versionId: z.string() })
 const driveFileVersionDownloadSchema = driveFileVersionIdSchema.extend({ outputPath: z.string() })
-const driveFileVersionPinSchema = driveFileVersionIdSchema.extend({ isPinned: z.boolean() })
 const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
@@ -1504,16 +1502,6 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => {
         const parsed = driveFileVersionIdSchema.parse(input)
         return accountService.deleteDriveFileVersion(parsed.itemId, parsed.versionId)
-      },
-    },
-    updateDriveFileVersionPin: {
-      kind: "invoke",
-      operationId: "app.drive.file_version_pin.update",
-      request: driveFileVersionPinSchema,
-      response: driveFileVersionSchema,
-      handler: async (_ctx, input) => {
-        const parsed = driveFileVersionPinSchema.parse(input)
-        return accountService.updateDriveFileVersionPin(parsed.itemId, parsed.versionId, parsed.isPinned)
       },
     },
     resolveDriveLink: {

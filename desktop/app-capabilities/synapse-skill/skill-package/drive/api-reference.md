@@ -534,7 +534,7 @@ Input:
 
 ### `app_drive_file_version_delete`
 
-Delete a non-current historical file version that is not pending cleanup and is not pinned. Current versions cannot be deleted. If the version is pinned/retained, call `app_drive_file_version_pin_update` with `isPinned: false` before deleting it.
+Delete a non-current historical file version that is not pending cleanup. Current versions cannot be deleted.
 
 Input:
 
@@ -545,16 +545,6 @@ Output:
 
 - `ok`: `true` when the delete request was accepted.
 - `deletePending`: optional. When `true`, physical cleanup is still pending; report it as cleanup in progress.
-
-### `app_drive_file_version_pin_update`
-
-Keep or unkeep a non-current historical file version that is not pending cleanup.
-
-Input:
-
-- `itemId` required: Drive file item id.
-- `versionId` required.
-- `isPinned` required: `true` keeps the version; `false` lets cleanup remove it later.
 
 ## Usage And Reorganization Tools
 

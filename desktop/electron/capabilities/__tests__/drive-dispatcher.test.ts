@@ -60,12 +60,12 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(uploadTool?.description).toContain("createdDirectories")
   })
 
-  it("documents pinned version handling before version deletion", () => {
+  it("documents version deletion constraints without pinned-version workflow", () => {
     const deleteTool = buildDriveTools().find((tool) => tool.name === "app_drive_file_version_delete")
     expect(deleteTool?.description).toContain("Current versions cannot be deleted")
     expect(deleteTool?.description).toContain("not pending cleanup")
-    expect(deleteTool?.description).toContain("not pinned")
-    expect(deleteTool?.description).toContain("app_drive_file_version_pin_update")
+    expect(deleteTool?.description).not.toContain("not pinned")
+    expect(deleteTool?.description).not.toContain("app_drive_file_version_pin_update")
     expect(deleteTool?.description).toContain("deletePending")
   })
 
@@ -101,7 +101,6 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_file_version_download_create",
       "app_drive_file_version_restore",
       "app_drive_file_version_delete",
-      "app_drive_file_version_pin_update",
       "app_drive_link_resolve",
       "app_drive_link_list",
       "app_drive_link_read_text",
@@ -1515,7 +1514,6 @@ describe("createDriveCapabilityDispatcher", () => {
       })),
       restoreDriveFileVersion: vi.fn(async () => driveItem({ id: "item-1" })),
       deleteDriveFileVersion: vi.fn(async () => ({ ok: true as const, deletePending: true })),
-      updateDriveFileVersionPin: vi.fn(async () => driveFileVersion({ id: "version-1", isPinned: true })),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
@@ -1540,19 +1538,10 @@ describe("createDriveCapabilityDispatcher", () => {
       itemId: "item-1",
       versionId: "version-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, deletePending: true } })
-    await expect(dispatcher.dispatch("app.drive.file_version_pin.update", {
-      itemId: "item-1",
-      versionId: "version-1",
-      isPinned: true,
-    }, { source: "mcp-stdio" })).resolves.toEqual({
-      ok: true,
-      data: driveFileVersion({ id: "version-1", isPinned: true }),
-    })
 
     expect(accountService.listDriveFileVersions).toHaveBeenCalledWith("item-1", { offset: 10, limit: 5 })
     expect(accountService.restoreDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.deleteDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
-    expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
   })
 
   it("checks fs.write.outside-userdata before saving a Drive file version locally", async () => {
@@ -2627,7 +2616,6 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     downloadDriveFileVersion: vi.fn(),
     restoreDriveFileVersion: vi.fn(),
     deleteDriveFileVersion: vi.fn(),
-    updateDriveFileVersionPin: vi.fn(),
     resolveDriveLink: vi.fn(),
     listDriveLink: vi.fn(),
     readDriveLinkText: vi.fn(),
@@ -2769,7 +2757,6 @@ function driveFileVersion(overrides: Partial<DriveFileVersion>): DriveFileVersio
     mimeType: "text/markdown",
     source: "upload",
     isCurrent: false,
-    isPinned: false,
     deletePending: false,
     restoredFromVersionId: null,
     createdAt: "2026-06-07T00:00:00.000Z",

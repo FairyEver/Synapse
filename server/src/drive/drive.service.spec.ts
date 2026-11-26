@@ -937,21 +937,7 @@ describe("DriveService", () => {
     expect(deleteObject).toHaveBeenCalledTimes(1)
   })
 
-  it("updates version pin state", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "11", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
-    await service.completeUpload("user-1", prepared.sessionId)
-    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => !entry.isCurrent)!
-
-    const pinned = await service.updateFileVersionPin("user-1", item.id, version.id, true)
-
-    expect(pinned).toMatchObject({ id: version.id, isPinned: true })
-  })
-
-  it("rejects deleting pinned historical versions", async () => {
+  it("deletes legacy historical versions even if previously marked pinned", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)
     const storage: DriveStoragePort = {
@@ -965,27 +951,14 @@ describe("DriveService", () => {
     const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
     await service.completeUpload("user-1", prepared.sessionId)
     const historical = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => !entry.isCurrent)!
-    await service.updateFileVersionPin("user-1", item.id, historical.id, true)
+    await prisma.driveFileVersion.update({ where: { id: historical.id }, data: { isPinned: true } })
     deleteObject.mockClear()
 
-    await expect(service.deleteFileVersion("user-1", item.id, historical.id)).rejects.toThrow("请先取消保留后再删除历史版本。")
-    expect(deleteObject).not.toHaveBeenCalled()
+    await expect(service.deleteFileVersion("user-1", item.id, historical.id)).resolves.toEqual({ ok: true })
+    expect(deleteObject).toHaveBeenCalledTimes(1)
     const version = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: historical.id } })
     expect(version.deletePending).toBe(false)
-    expect(version.deletedAt).toBeNull()
-  })
-
-  it("rejects pinning the current file version", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const current = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => entry.isCurrent)!
-
-    await expect(service.updateFileVersionPin("user-1", item.id, current.id, true)).rejects.toThrow("不能保留当前版本。")
-
-    const version = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: current.id } })
-    expect(version.isPinned).toBe(false)
+    expect(version.deletedAt).not.toBeNull()
   })
 
   it("keeps every historical version instead of automatically cleaning up", async () => {
@@ -1007,7 +980,6 @@ describe("DriveService", () => {
       publicAppUrl: "https://synapse.test",
     })
     await service.completeUpload("user-1", preparedCurrent.sessionId)
-    await service.updateFileVersionPin("user-1", item.id, v1.id, true)
 
     for (let index = 0; index < 101; index += 1) {
       const prepared = await service.prepareUpload("user-1", {
@@ -1022,8 +994,8 @@ describe("DriveService", () => {
 
     const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 200 })
     expect(versions.total).toBe(103)
-    const pinnedRow = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: v1.id } })
-    expect(pinnedRow).toMatchObject({ isPinned: true, deletedAt: null, deletePending: false })
+    const firstRow = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: v1.id } })
+    expect(firstRow).toMatchObject({ deletedAt: null, deletePending: false })
     expect(versions.items[0]!.isCurrent).toBe(true)
     expect(versions.items.every((version) => !version.deletePending)).toBe(true)
   })
@@ -1079,14 +1051,12 @@ describe("DriveService", () => {
 
     await expect(service.restoreFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
     await expect(service.openFileVersionDownload("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
-    await expect(service.updateFileVersionPin("user-1", item.id, version.id, true)).rejects.toThrow("历史版本正在清理中。")
     await expect(service.deleteFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
 
     expect(storage.copyObject).not.toHaveBeenCalled()
     expect(storage.getObjectStream).not.toHaveBeenCalled()
     expect(storage.deleteObject).not.toHaveBeenCalled()
     const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: version.id } })
-    expect(row.isPinned).toBe(false)
     expect(row.deletePending).toBe(true)
   })
 

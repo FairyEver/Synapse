@@ -788,7 +788,6 @@ describe("preload bridge", () => {
     await bridge.drive.fileVersionDownload.create({ itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" })
     await bridge.drive.fileVersion.restore({ itemId: "item-1", versionId: "version-1" })
     await bridge.drive.fileVersion.delete({ itemId: "item-1", versionId: "version-1" })
-    await bridge.drive.fileVersionPin.update({ itemId: "item-1", versionId: "version-1", isPinned: true })
     await bridge.drive.share.create({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" })
     await bridge.drive.share.list()
 
@@ -852,10 +851,6 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:drive:file_version:delete",
       { itemId: "item-1", versionId: "version-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:drive:file_version_pin:update",
-      { itemId: "item-1", versionId: "version-1", isPinned: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:drive:share:create",

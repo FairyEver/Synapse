@@ -8,7 +8,6 @@ import type {
   DriveAccessExpiresIn,
   DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
-  DriveFileVersionDto,
   DriveFileContentInspectResult,
   DriveFileContentChunkResult,
   DriveFileContentPatchInput,
@@ -141,7 +140,6 @@ type DriveAccountServicePort = {
   }) => Promise<unknown>
   readonly restoreDriveFileVersion: (itemId: string, versionId: string) => Promise<DriveItemDto>
   readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ readonly ok: true; readonly deletePending?: boolean }>
-  readonly updateDriveFileVersionPin: (itemId: string, versionId: string, isPinned: boolean) => Promise<DriveFileVersionDto>
   readonly resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
   readonly listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>
   readonly readDriveLinkText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
@@ -405,15 +403,6 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             data: await deps.accountService.deleteDriveFileVersion(
               requireString(params, "itemId"),
               requireString(params, "versionId"),
-            ),
-          }))
-        case "app.drive.file_version_pin.update":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.updateDriveFileVersionPin(
-              requireString(params, "itemId"),
-              requireString(params, "versionId"),
-              requireBoolean(params, "isPinned"),
             ),
           }))
         case "app.drive.link.resolve":
@@ -1195,7 +1184,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "targetParentId", "bindingId", "conflictId", "threadId", "commentId", "direction", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "targetParentId", "bindingId", "conflictId", "threadId", "commentId", "direction", "name", "folderName", "passwordEnabled", "accessMode", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) {
       metadata[key] = key === "shareId" && typeof value === "string"
@@ -1701,14 +1690,6 @@ function optionalDriveTrashItemKind(value: unknown): DriveTrashItemDto["kind"] |
 function optionalBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== "boolean") throw new Error("Expected boolean parameter.")
-  return value
-}
-
-function requireBoolean(params: Record<string, unknown>, key: string): boolean {
-  const value = params[key]
-  if (typeof value !== "boolean") {
-    throw new Error(`Missing or invalid '${key}': expected boolean`)
-  }
   return value
 }
 

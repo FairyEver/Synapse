@@ -27,8 +27,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
   { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version that is not pending cleanup to a local path.", mutates: true },
   { id: "app.drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a non-current Synapse Drive file version that is not pending cleanup as the current version.", mutates: true },
-  { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current Synapse Drive file version that is not pending cleanup and is not pinned. Unpin retained versions before deleting.", mutates: true, risk: "high" },
-  { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a non-current Synapse Drive file version that is not pending cleanup.", mutates: true },
+  { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current Synapse Drive file version that is not pending cleanup.", mutates: true, risk: "high" },
   { id: "app.drive.link.resolve" as CapabilityId, title: "Resolve Drive link", description: "Resolve a Synapse Drive /share, /sites, or /files URL for Agent consumption.", mutates: false },
   { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
   { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link, including image ids for complete Markdown responses.", mutates: false },
@@ -416,7 +415,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_delete",
-      description: "Delete a non-current Synapse Drive file version that is not pending cleanup and is not pinned. Current versions cannot be deleted with this tool; unpin retained versions with drive_file_version_pin_update before deleting. If the result has deletePending: true, report that physical cleanup is still pending.",
+      description: "Delete a non-current Synapse Drive file version that is not pending cleanup. Current versions cannot be deleted with this tool. If the result has deletePending: true, report that physical cleanup is still pending.",
       inputSchema: {
         type: "object",
         properties: {
@@ -424,19 +423,6 @@ export function buildDriveTools(): McpToolDefinition[] {
           versionId: stringField("Drive file version id."),
         },
         required: ["itemId", "versionId"],
-      },
-    },
-    {
-      name: "drive_file_version_pin_update",
-      description: "Keep or unkeep a non-current Synapse Drive file version that is not pending cleanup.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          itemId: stringField("Drive file item id."),
-          versionId: stringField("Drive file version id."),
-          isPinned: { type: "boolean", description: "true keeps the version; false lets automatic cleanup remove it later." },
-        },
-        required: ["itemId", "versionId", "isPinned"],
       },
     },
     {

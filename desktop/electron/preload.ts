@@ -928,7 +928,6 @@ const synapseBridge: SynapseBridge = {
       delete: invoke(IPC_CHANNELS.account.deleteDriveFileVersion),
     },
     fileVersionDownload: { create: invoke(IPC_CHANNELS.account.downloadDriveFileVersion) },
-    fileVersionPin: { update: invoke(IPC_CHANNELS.account.updateDriveFileVersionPin) },
     link: {
       resolve: invoke(IPC_CHANNELS.account.resolveDriveLink),
       list: invoke(IPC_CHANNELS.account.listDriveLink),

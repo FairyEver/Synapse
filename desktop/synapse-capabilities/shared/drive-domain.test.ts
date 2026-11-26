@@ -32,7 +32,6 @@ describe("Drive capability domain", () => {
       "app_drive_file_version_download_create",
       "app_drive_file_version_restore",
       "app_drive_file_version_delete",
-      "app_drive_file_version_pin_update",
       "app_drive_link_resolve",
       "app_drive_link_list",
       "app_drive_link_read_text",

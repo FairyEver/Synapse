@@ -160,7 +160,6 @@
 | `drive_file_version_download_create` | `app_drive_file_version_download_create` |
 | `drive_file_version_restore` | `app_drive_file_version_restore` |
 | `drive_file_version_delete` | `app_drive_file_version_delete` |
-| `drive_file_version_pin_update` | `app_drive_file_version_pin_update` |
 | `drive_link_resolve` | `app_drive_link_resolve` |
 | `drive_link_list` | `app_drive_link_list` |
 | `drive_link_read_text` | `app_drive_link_read_text` |

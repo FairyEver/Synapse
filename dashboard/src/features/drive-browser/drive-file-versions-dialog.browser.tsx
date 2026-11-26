@@ -13,7 +13,7 @@ async function renderHistory(count: number) {
   const versions: DriveFileVersionDto[] = Array.from({ length: count }, (_, index) => ({
     id: `version-${index + 1}`, itemId: 'item-1', versionNumber: count - index,
     size: '7372', mimeType: 'text/markdown', source: 'upload', isCurrent: index === 0,
-    isPinned: false, deletePending: false, restoredFromVersionId: null,
+    deletePending: false, restoredFromVersionId: null,
     createdAt: '2026-06-17T12:01:33.000Z', createdBy: null,
   }))
   vi.spyOn(driveFileVersionsApi, 'list').mockResolvedValue({
