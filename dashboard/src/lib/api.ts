@@ -27,6 +27,7 @@ import type {
   DriveHostedDocumentImageDto,
   DriveFileContentUpdateResult,
   DriveFileTextUpdateInput,
+  DriveFileVersionContentDto,
   DriveFileVersionListPageDto,
   DriveItemDto,
   DriveItemListInput,
@@ -1506,6 +1507,10 @@ export const driveFileVersionsApi = {
   list: (itemId: string, options: DriveFileVersionListOptions = {}) =>
     request<DriveFileVersionListPageDto>(
       `${driveFileVersionPath(itemId)}${querySuffix(options)}`
+    ),
+  getContent: (itemId: string, versionId: string) =>
+    request<DriveFileVersionContentDto>(
+      `${driveFileVersionPath(itemId, versionId)}/content`
     ),
   restore: (itemId: string, versionId: string) =>
     request<DriveItemDto>(`${driveFileVersionPath(itemId, versionId)}/restore`, {

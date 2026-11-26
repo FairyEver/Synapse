@@ -1051,6 +1051,7 @@ describe("DriveService", () => {
 
     await expect(service.restoreFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
     await expect(service.openFileVersionDownload("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.getFileVersionContent("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
     await expect(service.deleteFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
 
     expect(storage.copyObject).not.toHaveBeenCalled()
@@ -1058,6 +1059,40 @@ describe("DriveService", () => {
     expect(storage.deleteObject).not.toHaveBeenCalled()
     const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: version.id } })
     expect(row.deletePending).toBe(true)
+  })
+
+  it("reads historical text version content for owned text files and rejects binary or oversized versions", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => {
+        const text = "# v1\ninitial"
+        return { stream: Readable.from(text), size: BigInt(Buffer.byteLength(text)), contentType: "text/markdown" }
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "notes.md", mimeType: "text/markdown" })
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+
+    await expect(service.getFileVersionContent("user-1", item.id, version.id)).resolves.toEqual({
+      itemId: item.id,
+      versionId: version.id,
+      versionNumber: 1,
+      size: "11",
+      mimeType: "text/markdown",
+      text: "# v1\ninitial",
+    })
+
+    await prisma.driveFileVersion.update({
+      where: { id: version.id },
+      data: { size: BigInt(1024 * 1024 + 1) },
+    })
+    await expect(service.getFileVersionContent("user-1", item.id, version.id)).rejects.toThrow("历史版本文件超过 1 MB")
+
+    const binary = await createCompletedUpload(service, "user-1", { parentId: null, name: "photo.png", mimeType: "image/png" })
+    const binaryVersion = (await service.listFileVersions("user-1", binary.id, { offset: 0, limit: 20 })).items[0]!
+    await expect(service.getFileVersionContent("user-1", binary.id, binaryVersion.id)).rejects.toThrow("该文件类型暂不支持查看文本变更历史")
   })
 
   it("retries pending historical version deletes", async () => {

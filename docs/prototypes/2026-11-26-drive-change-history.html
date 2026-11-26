@@ -1,0 +1,2270 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Synapse 云盘 · 文档变更历史产品原型</title>
+  <style>
+    /* HeroUI v3 Default Light Theme Tokens (aligned with dashboard/DESIGN.md) */
+    :root {
+      color-scheme: light;
+      --background: oklch(0.9702 0 0);
+      --foreground: oklch(0.2103 0.0059 285.89);
+      --surface: #ffffff;
+      --surface-secondary: oklch(0.9524 0.0013 286.37);
+      --surface-tertiary: oklch(0.9373 0.0013 286.37);
+      --overlay: #ffffff;
+      --backdrop: oklch(0 0 0 / 42%);
+      --muted: oklch(0.5517 0.0138 285.94);
+      --default: oklch(0.94 0.001 286.375);
+      --default-hover: oklch(0.905 0.002 286.375);
+      --accent: oklch(0.6204 0.195 253.83);
+      --accent-hover: oklch(0.56 0.195 253.83);
+      --accent-soft: oklch(0.6204 0.195 253.83 / 11%);
+      --accent-foreground: #ffffff;
+      --success: oklch(0.54 0.165 150.81);
+      --success-bg: oklch(0.955 0.042 150.81);
+      --success-inline: oklch(0.885 0.095 150.81);
+      --success-gutter: oklch(0.925 0.055 150.81);
+      --danger: oklch(0.56 0.21 25.74);
+      --danger-bg: oklch(0.962 0.032 25.74);
+      --danger-inline: oklch(0.89 0.088 25.74);
+      --danger-gutter: oklch(0.935 0.045 25.74);
+      --warning: oklch(0.62 0.155 72.33);
+      --warning-bg: oklch(0.96 0.04 72.33);
+      --border: oklch(0.90 0.004 286.32);
+      --separator: oklch(0.92 0.004 286.32);
+      --radius: 0.5rem;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --radius-xl: 12px;
+      --radius-2xl: 16px;
+      --radius-3xl: 24px;
+      --shadow-surface: 0 1px 2px oklch(0 0 0 / 4%), 0 2px 8px oklch(0 0 0 / 3%);
+      --shadow-overlay: 0 12px 36px oklch(0 0 0 / 14%), 0 2px 8px oklch(0 0 0 / 6%);
+      --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+      --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+      accent-color: var(--accent);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--background);
+      color: var(--foreground);
+      font: 14px/1.5 var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button { cursor: pointer; }
+    h1, h2, h3, h4, p { margin: 0; }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    ::selection {
+      background: oklch(0.6204 0.195 253.83 / 22%);
+      color: var(--foreground);
+    }
+
+    .icon {
+      width: 16px;
+      height: 16px;
+      flex: none;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .icon-sm { width: 14px; height: 14px; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+
+    /* Prototype Stage Switcher (Meta Shell) */
+    .proto-bar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 20px;
+      background: var(--foreground);
+      color: #ffffff;
+      font-size: 13px;
+    }
+    .proto-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      user-select: none;
+    }
+    .proto-badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: oklch(1 0 0 / 14%);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .proto-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+    }
+    .proto-tab {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: var(--radius-lg);
+      background: transparent;
+      color: oklch(1 0 0 / 74%);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .proto-tab:hover {
+      background: oklch(1 0 0 / 10%);
+      color: #ffffff;
+    }
+    .proto-tab[aria-selected="true"] {
+      background: oklch(1 0 0 / 18%);
+      color: #ffffff;
+    }
+    .proto-tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      inset: auto 10px 0;
+      border-block-end: 2px solid #ffffff;
+    }
+
+    /* HeroUI-faithful Controls */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: var(--default);
+      color: var(--foreground);
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      user-select: none;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
+    }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary {
+      background: var(--default);
+      color: var(--foreground);
+    }
+    .btn-secondary:hover:not(:disabled) { background: var(--default-hover); }
+    .btn-outline {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--foreground);
+    }
+    .btn-outline:hover:not(:disabled) { background: var(--surface-secondary); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--foreground);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--default); }
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 999px;
+    }
+    .btn-danger-ghost {
+      background: transparent;
+      color: var(--danger);
+    }
+    .btn-danger-ghost:hover:not(:disabled) { background: var(--danger-bg); }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--default);
+      color: var(--foreground);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .chip-accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .chip-secondary {
+      background: var(--surface-secondary);
+      color: var(--foreground);
+    }
+    .chip-add {
+      background: var(--success-bg);
+      color: var(--success);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .chip-del {
+      background: var(--danger-bg);
+      color: var(--danger);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Segmented Tabs (HeroUI-style pills with border indicator for accessibility) */
+    .segment-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      border-radius: 999px;
+      background: var(--surface-secondary);
+    }
+    .segment-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      user-select: none;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .segment-btn:hover { color: var(--foreground); }
+    .segment-btn[aria-selected="true"],
+    .segment-btn[aria-pressed="true"] {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--foreground);
+      box-shadow: 0 1px 2px oklch(0 0 0 / 6%);
+    }
+
+    .field-input, .field-select {
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      color: var(--foreground);
+      font-size: 13px;
+    }
+    .field-select { padding-right: 26px; }
+    .field-input:focus, .field-select:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    /* ============================================================
+       STAGE 1: HISTORY VERSIONS MODAL (ENTRY POINT)
+       ============================================================ */
+    .stage-modal-wrap {
+      position: relative;
+      min-height: 620px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+      overflow: hidden;
+    }
+    .doc-backdrop-sim {
+      position: absolute;
+      inset: 0;
+      padding: 32px;
+      background: var(--surface);
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .doc-backdrop-inner {
+      max-width: 780px;
+      margin: 0 auto;
+      color: var(--foreground);
+      opacity: 0.48;
+      filter: blur(0.4px);
+    }
+    .doc-backdrop-inner h1 { font-size: 26px; margin-bottom: 12px; }
+    .doc-backdrop-inner h2 { font-size: 18px; margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--separator); }
+    .doc-backdrop-inner p, .doc-backdrop-inner li { font-size: 14px; line-height: 1.75; margin-bottom: 8px; }
+    .doc-backdrop-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--backdrop);
+    }
+
+    .modal-dialog {
+      position: relative;
+      z-index: 2;
+      width: min(100%, 768px);
+      background: var(--overlay);
+      border-radius: var(--radius-3xl);
+      box-shadow: var(--shadow-overlay);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--default);
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+    }
+    .modal-close:hover { background: var(--default-hover); color: var(--foreground); }
+    .modal-header {
+      padding-right: 40px;
+      margin-bottom: 12px;
+    }
+    .modal-heading {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    /* New top bar inside modal body above the table */
+    .modal-table-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .modal-meta {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .callout-ring {
+      position: relative;
+      box-shadow: 0 0 0 3px oklch(0.6204 0.195 253.83 / 24%);
+    }
+
+    /* HeroUI Table (Primary variant, single rounded container) */
+    .heroui-table-root {
+      background: var(--surface-secondary);
+      padding: 0 4px 4px;
+      border-radius: 20px;
+      overflow: clip;
+    }
+    .heroui-table-scroll {
+      overflow-x: auto;
+    }
+    .heroui-table {
+      width: 100%;
+      min-width: 620px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 14px;
+    }
+    .heroui-table thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      position: relative;
+    }
+    .heroui-table thead th:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 50%;
+      width: 1px;
+      height: 14px;
+      transform: translateY(-50%);
+      background: var(--separator);
+    }
+    .heroui-table thead th.right,
+    .heroui-table tbody td.right { text-align: right; }
+    .heroui-table tbody td {
+      background: var(--surface);
+      padding: 12px 16px;
+      border-bottom: 1px solid oklch(0.92 0.004 286.32 / 60%);
+      vertical-align: middle;
+    }
+    .heroui-table tbody tr:last-child td { border-bottom: 0; }
+    .heroui-table tbody tr:first-child td:first-child { border-top-left-radius: 16px; }
+    .heroui-table tbody tr:first-child td:last-child { border-top-right-radius: 16px; }
+    .heroui-table tbody tr:last-child td:first-child { border-bottom-left-radius: 16px; }
+    .heroui-table tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
+    .heroui-table tbody tr:hover td { background: oklch(0.985 0 0); }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    /* ============================================================
+       STAGE 2: DEDICATED CHANGE HISTORY PAGE (GIT-INSPIRED)
+       ============================================================ */
+    .history-page {
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .page-header {
+      position: sticky;
+      top: 46px;
+      z-index: 20;
+      background: var(--surface);
+      border-bottom: 1px solid var(--separator);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .page-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .doc-icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-xl);
+      background: var(--surface-secondary);
+      color: var(--foreground);
+      display: grid;
+      place-items: center;
+      flex: none;
+    }
+    .page-title-stack {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .page-doc-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 420px;
+    }
+    .page-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      background: var(--background);
+      border-bottom: 1px solid var(--separator);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .date-range-inputs {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .filter-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .stat-add { color: var(--success); font-family: var(--font-mono); font-weight: 600; }
+    .stat-del { color: var(--danger); font-family: var(--font-mono); font-weight: 600; }
+
+    /* Workspace: Left Commit Rail + Right Diff Inspector */
+    .workspace {
+      flex: 1;
+      width: min(100%, 1440px);
+      margin: 0 auto;
+      padding: 16px 24px 36px;
+      display: grid;
+      grid-template-columns: 332px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    /* Left Rail */
+    .rail-card {
+      position: sticky;
+      top: 118px;
+      background: var(--surface);
+      border-radius: var(--radius-2xl);
+      box-shadow: var(--shadow-surface);
+      border: 1px solid var(--separator);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 680px;
+    }
+    .rail-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--surface);
+    }
+    .rail-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    .compare-picker {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--separator);
+      background: var(--surface-secondary);
+      display: grid;
+      gap: 8px;
+    }
+    .compare-row {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .compare-picker select { width: 100%; }
+
+    .commit-list {
+      list-style: none;
+      margin: 0;
+      padding: 8px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .commit-item {
+      position: relative;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: var(--radius-xl);
+      background: transparent;
+      padding: 10px 12px 10px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: background 110ms ease, border-color 110ms ease;
+    }
+    .commit-item:hover { background: var(--surface-secondary); }
+    .commit-item[aria-current="true"] {
+      background: var(--accent-soft);
+      border-color: oklch(0.6204 0.195 253.83 / 28%);
+    }
+    .commit-item.in-range {
+      background: oklch(0.6204 0.195 253.83 / 6%);
+    }
+    .commit-item.range-endpoint {
+      background: var(--accent-soft);
+      border-color: oklch(0.6204 0.195 253.83 / 35%);
+    }
+
+    /* Vertical Git graph line & node */
+    .commit-li { position: relative; }
+    .commit-li::before {
+      content: "";
+      position: absolute;
+      left: 14px;
+      top: 0;
+      bottom: 0;
+      width: 1.5px;
+      background: var(--separator);
+      pointer-events: none;
+    }
+    .commit-li:first-child::before { top: 18px; }
+    .commit-li:last-child::before { bottom: calc(100% - 18px); }
+    .commit-dot {
+      position: absolute;
+      left: 10px;
+      top: 15px;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 2px solid var(--muted);
+      z-index: 1;
+      pointer-events: none;
+    }
+    .commit-item[aria-current="true"] .commit-dot,
+    .commit-item.range-endpoint .commit-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+    .commit-item.in-range .commit-dot {
+      border-color: var(--accent);
+    }
+
+    .commit-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .commit-ver-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .commit-ver {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--foreground);
+    }
+    .commit-diffstat {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      flex: none;
+    }
+    .commit-summary {
+      font-size: 13px;
+      color: var(--foreground);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .commit-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    /* Right Diff Inspector */
+    .diff-stage {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .diff-card {
+      background: var(--surface);
+      border-radius: var(--radius-2xl);
+      box-shadow: var(--shadow-surface);
+      border: 1px solid var(--separator);
+      overflow: hidden;
+    }
+    .diff-card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--separator);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .diff-header-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .diff-heading-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .diff-heading {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .diff-submeta {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .diff-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Diff Table */
+    .diff-body {
+      overflow-x: auto;
+      background: var(--surface);
+    }
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.65;
+      table-layout: fixed;
+    }
+    .diff-table td {
+      padding: 0;
+      vertical-align: top;
+    }
+    .diff-ln {
+      width: 46px;
+      padding: 1px 10px 1px 6px !important;
+      text-align: right;
+      color: var(--muted);
+      user-select: none;
+      border-right: 1px solid var(--separator);
+      background: var(--surface);
+      font-size: 11.5px;
+    }
+    .diff-sign {
+      width: 22px;
+      text-align: center;
+      user-select: none;
+      color: var(--muted);
+    }
+    .diff-code {
+      padding: 1px 14px 1px 4px !important;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--foreground);
+    }
+    .diff-row-add td { background: var(--success-bg); }
+    .diff-row-add .diff-ln { background: var(--success-gutter); color: var(--success); }
+    .diff-row-add .diff-sign { color: var(--success); font-weight: 700; }
+
+    .diff-row-del td { background: var(--danger-bg); }
+    .diff-row-del .diff-ln { background: var(--danger-gutter); color: var(--danger); }
+    .diff-row-del .diff-sign { color: var(--danger); font-weight: 700; }
+
+    .diff-row-empty td { background: var(--surface-secondary); }
+
+    .hl-add {
+      background: var(--success-inline);
+      border-radius: 3px;
+      padding: 0 1px;
+    }
+    .hl-del {
+      background: var(--danger-inline);
+      border-radius: 3px;
+      padding: 0 1px;
+      text-decoration: line-through;
+      text-decoration-color: oklch(0.56 0.21 25.74 / 45%);
+    }
+
+    .hunk-row td {
+      background: var(--surface-secondary);
+      border-top: 1px solid var(--separator);
+      border-bottom: 1px solid var(--separator);
+      padding: 5px 12px !important;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .hunk-expand-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 2px 6px;
+      border-radius: var(--radius-md);
+    }
+    .hunk-expand-btn:hover { background: var(--accent-soft); }
+
+    /* Split Diff specific */
+    .diff-table-split .diff-split-divider {
+      border-left: 1px solid var(--border);
+    }
+
+    /* Feed Banner */
+    .feed-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: var(--radius-2xl);
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      flex-wrap: wrap;
+    }
+
+    .empty-state {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ============================================================
+       STAGE 3: PRODUCT SPEC VIEW
+       ============================================================ */
+    .spec-wrap {
+      width: min(100%, 960px);
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .spec-card {
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      border-radius: var(--radius-2xl);
+      padding: 20px 24px;
+      box-shadow: var(--shadow-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .spec-card h2 { font-size: 16px; font-weight: 600; }
+    .spec-card h3 { font-size: 14px; font-weight: 600; margin-top: 4px; }
+    .spec-card p, .spec-card li { font-size: 14px; color: var(--foreground); line-height: 1.65; }
+    .spec-card ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+    .spec-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .spec-tile {
+      padding: 14px 16px;
+      border-radius: var(--radius-xl);
+      background: var(--surface-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .spec-tile strong { font-size: 13.5px; }
+    .spec-tile span { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+    /* Confirm Modal & Toast */
+    .confirm-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: var(--backdrop);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .confirm-dialog {
+      width: min(100%, 420px);
+      background: var(--overlay);
+      border-radius: var(--radius-3xl);
+      box-shadow: var(--shadow-overlay);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .confirm-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 70;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: var(--foreground);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-overlay);
+    }
+
+    @media (max-width: 960px) {
+      .workspace {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px 14px 32px;
+      }
+      .rail-card {
+        position: static;
+        max-height: 320px;
+      }
+      .page-header, .filter-bar { padding: 10px 14px; }
+      .page-doc-name { max-width: 210px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- SVG Icons -->
+  <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-git-compare" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></symbol>
+    <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></symbol>
+  </svg>
+
+  <!-- Prototype Stage Navigation -->
+  <header class="proto-bar">
+    <div class="proto-brand">
+      <span class="proto-badge">交互原型</span>
+      <span>Synapse 云盘 · 文档变更历史</span>
+    </div>
+    <nav class="proto-tabs" role="tablist" aria-label="原型视图切换">
+      <button type="button" class="proto-tab" role="tab" id="tab-modal" aria-selected="true" data-stage="modal">
+        1. 入口：历史版本弹窗
+      </button>
+      <button type="button" class="proto-tab" role="tab" id="tab-page" aria-selected="false" data-stage="page">
+        2. 独立页：变更历史
+      </button>
+      <button type="button" class="proto-tab" role="tab" id="tab-spec" aria-selected="false" data-stage="spec">
+        3. 产品设计说明
+      </button>
+    </nav>
+  </header>
+
+  <!-- =========================================================
+       STAGE 1: HISTORY VERSIONS MODAL WITH "变更历史" ENTRY
+       ========================================================= -->
+  <section id="stage-modal" role="tabpanel" aria-labelledby="tab-modal">
+    <div class="stage-modal-wrap">
+      <div class="doc-backdrop-sim" aria-hidden="true">
+        <div class="doc-backdrop-inner">
+          <h1>Q4 云盘版本与协同架构评审</h1>
+          <p>本文档沉淀云盘 Markdown 文档的历史版本保存、协同检查点与变更回溯方案，作为服务端与网页端联合交付基线。</p>
+          <h2>1. 版本留存策略</h2>
+          <ul>
+            <li>上传覆盖、在线编辑、协同检查点与历史恢复均生成不可变版本记录。</li>
+            <li>所有历史版本长期保存，仅由文档所有者显式删除时释放存储与配额。</li>
+          </ul>
+          <h2>2. 变更历史回溯</h2>
+          <p>支持查看单次改动、任意起止版本对比及指定时间段内的累计变更，并保持与当前文档正文一致的权限边界。</p>
+        </div>
+      </div>
+      <div class="doc-backdrop-scrim" aria-hidden="true"></div>
+
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="versions-modal-title">
+        <button type="button" class="modal-close" aria-label="关闭" id="modal-close-hint">
+          <svg class="icon"><use href="#i-x" /></svg>
+        </button>
+        <div class="modal-header">
+          <h2 class="modal-heading" id="versions-modal-title">历史版本</h2>
+        </div>
+
+        <!-- NEW: Top Action Row Above Table -->
+        <div class="modal-table-topbar">
+          <span class="modal-meta tabular" id="modal-version-count">共 7 个版本</span>
+          <button type="button" class="btn btn-secondary btn-sm callout-ring" id="open-change-history-btn">
+            <svg class="icon icon-sm"><use href="#i-git-compare" /></svg>
+            变更历史
+            <svg class="icon icon-sm muted"><use href="#i-arrow-up-right" /></svg>
+          </button>
+        </div>
+
+        <!-- HeroUI Primary Table (single outer surface, no pin icon) -->
+        <div class="heroui-table-root">
+          <div class="heroui-table-scroll">
+            <table class="heroui-table" aria-label="历史版本列表">
+              <thead>
+                <tr>
+                  <th style="width:156px">版本</th>
+                  <th style="width:104px">来源</th>
+                  <th class="right" style="width:92px">大小</th>
+                  <th style="width:150px">创建时间</th>
+                  <th class="right" style="width:130px" aria-label="操作"></th>
+                </tr>
+              </thead>
+              <tbody id="modal-versions-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       STAGE 2: DEDICATED DOCUMENT CHANGE HISTORY PAGE
+       ========================================================= -->
+  <section id="stage-page" role="tabpanel" aria-labelledby="tab-page" hidden>
+    <div class="history-page">
+      <!-- Clean Top Bar -->
+      <div class="page-header">
+        <div class="page-title-group">
+          <div class="doc-icon-box" aria-hidden="true">
+            <svg class="icon"><use href="#i-file-text" /></svg>
+          </div>
+          <div class="page-title-stack">
+            <h1 class="page-doc-name">Q4-云盘版本与协同架构评审.md</h1>
+            <span class="chip chip-secondary">变更历史</span>
+          </div>
+        </div>
+
+        <div class="page-header-right">
+          <div class="segment-group" role="tablist" aria-label="查看模式">
+            <button type="button" class="segment-btn" role="tab" data-mode="single" aria-selected="true">单次修改</button>
+            <button type="button" class="segment-btn" role="tab" data-mode="range" aria-selected="false">范围对比</button>
+            <button type="button" class="segment-btn" role="tab" data-mode="feed" aria-selected="false">按次总览</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Time Range & Source Filter Bar -->
+      <div class="filter-bar">
+        <div class="filter-controls">
+          <div class="segment-group" role="group" aria-label="时间段筛选">
+            <button type="button" class="segment-btn" data-preset="all" aria-pressed="true">创建至今</button>
+            <button type="button" class="segment-btn" data-preset="7d" aria-pressed="false">近 7 天</button>
+            <button type="button" class="segment-btn" data-preset="14d" aria-pressed="false">近 14 天</button>
+            <button type="button" class="segment-btn" data-preset="custom" aria-pressed="false">自定义时间段</button>
+          </div>
+
+          <div class="date-range-inputs" id="custom-date-box" hidden>
+            <input type="date" class="field-input tabular" id="date-from" aria-label="开始日期" />
+            <span>至</span>
+            <input type="date" class="field-input tabular" id="date-to" aria-label="结束日期" />
+          </div>
+
+          <select class="field-select" id="source-filter" aria-label="变更来源筛选">
+            <option value="all">全部来源</option>
+            <option value="online_edit">编辑</option>
+            <option value="collaboration">协同编辑</option>
+            <option value="upload">上传</option>
+            <option value="restore">恢复</option>
+          </select>
+        </div>
+
+        <div class="filter-summary">
+          <span class="tabular" id="filter-summary-text"></span>
+          <button type="button" class="btn btn-secondary btn-sm" id="view-range-cumulative-btn" title="合并查看当前时间段内的净变化">
+            查看该时段累计变更
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Split Workspace -->
+      <main class="workspace">
+        <!-- Left Commit Timeline Rail -->
+        <aside class="rail-card" aria-label="版本时间线">
+          <div class="rail-header">
+            <span class="rail-title tabular" id="rail-title">变更记录</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="feed-order-btn" hidden>最新在前</button>
+          </div>
+
+          <!-- Range Selector (shown in range mode) -->
+          <div class="compare-picker" id="compare-picker" hidden>
+            <label class="compare-row">
+              <span>基准</span>
+              <select class="field-select tabular" id="base-select" aria-label="选择基准版本"></select>
+            </label>
+            <label class="compare-row">
+              <span>目标</span>
+              <select class="field-select tabular" id="target-select" aria-label="选择目标版本"></select>
+            </label>
+          </div>
+
+          <ul class="commit-list" id="commit-list"></ul>
+        </aside>
+
+        <!-- Right Diff Inspector -->
+        <section class="diff-stage" id="diff-stage" aria-live="polite"></section>
+      </main>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       STAGE 3: PRODUCT DESIGN SPECIFICATION
+       ========================================================= -->
+  <section id="stage-spec" role="tabpanel" aria-labelledby="tab-spec" hidden>
+    <div class="spec-wrap">
+      <div class="spec-card">
+        <h2>产品定位与核心目标</h2>
+        <p>
+          把「版本管理」与「变更回溯」职责拆清：<strong>历史版本弹窗</strong>继续承担轻量级的版本清单与下载/恢复/删除操作；新增的<strong>变更历史独立页</strong>提供接近 Git 的干净阅读环境，专门回答「这篇文档从创建至今改了什么」「某段时间里累计改了什么」「某两次版本之间有什么差异」。
+        </p>
+        <div class="spec-grid">
+          <div class="spec-tile">
+            <strong>入口轻量不侵入</strong>
+            <span>在历史版本弹窗顶部（表格上方右侧）新增「变更历史」按钮，点击新开独立页面 <code>/drive/items/:itemId/changes</code>，不改变原弹窗尺寸与表格操作。</span>
+          </div>
+          <div class="spec-tile">
+            <strong>三种回溯视角</strong>
+            <span><strong>单次修改</strong>（vN-1 → vN）、<strong>范围对比</strong>（任选基准/目标版本或时间段累计净变更）、<strong>按次总览</strong>（类似 <code>git log -p</code> 串联展开每次改动）。</span>
+          </div>
+          <div class="spec-tile">
+            <strong>时间段与来源筛选</strong>
+            <span>支持「创建至今 / 近 7 天 / 近 14 天 / 自定义时间段」与来源（编辑 / 协同编辑 / 上传 / 恢复）筛选，可一键把当前时间段切换为累计 Diff。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="spec-card">
+        <h2>页面信息架构与交互规范</h2>
+        <ul>
+          <li><strong>顶栏</strong>：因在新标签页打开，不放多余的返回按钮；仅保留文档名 +「变更历史」标签与右侧三种查看模式切换，保持页面干净克制。</li>
+          <li><strong>筛选栏</strong>：时间段胶囊 + 自定义起止日期 + 来源筛选；右侧显示命中变更次数与累计 <code>+新增 / -删除</code> 行数，并提供「查看该时段累计变更」快捷按钮。</li>
+          <li><strong>左侧时间线（Commit Rail）</strong>：竖向连接轨串联每个版本节点，展示版本号、<code>当前</code> 徽标、来源、<code>+X / -Y</code>、时间与自动提取的一句话改动摘要（无需人工写 commit message）。点击节点在右侧展示差异；范围模式下高亮基准到目标的区间。</li>
+          <li><strong>右侧 Diff 检视器</strong>：支持<strong>统一视图（Unified）</strong>与<strong>分栏对比（Split）</strong>切换、<strong>仅看改动（自动折叠未改行并支持点击展开）</strong>与<strong>完整文档</strong>切换，并在修改行内提供字词级高亮（inline word diff）。</li>
+          <li><strong>安全衔接现有操作</strong>：在 Diff 顶栏保留「下载此版本」与「恢复到此版本」（沿用既有二次确认弹窗，恢复后生成新版本，不覆盖历史）。</li>
+        </ul>
+      </div>
+
+      <div class="spec-card">
+        <h2>边界条件与数据契约建议</h2>
+        <ul>
+          <li><strong>文件类型边界</strong>：仅文本类文件（Markdown、TXT、HTML 源码、代码/JSON/YAML）显示「变更历史」入口；图片、PDF、压缩包等二进制文件保持仅在弹窗内下载/恢复，不进入文本 Diff 页。</li>
+          <li><strong>权限边界</strong>：与现有历史版本一致，仅文件所有者登录态可访问；公开分享链接不暴露历史版本或变更历史。</li>
+          <li><strong>单版本与初始创建</strong>：文档只有 v1（或在时间线选中 v1）时，右侧以全量新增形式展示初始创建内容；选中某个通过「恢复」生成的版本时，副标题明确标注 <code>恢复自 vX</code>（复用 <code>restoredFromVersionId</code>）。</li>
+          <li><strong>大文档与性能</strong>：建议服务端新增按需 Diff / 版本内容读取接口（仅拉取当前对比涉及的 2 个版本，限制单文件最大文本 Diff 体积，例如 1 MiB；「按次总览」按页懒加载，默认展开最近 5~10 次，避免一次性拉取上百个完整快照）。</li>
+          <li><strong>待清理版本</strong>：<code>deletePending: true</code> 的历史版本在时间线中置灰标为「待清理」，不可选作 Diff 对比目标。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Confirm Restore Dialog -->
+  <div class="confirm-backdrop" id="confirm-backdrop" hidden>
+    <div class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+      <h3 id="confirm-title" style="font-size:16px;font-weight:600">恢复版本</h3>
+      <p id="confirm-desc" class="muted" style="font-size:14px"></p>
+      <div class="confirm-footer">
+        <button type="button" class="btn btn-outline btn-sm" id="confirm-cancel">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="confirm-ok">确认恢复</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script>
+    /* =====================================================================
+       SAMPLE DATA: 7 Realistic Revisions of a Markdown Document (28 days -> now)
+       ===================================================================== */
+    const SOURCE_LABEL = {
+      upload: '上传',
+      online_edit: '编辑',
+      collaboration: '协同编辑',
+      restore: '恢复',
+    };
+
+    const TODAY = '2026-11-26';
+
+    const VERSIONS = [
+      {
+        id: 'ver-1',
+        versionNumber: 1,
+        source: 'upload',
+        size: '1.2 KB',
+        createdAt: '2026-10-29T09:15:00+08:00',
+        date: '2026-10-29',
+        relativeTime: '28 天前',
+        author: '李阳',
+        isCurrent: false,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档记录云盘 Markdown 文档的历史版本与协同编辑方案。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖与在线编辑均生成新的历史版本。',
+          '- 默认仅保留最近 100 个版本，超过 180 天的未保留版本将被自动清理。',
+          '- 用户可以手动点击「保留」防止重要版本被清理。',
+          '',
+          '## 2. 历史版本入口',
+          '',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+          '- 弹窗列表支持下载、恢复、保留与删除操作。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-2',
+        versionNumber: 2,
+        source: 'online_edit',
+        size: '1.5 KB',
+        createdAt: '2026-11-05T15:40:00+08:00',
+        date: '2026-11-05',
+        relativeTime: '21 天前',
+        author: '李阳',
+        isCurrent: false,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档记录云盘 Markdown 文档的历史版本、协同检查点与回溯方案。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑与协同检查点均生成不可变的历史版本。',
+          '- 默认仅保留最近 100 个版本，超过 180 天的未保留版本将被自动清理。',
+          '- 用户可以手动点击「保留」防止重要版本被清理。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '',
+          '## 3. 历史版本入口',
+          '',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+          '- 弹窗列表支持下载、恢复、保留与删除操作。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-3',
+        versionNumber: 3,
+        source: 'collaboration',
+        size: '1.7 KB',
+        createdAt: '2026-11-12T11:20:00+08:00',
+        date: '2026-11-12',
+        relativeTime: '14 天前',
+        author: '李阳 · 林岚',
+        isCurrent: false,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档沉淀云盘 Markdown 文档的历史版本、协同检查点与回溯方案，作为联合交付基线。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑与协同检查点均生成不可变的历史版本。',
+          '- 默认仅保留最近 100 个版本，超过 180 天的未保留版本将被自动清理。',
+          '- 用户可以手动点击「保留」防止重要版本被清理。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '- 历史恢复与整文覆盖必须切换协同代际，避免旧客户端状态回写。',
+          '',
+          '## 3. 历史版本入口',
+          '',
+          '- 仅文档所有者可见「历史版本」，公开分享链接不暴露版本记录。',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+          '- 弹窗列表支持下载、恢复、保留与删除操作。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-4',
+        versionNumber: 4,
+        source: 'upload',
+        size: '1.6 KB',
+        createdAt: '2026-11-18T18:05:00+08:00',
+        date: '2026-11-18',
+        relativeTime: '8 天前',
+        author: '李阳',
+        isCurrent: false,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审（草稿）',
+          '',
+          '本文档沉淀云盘 Markdown 文档的历史版本与协同方案。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑与协同检查点均生成不可变的历史版本。',
+          '- 临时调整：仅保留最近 30 天历史版本以节省对象存储成本。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '- 历史恢复与整文覆盖必须切换协同代际，避免旧客户端状态回写。',
+          '',
+          '## 3. 历史版本入口',
+          '',
+          '- 仅文档所有者可见「历史版本」，公开分享链接不暴露版本记录。',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-5',
+        versionNumber: 5,
+        source: 'restore',
+        size: '1.7 KB',
+        createdAt: '2026-11-20T10:12:00+08:00',
+        date: '2026-11-20',
+        relativeTime: '6 天前',
+        author: '李阳',
+        isCurrent: false,
+        restoredFromVersionNumber: 3,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档沉淀云盘 Markdown 文档的历史版本、协同检查点与回溯方案，作为联合交付基线。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑与协同检查点均生成不可变的历史版本。',
+          '- 默认仅保留最近 100 个版本，超过 180 天的未保留版本将被自动清理。',
+          '- 用户可以手动点击「保留」防止重要版本被清理。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '- 历史恢复与整文覆盖必须切换协同代际，避免旧客户端状态回写。',
+          '',
+          '## 3. 历史版本入口',
+          '',
+          '- 仅文档所有者可见「历史版本」，公开分享链接不暴露版本记录。',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+          '- 弹窗列表支持下载、恢复、保留与删除操作。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-6',
+        versionNumber: 6,
+        source: 'online_edit',
+        size: '1.9 KB',
+        createdAt: '2026-11-25T14:32:00+08:00',
+        date: '2026-11-25',
+        relativeTime: '昨天 14:32',
+        author: '李阳',
+        isCurrent: false,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档沉淀云盘 Markdown 文档的历史版本、协同检查点与变更回溯方案，作为服务端与网页端联合交付基线。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑、协同检查点与历史恢复均生成不可变的历史版本。',
+          '- 取消自动清理：所有历史版本长期保留，仅在用户显式删除时释放对象与配额。',
+          '- 移除冗余的「保留 / 取消保留」图钉标记，所有非当前版本均可直接删除。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '- 历史恢复与整文覆盖必须切换协同代际，避免旧客户端状态回写。',
+          '',
+          '## 3. 历史版本入口',
+          '',
+          '- 仅文档所有者可见「历史版本」，公开分享链接不暴露版本记录。',
+          '- 在文档右上角「更多」菜单中打开历史版本弹窗。',
+          '- 弹窗列表保留下载、恢复与删除三项操作。',
+        ].join('\n'),
+      },
+      {
+        id: 'ver-7',
+        versionNumber: 7,
+        source: 'online_edit',
+        size: '2.3 KB',
+        createdAt: '2026-11-26T14:15:00+08:00',
+        date: '2026-11-26',
+        relativeTime: '10 分钟前',
+        author: '李阳',
+        isCurrent: true,
+        restoredFromVersionNumber: null,
+        content: [
+          '# Q4 云盘版本与协同架构评审',
+          '',
+          '本文档沉淀云盘 Markdown 文档的历史版本、协同检查点与变更回溯方案，作为服务端与网页端联合交付基线。',
+          '',
+          '## 1. 版本留存策略',
+          '',
+          '- 上传覆盖、在线编辑、协同检查点与历史恢复均生成不可变的历史版本。',
+          '- 取消自动清理：所有历史版本长期保留，仅在用户显式删除时释放对象与配额。',
+          '- 移除冗余的「保留 / 取消保留」图钉标记，所有非当前版本均可直接删除。',
+          '',
+          '## 2. 协同检查点',
+          '',
+          '- 实时编辑期间 Yjs 更新写入协同日志，停止输入或关闭房间时落盘检查点。',
+          '- 检查点作为 `collaboration` 来源进入历史版本并计入云盘配额。',
+          '- 历史恢复与整文覆盖必须切换协同代际，避免旧客户端状态回写。',
+          '',
+          '## 3. 历史版本与变更历史',
+          '',
+          '- 仅文档所有者可见「历史版本」，公开分享链接不暴露版本记录。',
+          '- 在历史版本弹窗表格上方新增「变更历史」按钮，点击打开独立的变更历史页面。',
+          '- 支持单次修改、任意版本范围对比、时间段累计变更与按次总览，提供统一 / 分栏两种 Diff 视图。',
+          '- 弹窗列表保留下载、恢复与删除三项操作，并与独立页共享恢复确认流程。',
+        ].join('\n'),
+      },
+    ];
+
+    /* =====================================================================
+       DIFF ENGINE: LCS Line Diff + Inline Character/Word Highlight
+       ===================================================================== */
+    function computeLineDiff(oldText, newText) {
+      const a = oldText ? oldText.split('\n') : [];
+      const b = newText ? newText.split('\n') : [];
+      const m = a.length;
+      const n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+
+      for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+          if (a[i] === b[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
+          else dp[i][j] = dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1];
+        }
+      }
+
+      const ops = [];
+      let i = 0, j = 0, oldLn = 1, newLn = 1;
+      while (i < m && j < n) {
+        if (a[i] === b[j]) {
+          ops.push({ type: 'eq', oldLn: oldLn++, newLn: newLn++, text: a[i] });
+          i++; j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+          ops.push({ type: 'del', oldLn: oldLn++, newLn: null, text: a[i] });
+          i++;
+        } else {
+          ops.push({ type: 'add', oldLn: null, newLn: newLn++, text: b[j] });
+          j++;
+        }
+      }
+      while (i < m) ops.push({ type: 'del', oldLn: oldLn++, newLn: null, text: a[i++] });
+      while (j < n) ops.push({ type: 'add', oldLn: null, newLn: newLn++, text: b[j++] });
+      return ops;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function tokenizeInline(str) {
+      return str.match(/[A-Za-z0-9_`./:-]+|\s+|./gu) || [];
+    }
+
+    function inlineHighlightPair(oldLine, newLine) {
+      const a = tokenizeInline(oldLine);
+      const b = tokenizeInline(newLine);
+      if (a.length * b.length > 40000) {
+        return { oldHtml: escapeHtml(oldLine), newHtml: escapeHtml(newLine) };
+      }
+      const m = a.length, n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+      for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+          dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+      const oldParts = [];
+      const newParts = [];
+      let i = 0, j = 0;
+      while (i < m && j < n) {
+        if (a[i] === b[j]) {
+          oldParts.push({ ch: false, t: a[i] });
+          newParts.push({ ch: false, t: b[j] });
+          i++; j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+          oldParts.push({ ch: true, t: a[i++] });
+        } else {
+          newParts.push({ ch: true, t: b[j++] });
+        }
+      }
+      while (i < m) oldParts.push({ ch: true, t: a[i++] });
+      while (j < n) newParts.push({ ch: true, t: b[j++] });
+
+      const render = (parts, cls) => {
+        let html = '';
+        let open = false;
+        for (const p of parts) {
+          if (p.ch && !open) { html += `<span class="${cls}">`; open = true; }
+          if (!p.ch && open) { html += '</span>'; open = false; }
+          html += escapeHtml(p.t);
+        }
+        if (open) html += '</span>';
+        return html;
+      };
+      return {
+        oldHtml: render(oldParts, 'hl-del'),
+        newHtml: render(newParts, 'hl-add'),
+      };
+    }
+
+    function decorateOpsWithInline(ops) {
+      const out = ops.map((op) => ({ ...op, html: escapeHtml(op.text) }));
+      let i = 0;
+      while (i < out.length) {
+        if (out[i].type === 'del') {
+          let delStart = i;
+          while (i < out.length && out[i].type === 'del') i++;
+          let addStart = i;
+          while (i < out.length && out[i].type === 'add') i++;
+          const pairCount = Math.min(addStart - delStart, i - addStart);
+          for (let k = 0; k < pairCount; k++) {
+            const { oldHtml, newHtml } = inlineHighlightPair(out[delStart + k].text, out[addStart + k].text);
+            out[delStart + k].html = oldHtml;
+            out[addStart + k].html = newHtml;
+          }
+        } else {
+          i++;
+        }
+      }
+      return out;
+    }
+
+    function diffStats(ops) {
+      let adds = 0, dels = 0;
+      for (const op of ops) {
+        if (op.type === 'add') adds++;
+        else if (op.type === 'del') dels++;
+      }
+      return { adds, dels };
+    }
+
+    function autoSummary(version, prevVersion) {
+      if (!prevVersion) return '初始上传文档（创建 v1）';
+      if (version.restoredFromVersionNumber) {
+        return `恢复自 v${version.restoredFromVersionNumber}`;
+      }
+      const ops = computeLineDiff(prevVersion.content, version.content);
+      const firstAdd = ops.find((o) => o.type === 'add' && o.text.trim().length > 0);
+      if (firstAdd) {
+        return firstAdd.text.replace(/^#+\s*|-\s*/u, '').trim();
+      }
+      const firstDel = ops.find((o) => o.type === 'del' && o.text.trim().length > 0);
+      if (firstDel) {
+        return '删除：' + firstDel.text.replace(/^#+\s*|-\s*/u, '').trim();
+      }
+      return '内容无文本差异';
+    }
+
+    // Precompute per-version diff stats & auto summary
+    const ENRICHED = VERSIONS.map((v, idx) => {
+      const prev = idx > 0 ? VERSIONS[idx - 1] : null;
+      const ops = computeLineDiff(prev ? prev.content : '', v.content);
+      return {
+        ...v,
+        prevId: prev ? prev.id : null,
+        stats: diffStats(ops),
+        summary: autoSummary(v, prev),
+      };
+    });
+
+    const VERSION_BY_ID = new Map(ENRICHED.map((v) => [v.id, v]));
+
+    /* =====================================================================
+       STATE
+       ===================================================================== */
+    const state = {
+      stage: 'modal',          // 'modal' | 'page' | 'spec'
+      mode: 'single',          // 'single' | 'range' | 'feed'
+      preset: 'all',           // 'all' | '7d' | '14d' | 'custom'
+      dateFrom: '2026-10-29',
+      dateTo: TODAY,
+      source: 'all',
+      selectedId: 'ver-7',
+      baseId: 'ver-3',
+      targetId: 'ver-7',
+      diffStyle: 'unified',    // 'unified' | 'split'
+      showFull: false,
+      feedOrder: 'desc',       // 'desc' | 'asc'
+      expandedGaps: new Set(),
+      pendingRestoreVersion: null,
+    };
+
+    function shiftDays(dateStr, days) {
+      const d = new Date(`${dateStr}T00:00:00+08:00`);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function getFilteredVersions() {
+      let minDate = null;
+      let maxDate = null;
+      if (state.preset === '7d') { minDate = shiftDays(TODAY, -7); maxDate = TODAY; }
+      else if (state.preset === '14d') { minDate = shiftDays(TODAY, -14); maxDate = TODAY; }
+      else if (state.preset === 'custom') { minDate = state.dateFrom || null; maxDate = state.dateTo || null; }
+
+      return ENRICHED.filter((v) => {
+        if (minDate && v.date < minDate) return false;
+        if (maxDate && v.date > maxDate) return false;
+        if (state.source !== 'all' && v.source !== state.source) return false;
+        return true;
+      });
+    }
+
+    /* =====================================================================
+       RENDER: STAGE 1 MODAL TABLE
+       ===================================================================== */
+    function renderModalTable() {
+      const tbody = document.getElementById('modal-versions-tbody');
+      const reversed = [...ENRICHED].reverse();
+      document.getElementById('modal-version-count').textContent = `共 ${ENRICHED.length} 个版本`;
+
+      tbody.innerHTML = reversed.map((v) => `
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <strong class="tabular">v${v.versionNumber}</strong>
+              ${v.isCurrent ? '<span class="chip">当前</span>' : ''}
+            </div>
+          </td>
+          <td><span class="chip chip-secondary">${SOURCE_LABEL[v.source]}</span></td>
+          <td class="right tabular muted">${v.size}</td>
+          <td class="tabular muted">${v.relativeTime}</td>
+          <td class="right">
+            <div class="row-actions">
+              <button type="button" class="btn btn-ghost btn-icon" title="下载 v${v.versionNumber}" aria-label="下载 v${v.versionNumber}" data-action="download" data-ver="${v.versionNumber}">
+                <svg class="icon"><use href="#i-download" /></svg>
+              </button>
+              ${!v.isCurrent ? `
+                <button type="button" class="btn btn-ghost btn-icon" title="恢复 v${v.versionNumber}" aria-label="恢复 v${v.versionNumber}" data-action="restore" data-ver="${v.versionNumber}">
+                  <svg class="icon"><use href="#i-restore" /></svg>
+                </button>
+                <button type="button" class="btn btn-danger-ghost btn-icon" title="删除 v${v.versionNumber}" aria-label="删除 v${v.versionNumber}" data-action="delete" data-ver="${v.versionNumber}">
+                  <svg class="icon"><use href="#i-trash" /></svg>
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    /* =====================================================================
+       RENDER: DIFF TABLES (UNIFIED & SPLIT WITH HUNK FOLDING)
+       ===================================================================== */
+    function buildCollapsedBlocks(ops, contextLines, keyPrefix) {
+      if (state.showFull) return [{ kind: 'ops', ops }];
+
+      const keep = new Array(ops.length).fill(false);
+      for (let i = 0; i < ops.length; i++) {
+        if (ops[i].type !== 'eq') {
+          for (let k = Math.max(0, i - contextLines); k <= Math.min(ops.length - 1, i + contextLines); k++) {
+            keep[k] = true;
+          }
+        }
+      }
+
+      const blocks = [];
+      let i = 0;
+      let gapIndex = 0;
+      while (i < ops.length) {
+        if (keep[i]) {
+          const chunk = [];
+          while (i < ops.length && keep[i]) chunk.push(ops[i++]);
+          blocks.push({ kind: 'ops', ops: chunk });
+        } else {
+          const start = i;
+          while (i < ops.length && !keep[i]) i++;
+          const hiddenOps = ops.slice(start, i);
+          const gapKey = `${keyPrefix}:gap:${gapIndex++}`;
+          if (hiddenOps.length <= 2 || state.expandedGaps.has(gapKey)) {
+            blocks.push({ kind: 'ops', ops: hiddenOps });
+          } else {
+            blocks.push({ kind: 'gap', key: gapKey, count: hiddenOps.length });
+          }
+        }
+      }
+      return blocks;
+    }
+
+    function renderUnifiedTable(ops, keyPrefix) {
+      const blocks = buildCollapsedBlocks(ops, 2, keyPrefix);
+      let rows = '';
+      for (const block of blocks) {
+        if (block.kind === 'gap') {
+          rows += `
+            <tr class="hunk-row">
+              <td colspan="4">
+                <button type="button" class="hunk-expand-btn" data-expand-gap="${block.key}">
+                  <svg class="icon icon-sm"><use href="#i-unfold" /></svg>
+                  展开 ${block.count} 行未改动内容
+                </button>
+              </td>
+            </tr>`;
+        } else {
+          for (const op of block.ops) {
+            const cls = op.type === 'add' ? 'diff-row-add' : op.type === 'del' ? 'diff-row-del' : '';
+            const sign = op.type === 'add' ? '+' : op.type === 'del' ? '−' : ' ';
+            rows += `
+              <tr class="${cls}">
+                <td class="diff-ln tabular">${op.oldLn ?? ''}</td>
+                <td class="diff-ln tabular">${op.newLn ?? ''}</td>
+                <td class="diff-sign">${sign}</td>
+                <td class="diff-code">${op.html || '&nbsp;'}</td>
+              </tr>`;
+          }
+        }
+      }
+      return `
+        <table class="diff-table">
+          <colgroup>
+            <col style="width:46px" /><col style="width:46px" /><col style="width:22px" /><col />
+          </colgroup>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    function renderSplitTable(ops, keyPrefix) {
+      const blocks = buildCollapsedBlocks(ops, 2, keyPrefix);
+      let rows = '';
+      for (const block of blocks) {
+        if (block.kind === 'gap') {
+          rows += `
+            <tr class="hunk-row">
+              <td colspan="6">
+                <button type="button" class="hunk-expand-btn" data-expand-gap="${block.key}">
+                  <svg class="icon icon-sm"><use href="#i-unfold" /></svg>
+                  展开 ${block.count} 行未改动内容
+                </button>
+              </td>
+            </tr>`;
+        } else {
+          const list = block.ops;
+          let i = 0;
+          while (i < list.length) {
+            if (list[i].type === 'eq') {
+              const op = list[i++];
+              rows += `
+                <tr>
+                  <td class="diff-ln tabular">${op.oldLn}</td>
+                  <td class="diff-sign"> </td>
+                  <td class="diff-code">${op.html || '&nbsp;'}</td>
+                  <td class="diff-ln diff-split-divider tabular">${op.newLn}</td>
+                  <td class="diff-sign"> </td>
+                  <td class="diff-code">${op.html || '&nbsp;'}</td>
+                </tr>`;
+            } else {
+              const dels = [], adds = [];
+              while (i < list.length && list[i].type === 'del') dels.push(list[i++]);
+              while (i < list.length && list[i].type === 'add') adds.push(list[i++]);
+              const max = Math.max(dels.length, adds.length);
+              for (let k = 0; k < max; k++) {
+                const l = dels[k];
+                const r = adds[k];
+                rows += `<tr>`;
+                if (l) {
+                  rows += `
+                    <td class="diff-ln tabular" style="background:var(--danger-gutter);color:var(--danger)">${l.oldLn}</td>
+                    <td class="diff-sign" style="background:var(--danger-bg);color:var(--danger);font-weight:700">−</td>
+                    <td class="diff-code" style="background:var(--danger-bg)">${l.html || '&nbsp;'}</td>`;
+                } else {
+                  rows += `<td class="diff-ln" style="background:var(--surface-secondary)"></td><td class="diff-sign" style="background:var(--surface-secondary)"></td><td class="diff-code" style="background:var(--surface-secondary)"></td>`;
+                }
+                if (r) {
+                  rows += `
+                    <td class="diff-ln diff-split-divider tabular" style="background:var(--success-gutter);color:var(--success)">${r.newLn}</td>
+                    <td class="diff-sign" style="background:var(--success-bg);color:var(--success);font-weight:700">+</td>
+                    <td class="diff-code" style="background:var(--success-bg)">${r.html || '&nbsp;'}</td>`;
+                } else {
+                  rows += `<td class="diff-ln diff-split-divider" style="background:var(--surface-secondary)"></td><td class="diff-sign" style="background:var(--surface-secondary)"></td><td class="diff-code" style="background:var(--surface-secondary)"></td>`;
+                }
+                rows += `</tr>`;
+              }
+            }
+          }
+        }
+      }
+      return `
+        <table class="diff-table diff-table-split">
+          <colgroup>
+            <col style="width:42px" /><col style="width:20px" /><col style="width:calc(50% - 62px)" />
+            <col style="width:42px" /><col style="width:20px" /><col style="width:calc(50% - 62px)" />
+          </colgroup>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    function renderDiffToolbar(targetVersion, includeControls = true) {
+      const styleToggle = includeControls ? `
+        <div class="segment-group" role="group" aria-label="对比视图">
+          <button type="button" class="segment-btn" data-diff-style="unified" aria-pressed="${state.diffStyle === 'unified'}">统一</button>
+          <button type="button" class="segment-btn" data-diff-style="split" aria-pressed="${state.diffStyle === 'split'}">分栏</button>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" data-toggle-full="1">
+          ${state.showFull ? '仅看改动' : '完整文档'}
+        </button>` : '';
+      const actions = targetVersion ? `
+        <button type="button" class="btn btn-ghost btn-sm" data-action="download" data-ver="${targetVersion.versionNumber}">
+          <svg class="icon icon-sm"><use href="#i-download" /></svg>
+          下载 v${targetVersion.versionNumber}
+        </button>
+        ${!targetVersion.isCurrent ? `
+          <button type="button" class="btn btn-outline btn-sm" data-action="restore" data-ver="${targetVersion.versionNumber}">
+            <svg class="icon icon-sm"><use href="#i-restore" /></svg>
+            恢复到此版本
+          </button>` : ''}` : '';
+      return `<div class="diff-toolbar">${styleToggle}${actions}</div>`;
+    }
+
+    /* =====================================================================
+       RENDER: STAGE 2 HISTORY PAGE
+       ===================================================================== */
+    function renderHistoryPage() {
+      const filtered = getFilteredVersions();
+      const filteredDesc = [...filtered].reverse();
+
+      // Ensure selectedId is valid inside filtered list
+      if (filtered.length > 0 && !filtered.some((v) => v.id === state.selectedId)) {
+        state.selectedId = filteredDesc[0].id;
+      }
+
+      // Summary bar
+      const totalAdds = filtered.reduce((acc, v) => acc + v.stats.adds, 0);
+      const totalDels = filtered.reduce((acc, v) => acc + v.stats.dels, 0);
+      document.getElementById('filter-summary-text').innerHTML =
+        `共 <strong>${filtered.length}</strong> 次变更 · <span class="stat-add">+${totalAdds}</span> <span class="stat-del">−${totalDels}</span>`;
+
+      const cumBtn = document.getElementById('view-range-cumulative-btn');
+      cumBtn.disabled = filtered.length === 0;
+
+      // Mode tab sync
+      document.querySelectorAll('[data-mode]').forEach((btn) => {
+        btn.setAttribute('aria-selected', String(btn.dataset.mode === state.mode));
+      });
+      document.querySelectorAll('[data-preset]').forEach((btn) => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.preset === state.preset));
+      });
+      document.getElementById('custom-date-box').hidden = state.preset !== 'custom';
+      document.getElementById('date-from').value = state.dateFrom;
+      document.getElementById('date-to').value = state.dateTo;
+
+      // Compare picker & feed order button
+      const comparePicker = document.getElementById('compare-picker');
+      const feedOrderBtn = document.getElementById('feed-order-btn');
+      comparePicker.hidden = state.mode !== 'range';
+      feedOrderBtn.hidden = state.mode !== 'feed';
+      feedOrderBtn.textContent = state.feedOrder === 'desc' ? '最新在前' : '从创建开始';
+
+      // Populate base / target selects
+      if (state.mode === 'range') {
+        const baseSel = document.getElementById('base-select');
+        const targetSel = document.getElementById('target-select');
+        const baseOpts = `<option value="empty">空白（创建前）</option>` +
+          ENRICHED.map((v) => `<option value="${v.id}">v${v.versionNumber} · ${v.date}（${SOURCE_LABEL[v.source]}）</option>`).join('');
+        const targetOpts = ENRICHED.map((v) => `<option value="${v.id}">v${v.versionNumber} · ${v.date}${v.isCurrent ? '（当前）' : ''}</option>`).join('');
+        baseSel.innerHTML = baseOpts;
+        targetSel.innerHTML = targetOpts;
+        baseSel.value = state.baseId;
+        targetSel.value = state.targetId;
+      }
+
+      // Render Left Rail
+      document.getElementById('rail-title').textContent = `变更时间线（${filtered.length}）`;
+      const railList = document.getElementById('commit-list');
+      if (filteredDesc.length === 0) {
+        railList.innerHTML = `<li class="empty-state" style="padding:28px 12px">当前筛选条件下没有变更记录</li>`;
+      } else {
+        const baseNum = state.baseId === 'empty' ? 0 : (VERSION_BY_ID.get(state.baseId)?.versionNumber ?? 0);
+        const targetNum = VERSION_BY_ID.get(state.targetId)?.versionNumber ?? 0;
+        const low = Math.min(baseNum, targetNum);
+        const high = Math.max(baseNum, targetNum);
+
+        railList.innerHTML = filteredDesc.map((v) => {
+          const isCurrentSel = state.mode === 'single' && v.id === state.selectedId;
+          const isRangeEndpoint = state.mode === 'range' && (v.id === state.baseId || v.id === state.targetId);
+          const isInRange = state.mode === 'range' && !isRangeEndpoint && v.versionNumber > low && v.versionNumber < high;
+          const classes = ['commit-item'];
+          if (isRangeEndpoint) classes.push('range-endpoint');
+          else if (isInRange) classes.push('in-range');
+
+          return `
+            <li class="commit-li">
+              <button type="button" class="${classes.join(' ')}" data-select-ver="${v.id}" aria-current="${isCurrentSel ? 'true' : 'false'}">
+                <span class="commit-dot" aria-hidden="true"></span>
+                <div class="commit-top">
+                  <div class="commit-ver-group">
+                    <span class="commit-ver tabular">v${v.versionNumber}</span>
+                    ${v.isCurrent ? '<span class="chip chip-accent">当前</span>' : ''}
+                    <span class="chip chip-secondary">${SOURCE_LABEL[v.source]}</span>
+                  </div>
+                  <span class="commit-diffstat tabular">
+                    <span class="stat-add">+${v.stats.adds}</span>
+                    <span class="stat-del">−${v.stats.dels}</span>
+                  </span>
+                </div>
+                <div class="commit-summary">${escapeHtml(v.summary)}</div>
+                <div class="commit-meta tabular">
+                  <span>${v.relativeTime}</span>
+                  <span>·</span>
+                  <span>${v.author}</span>
+                  ${v.restoredFromVersionNumber ? `<span>· 恢复自 v${v.restoredFromVersionNumber}</span>` : ''}
+                </div>
+              </button>
+            </li>`;
+        }).join('');
+      }
+
+      // Render Right Diff Stage
+      const stageEl = document.getElementById('diff-stage');
+      if (filtered.length === 0) {
+        stageEl.innerHTML = `
+          <div class="diff-card">
+            <div class="empty-state">
+              <strong style="color:var(--foreground)">该时间段内没有符合条件的变更</strong>
+              <span>可以切换到「创建至今」或清空来源筛选查看完整历史。</span>
+            </div>
+          </div>`;
+        return;
+      }
+
+      if (state.mode === 'single') {
+        const cur = VERSION_BY_ID.get(state.selectedId) || filteredDesc[0];
+        const prev = cur.prevId ? VERSION_BY_ID.get(cur.prevId) : null;
+        const ops = decorateOpsWithInline(computeLineDiff(prev ? prev.content : '', cur.content));
+        const st = diffStats(ops);
+        const title = prev ? `v${prev.versionNumber} → v${cur.versionNumber}` : `初始创建 · v${cur.versionNumber}`;
+        const subMeta = [
+          SOURCE_LABEL[cur.source],
+          cur.restoredFromVersionNumber ? `恢复自 v${cur.restoredFromVersionNumber}` : null,
+          cur.author,
+          `${cur.date}（${cur.relativeTime}）`,
+          cur.size,
+        ].filter(Boolean).join(' · ');
+
+        stageEl.innerHTML = `
+          <article class="diff-card">
+            <div class="diff-card-header">
+              <div class="diff-header-main">
+                <div class="diff-heading-row">
+                  <h2 class="diff-heading tabular">${title}</h2>
+                  ${cur.isCurrent ? '<span class="chip chip-accent">当前版本</span>' : ''}
+                  <span class="chip chip-add">+${st.adds}</span>
+                  <span class="chip chip-del">−${st.dels}</span>
+                </div>
+                <div class="diff-submeta tabular">${escapeHtml(subMeta)}</div>
+              </div>
+              ${renderDiffToolbar(cur, true)}
+            </div>
+            <div class="diff-body">
+              ${state.diffStyle === 'split'
+                ? renderSplitTable(ops, `single:${cur.id}`)
+                : renderUnifiedTable(ops, `single:${cur.id}`)}
+            </div>
+          </article>`;
+      } else if (state.mode === 'range') {
+        const baseVer = state.baseId === 'empty' ? null : VERSION_BY_ID.get(state.baseId);
+        const targetVer = VERSION_BY_ID.get(state.targetId) || ENRICHED[ENRICHED.length - 1];
+        const ops = decorateOpsWithInline(computeLineDiff(baseVer ? baseVer.content : '', targetVer.content));
+        const st = diffStats(ops);
+        const spanCount = Math.abs(targetVer.versionNumber - (baseVer ? baseVer.versionNumber : 0));
+        const hasChanges = st.adds > 0 || st.dels > 0;
+        const title = baseVer
+          ? `v${baseVer.versionNumber} → v${targetVer.versionNumber}`
+          : `创建前 → v${targetVer.versionNumber}`;
+
+        stageEl.innerHTML = `
+          <article class="diff-card">
+            <div class="diff-card-header">
+              <div class="diff-header-main">
+                <div class="diff-heading-row">
+                  <h2 class="diff-heading tabular">${title}</h2>
+                  <span class="chip chip-secondary tabular">累计跨 ${spanCount} 次变更</span>
+                  <span class="chip chip-add">+${st.adds}</span>
+                  <span class="chip chip-del">−${st.dels}</span>
+                </div>
+                <div class="diff-submeta tabular">
+                  ${baseVer ? `${baseVer.date} v${baseVer.versionNumber}` : '空白文档'} → ${targetVer.date} v${targetVer.versionNumber}（仅展示净变化）
+                </div>
+              </div>
+              ${renderDiffToolbar(targetVer, true)}
+            </div>
+            <div class="diff-body">
+              ${hasChanges
+                ? (state.diffStyle === 'split'
+                    ? renderSplitTable(ops, `range:${state.baseId}:${state.targetId}`)
+                    : renderUnifiedTable(ops, `range:${state.baseId}:${state.targetId}`))
+                : `<div class="empty-state"><strong style="color:var(--foreground)">两个版本的文本内容完全一致</strong><span>这通常发生在中间经历过修改后又恢复回了原版本。</span></div>`}
+            </div>
+          </article>`;
+      } else {
+        // Feed mode: git log -p style stream of every modification in filtered range
+        const list = state.feedOrder === 'desc' ? filteredDesc : [...filtered];
+        const banner = `
+          <div class="feed-banner">
+            <div class="diff-header-main">
+              <strong style="font-size:14px">按次总览（${state.feedOrder === 'desc' ? '最新 → 最早' : '最早 → 最新'}）</strong>
+              <span class="muted tabular" style="font-size:12.5px">逐条展开当前筛选范围内的 ${list.length} 次修改</span>
+            </div>
+            ${renderDiffToolbar(null, true)}
+          </div>`;
+
+        const cards = list.map((cur) => {
+          const prev = cur.prevId ? VERSION_BY_ID.get(cur.prevId) : null;
+          const ops = decorateOpsWithInline(computeLineDiff(prev ? prev.content : '', cur.content));
+          const st = diffStats(ops);
+          const heading = prev ? `v${prev.versionNumber} → v${cur.versionNumber}` : `初始创建 · v${cur.versionNumber}`;
+          return `
+            <article class="diff-card" id="feed-${cur.id}">
+              <div class="diff-card-header">
+                <div class="diff-header-main">
+                  <div class="diff-heading-row">
+                    <h3 class="diff-heading tabular">${heading}</h3>
+                    ${cur.isCurrent ? '<span class="chip chip-accent">当前</span>' : ''}
+                    <span class="chip chip-secondary">${SOURCE_LABEL[cur.source]}</span>
+                    <span class="chip chip-add">+${st.adds}</span>
+                    <span class="chip chip-del">−${st.dels}</span>
+                  </div>
+                  <div class="diff-submeta tabular">
+                    ${cur.author} · ${cur.date}（${cur.relativeTime}）${cur.restoredFromVersionNumber ? ` · 恢复自 v${cur.restoredFromVersionNumber}` : ''}
+                  </div>
+                </div>
+                ${renderDiffToolbar(cur, false)}
+              </div>
+              <div class="diff-body">
+                ${state.diffStyle === 'split'
+                  ? renderSplitTable(ops, `feed:${cur.id}`)
+                  : renderUnifiedTable(ops, `feed:${cur.id}`)}
+              </div>
+            </article>`;
+        }).join('');
+
+        stageEl.innerHTML = banner + cards;
+      }
+    }
+
+    /* =====================================================================
+       STAGE SWITCHING & EVENTS
+       ===================================================================== */
+    function switchStage(stage) {
+      state.stage = stage;
+      document.querySelectorAll('.proto-tab').forEach((tab) => {
+        tab.setAttribute('aria-selected', String(tab.dataset.stage === stage));
+      });
+      document.getElementById('stage-modal').hidden = stage !== 'modal';
+      document.getElementById('stage-page').hidden = stage !== 'page';
+      document.getElementById('stage-spec').hidden = stage !== 'spec';
+      if (stage === 'page') renderHistoryPage();
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.hidden = true; }, 2200);
+    }
+
+    function openRestoreConfirm(verNum) {
+      state.pendingRestoreVersion = verNum;
+      document.getElementById('confirm-desc').textContent = `将 v${verNum} 恢复为当前版本（会生成新版本 v${ENRICHED.length + 1}，原有历史记录均会保留）。`;
+      document.getElementById('confirm-backdrop').hidden = false;
+    }
+
+    // Top prototype switcher
+    document.querySelectorAll('.proto-tab').forEach((tab) => {
+      tab.addEventListener('click', () => switchStage(tab.dataset.stage));
+    });
+
+    // Modal -> Change History Page
+    document.getElementById('open-change-history-btn').addEventListener('click', () => {
+      switchStage('page');
+      showToast('已打开文档变更历史页面');
+    });
+    document.getElementById('modal-close-hint').addEventListener('click', () => {
+      showToast('点击表格上方「变更历史」可体验独立页面');
+    });
+
+    // Mode tabs
+    document.querySelectorAll('[data-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.mode = btn.dataset.mode;
+        renderHistoryPage();
+      });
+    });
+
+    // Date presets
+    document.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.preset = btn.dataset.preset;
+        renderHistoryPage();
+      });
+    });
+
+    document.getElementById('date-from').addEventListener('change', (e) => {
+      state.dateFrom = e.target.value;
+      renderHistoryPage();
+    });
+    document.getElementById('date-to').addEventListener('change', (e) => {
+      state.dateTo = e.target.value;
+      renderHistoryPage();
+    });
+    document.getElementById('source-filter').addEventListener('change', (e) => {
+      state.source = e.target.value;
+      renderHistoryPage();
+    });
+
+    // Cumulative range shortcut for active time filter
+    document.getElementById('view-range-cumulative-btn').addEventListener('click', () => {
+      const filtered = getFilteredVersions();
+      if (filtered.length === 0) return;
+      const earliest = filtered[0];
+      const latest = filtered[filtered.length - 1];
+      state.baseId = earliest.prevId || 'empty';
+      state.targetId = latest.id;
+      state.mode = 'range';
+      renderHistoryPage();
+      showToast(`已切换为该时段累计变更（${state.baseId === 'empty' ? '创建前' : 'v' + VERSION_BY_ID.get(state.baseId).versionNumber} → v${latest.versionNumber}）`);
+    });
+
+    // Base / target selects
+    document.getElementById('base-select').addEventListener('change', (e) => {
+      state.baseId = e.target.value;
+      renderHistoryPage();
+    });
+    document.getElementById('target-select').addEventListener('change', (e) => {
+      state.targetId = e.target.value;
+      renderHistoryPage();
+    });
+
+    // Feed sort order
+    document.getElementById('feed-order-btn').addEventListener('click', () => {
+      state.feedOrder = state.feedOrder === 'desc' ? 'asc' : 'desc';
+      renderHistoryPage();
+    });
+
+    // Delegated clicks for timeline, diff controls, and row actions
+    document.addEventListener('click', (e) => {
+      const selectBtn = e.target.closest('[data-select-ver]');
+      if (selectBtn) {
+        const verId = selectBtn.dataset.selectVer;
+        if (state.mode === 'single') {
+          state.selectedId = verId;
+          renderHistoryPage();
+        } else if (state.mode === 'range') {
+          // Clicking in range mode sets target (or shifts base if clicking older)
+          const clickedNum = VERSION_BY_ID.get(verId).versionNumber;
+          const baseNum = state.baseId === 'empty' ? 0 : VERSION_BY_ID.get(state.baseId).versionNumber;
+          if (clickedNum <= baseNum) state.baseId = verId;
+          else state.targetId = verId;
+          renderHistoryPage();
+        } else {
+          const card = document.getElementById(`feed-${verId}`);
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        return;
+      }
+
+      const styleBtn = e.target.closest('[data-diff-style]');
+      if (styleBtn) {
+        state.diffStyle = styleBtn.dataset.diffStyle;
+        renderHistoryPage();
+        return;
+      }
+
+      const fullBtn = e.target.closest('[data-toggle-full]');
+      if (fullBtn) {
+        state.showFull = !state.showFull;
+        renderHistoryPage();
+        return;
+      }
+
+      const gapBtn = e.target.closest('[data-expand-gap]');
+      if (gapBtn) {
+        state.expandedGaps.add(gapBtn.dataset.expandGap);
+        renderHistoryPage();
+        return;
+      }
+
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        const action = actionBtn.dataset.action;
+        const ver = actionBtn.dataset.ver;
+        if (action === 'download') showToast(`原型示意：开始下载 Q4-云盘版本与协同架构评审-v${ver}.md`);
+        else if (action === 'restore') openRestoreConfirm(ver);
+        else if (action === 'delete') showToast(`原型示意：弹出删除 v${ver} 确认框`);
+      }
+    });
+
+    // Confirm restore modal
+    document.getElementById('confirm-cancel').addEventListener('click', () => {
+      document.getElementById('confirm-backdrop').hidden = true;
+    });
+    document.getElementById('confirm-ok').addEventListener('click', () => {
+      document.getElementById('confirm-backdrop').hidden = true;
+      showToast(`原型示意：已将 v${state.pendingRestoreVersion} 恢复为最新版本`);
+    });
+
+    // Initial render
+    renderModalTable();
+    renderHistoryPage();
+  </script>
+</body>
+</html>

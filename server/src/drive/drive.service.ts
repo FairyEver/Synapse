@@ -22,12 +22,14 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE,
   DRIVE_MAX_FILE_BYTES,
+  DRIVE_FILE_VERSION_DIFF_MAX_BYTES,
   DRIVE_MAX_FILE_SIZE_LABEL,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
   type DriveFolderPathEnsureInput,
   type DriveFolderPathEnsureResultDto,
   type DriveFolderUploadPrepareResult,
+  type DriveFileVersionContentDto,
   type DriveFileVersionDto,
   type DriveFileVersionListInput,
   type DriveFileVersionListPageDto,
@@ -910,6 +912,32 @@ export class DriveService implements OnApplicationBootstrap {
       ipAddress: auditContext.ipAddress,
     })
     return deletePending ? { ok: true, deletePending: true } : { ok: true }
+  }
+
+  async getFileVersionContent(userId: string, itemId: string, versionId: string): Promise<DriveFileVersionContentDto> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
+    if (!isDriveTextEditablePreviewKind(previewKind)) {
+      throw new BadRequestException("该文件类型暂不支持查看文本变更历史。")
+    }
+    const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
+    if (version.size > BigInt(DRIVE_FILE_VERSION_DIFF_MAX_BYTES)) {
+      throw new PayloadTooLargeException("历史版本文件超过 1 MB，暂不支持在线对比。")
+    }
+    const object = await this.storage.getObjectStream({ key: version.storageKey })
+    const content = await readStreamTextPrefix(object.stream, DRIVE_FILE_VERSION_DIFF_MAX_BYTES)
+    if (content.truncated) {
+      throw new PayloadTooLargeException("历史版本文件超过 1 MB，暂不支持在线对比。")
+    }
+    return {
+      itemId: item.id,
+      versionId: version.id,
+      versionNumber: version.versionNumber,
+      size: version.size.toString(),
+      mimeType: version.mimeType,
+      text: content.text,
+    }
   }
 
   async openFileVersionDownload(userId: string, itemId: string, versionId: string): Promise<DriveBrowserDownloadResult> {

@@ -47,6 +47,7 @@ describe("DriveController", () => {
     restoreItem: vi.fn(),
     hideTrashedItem: vi.fn(),
     listFileVersions: vi.fn(),
+    getFileVersionContent: vi.fn(),
     restoreFileVersion: vi.fn(),
     deleteFileVersion: vi.fn(),
     openFileVersionDownload: vi.fn(),
@@ -171,6 +172,8 @@ describe("DriveController", () => {
     expect(getDefaultThrottleTtl(DriveUserController.prototype.listFileVersions)).toBe(RATE_LIMIT_TTL_MS)
     expect(getDefaultThrottleLimit(DriveUserController.prototype.downloadFileVersion)).toBe(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE)
     expect(getDefaultThrottleTtl(DriveUserController.prototype.downloadFileVersion)).toBe(RATE_LIMIT_TTL_MS)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.getFileVersionContent)).toBe(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleTtl(DriveUserController.prototype.getFileVersionContent)).toBe(RATE_LIMIT_TTL_MS)
   })
 
   beforeEach(async () => {
@@ -183,6 +186,7 @@ describe("DriveController", () => {
     drive.restoreItem.mockReset()
     drive.hideTrashedItem.mockReset()
     drive.listFileVersions.mockReset()
+    drive.getFileVersionContent.mockReset()
     drive.restoreFileVersion.mockReset()
     drive.deleteFileVersion.mockReset()
     drive.openFileVersionDownload.mockReset()
@@ -805,6 +809,7 @@ describe("DriveController", () => {
     await userApp.init()
     try {
       drive.listFileVersions.mockResolvedValue({ items: [], total: 0, page: { offset: 10, limit: 5, hasMore: false, nextOffset: null } })
+      drive.getFileVersionContent.mockResolvedValue({ itemId: "file-1", versionId: "ver-1", versionNumber: 1, size: "3", mimeType: "text/markdown", text: "old" })
       drive.restoreFileVersion.mockResolvedValue({ id: "file-1" })
       drive.deleteFileVersion.mockResolvedValue({ ok: true })
       drive.openFileVersionDownload.mockResolvedValue({
@@ -816,11 +821,13 @@ describe("DriveController", () => {
       drive.recordFileVersionDownloadAudit.mockResolvedValue(undefined)
 
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions?offset=10&limit=5").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions/ver-1/content").expect(200)
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions/ver-1/download").expect(200)
       await request(userApp.getHttpServer()).post("/api/drive/items/file-1/versions/ver-1/restore").expect(201)
       await request(userApp.getHttpServer()).delete("/api/drive/items/file-1/versions/ver-1").expect(200)
 
       expect(drive.listFileVersions).toHaveBeenCalledWith("user-1", "file-1", { offset: 10, limit: 5 })
+      expect(drive.getFileVersionContent).toHaveBeenCalledWith("user-1", "file-1", "ver-1")
       expect(drive.openFileVersionDownload).toHaveBeenCalledWith("user-1", "file-1", "ver-1")
       expect(drive.recordFileVersionDownloadAudit).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.objectContaining({
         fileName: "spec-v2.md",

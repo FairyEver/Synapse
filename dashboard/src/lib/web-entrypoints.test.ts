@@ -7,16 +7,16 @@ describe('Dashboard web entrypoints', () => {
   })
   describe.each(['console', 'dashboard'])('legacy %s reader links', (prefix) => {
     it.each(['items', 'folders'])('moves %s links to the independent reader and retains comment targets', (kind) => {
-      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc?surface=console&threadId=thread#comment`)).toEqual({ kind: 'redirect', location: '/drive/items/doc?surface=standalone&threadId=thread#comment' })
+      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc?surface=console&threadId=thread#comment`)).toEqual({ kind: 'redirect', location: '/drive/items/doc?threadId=thread#comment' })
     })
     it.each(['items', 'folders'])('accepts a trailing slash and preserves the encoded %s identifier', (kind) => {
-      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc%2F%E4%B8%AD/?view=code&versions=1#discussion=annotation&threadId=thread`)).toEqual({ kind: 'redirect', location: '/drive/items/doc%2F%E4%B8%AD?view=code&versions=1&surface=standalone#discussion=annotation&threadId=thread' })
+      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc%2F%E4%B8%AD/?view=code&versions=1#discussion=annotation&threadId=thread`)).toEqual({ kind: 'redirect', location: '/drive/items/doc%2F%E4%B8%AD?view=code&versions=1#discussion=annotation&threadId=thread' })
     })
     it.each(['items', 'folders'])('does not mistake deeper %s paths for reader links', (kind) => {
       expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc/download`)).toEqual({ kind: 'not-found' })
     })
   })
-  it.each(['/drive/items/doc?surface=standalone', '/share/token', '/share/token/items/child', '/notifications/notice/open'])('retains independent readers and notification links: %s', (url) => {
+  it.each(['/drive/items/doc', '/drive/items/doc?surface=standalone', '/drive/items/doc/changes', '/share/token', '/share/token/items/child', '/notifications/notice/open'])('retains independent readers and notification links: %s', (url) => {
     expect(resolveWebEntrypoint(url)).toEqual({ kind: 'html', filename: 'index.html' })
   })
   it('keeps the admin document separate from the user console', () => {

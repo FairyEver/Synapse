@@ -4,7 +4,6 @@ import { navigateDriveBrowserUrl } from '@/features/drive-browser/shared/drive-n
 export const Route = createFileRoute(
   '/_authenticated/drive/items/$browserItemId'
 )({
-  validateSearch: validateDriveBrowserSearch,
   component: RouteComponent,
 })
 function RouteComponent() {
@@ -17,9 +16,4 @@ function RouteComponent() {
       onNavigate={navigateDriveBrowserUrl}
     />
   )
-}
-function validateDriveBrowserSearch(_search: Record<string, unknown>) {
-  return {
-    surface: 'standalone' as const,
-  }
 }

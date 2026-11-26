@@ -34,6 +34,7 @@ import {
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   buildOwnerDriveBrowserUrl,
+  buildOwnerDriveChangesUrl,
   buildOwnerDriveDownloadUrl,
   buildOwnerDriveRenderUrl,
   buildShareDriveBrowserUrl,
@@ -43,6 +44,7 @@ import {
   drivePublicAssetContentKind,
   inferDrivePublicAssetMimeType,
   isDrivePublicAssetTextMimeType,
+  isDriveTextDiffPreviewKind,
   isDriveCommentableMarkdownItem,
   isDriveMarkdownItem,
   isPlainDriveMarkdownItem,
@@ -200,8 +202,14 @@ describe("drive URL helpers", () => {
 
   it("builds owner browser URLs with a single item id", () => {
     expect(buildOwnerDriveBrowserUrl("item/a")).toBe("/drive/items/item%2Fa")
+    expect(buildOwnerDriveChangesUrl("item/a")).toBe("/drive/items/item%2Fa/changes")
     expect(buildOwnerDriveDownloadUrl("item/a")).toBe("/drive/items/item%2Fa/download")
     expect(buildOwnerDriveRenderUrl("item/a")).toBe("/drive/items/item%2Fa/render")
+    expect(isDriveTextDiffPreviewKind("markdown")).toBe(true)
+    expect(isDriveTextDiffPreviewKind("text")).toBe(true)
+    expect(isDriveTextDiffPreviewKind("html-source")).toBe(true)
+    expect(isDriveTextDiffPreviewKind("image")).toBe(false)
+    expect(isDriveTextDiffPreviewKind("download-only")).toBe(false)
   })
 
   it("builds console drive browser URLs for folders", () => {

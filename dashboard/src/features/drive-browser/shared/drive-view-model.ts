@@ -27,9 +27,7 @@ export function getDriveFileVersionItemId(snapshot: DriveBrowserSnapshotDto): st
 
 function getDriveStandaloneOpenUrl(snapshot: DriveBrowserSnapshotDto): string {
   if (snapshot.context !== 'owner' || snapshot.surface !== 'console') return snapshot.current.browserUrl
-  const url = new URL(buildOwnerDriveBrowserUrl(snapshot.current.id), 'http://synapse.local')
-  url.searchParams.set('surface', 'standalone')
-  return `${url.pathname}${url.search}${url.hash}`
+  return buildOwnerDriveBrowserUrl(snapshot.current.id)
 }
 
 export function getDriveBrowserChildUrls(snapshot: DriveBrowserSnapshotDto) {

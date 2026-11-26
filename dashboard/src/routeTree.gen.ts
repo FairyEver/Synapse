@@ -32,6 +32,7 @@ import { Route as AuthenticatedSettingsApiKeysRouteImport } from './routes/_auth
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
 import { Route as AuthenticatedDriveItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$browserItemId'
+import { Route as AuthenticatedDriveItemsBrowserItemIdChangesRouteImport } from './routes/_authenticated/drive/items/$browserItemId_.changes'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -162,6 +163,12 @@ const AuthenticatedDriveItemsBrowserItemIdRoute =
     path: '/drive/items/$browserItemId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDriveItemsBrowserItemIdChangesRoute =
+  AuthenticatedDriveItemsBrowserItemIdChangesRouteImport.update({
+    id: '/drive/items/$browserItemId_/changes',
+    path: '/drive/items/$browserItemId/changes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
+  '/drive/items/$browserItemId/changes': typeof AuthenticatedDriveItemsBrowserItemIdChangesRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof authForgotPasswordRoute
@@ -209,6 +217,7 @@ export interface FileRoutesByTo {
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
+  '/drive/items/$browserItemId/changes': typeof AuthenticatedDriveItemsBrowserItemIdChangesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -235,6 +244,7 @@ export interface FileRoutesById {
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/share/$shareId_/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
+  '/_authenticated/drive/items/$browserItemId_/changes': typeof AuthenticatedDriveItemsBrowserItemIdChangesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/webhooks/'
     | '/drive/items/$browserItemId'
     | '/share/$shareId/items/$browserItemId'
+    | '/drive/items/$browserItemId/changes'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/webhooks'
     | '/drive/items/$browserItemId'
     | '/share/$shareId/items/$browserItemId'
+    | '/drive/items/$browserItemId/changes'
   id:
     | '__root__'
     | '/_authenticated'
@@ -309,6 +321,7 @@ export interface FileRouteTypes {
     | '/_authenticated/webhooks/'
     | '/_authenticated/drive/items/$browserItemId'
     | '/share/$shareId_/items/$browserItemId'
+    | '/_authenticated/drive/items/$browserItemId_/changes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -486,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDriveItemsBrowserItemIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/drive/items/$browserItemId_/changes': {
+      id: '/_authenticated/drive/items/$browserItemId_/changes'
+      path: '/drive/items/$browserItemId/changes'
+      fullPath: '/drive/items/$browserItemId/changes'
+      preLoaderRoute: typeof AuthenticatedDriveItemsBrowserItemIdChangesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -518,6 +538,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedDriveItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsBrowserItemIdRoute
+  AuthenticatedDriveItemsBrowserItemIdChangesRoute: typeof AuthenticatedDriveItemsBrowserItemIdChangesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -535,6 +556,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
   AuthenticatedDriveItemsBrowserItemIdRoute:
     AuthenticatedDriveItemsBrowserItemIdRoute,
+  AuthenticatedDriveItemsBrowserItemIdChangesRoute:
+    AuthenticatedDriveItemsBrowserItemIdChangesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

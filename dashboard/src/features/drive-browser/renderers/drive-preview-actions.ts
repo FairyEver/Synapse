@@ -201,9 +201,7 @@ export function getDrivePreviewSystemMenuSections(
 export function getDrivePreviewNewWindowUrl(snapshot: DriveBrowserSnapshotDto): string | null {
   if (snapshot.current.type !== 'file') return null
   if (snapshot.context !== 'owner' || snapshot.surface !== 'console') return null
-  const url = new URL(buildOwnerDriveBrowserUrl(snapshot.current.id), 'http://synapse.local')
-  url.searchParams.set('surface', 'standalone')
-  return `${url.pathname}${url.search}${url.hash}`
+  return buildOwnerDriveBrowserUrl(snapshot.current.id)
 }
 
 export function getDrivePreviewDriveBrowserUrl(_snapshot: DriveBrowserSnapshotDto): null {

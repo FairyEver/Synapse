@@ -1395,6 +1395,7 @@ describe('driveFileVersionsApi', () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
     await driveFileVersionsApi.list('item/id', { offset: 10, limit: 20 })
+    await driveFileVersionsApi.getContent('item/id', 'version/id')
     await driveFileVersionsApi.restore('item/id', 'version/id')
     await driveFileVersionsApi.delete('item/id', 'version/id')
 
@@ -1405,6 +1406,11 @@ describe('driveFileVersionsApi', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      '/api/drive/items/item%2Fid/versions/version%2Fid/content',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       '/api/drive/items/item%2Fid/versions/version%2Fid/restore',
       expect.objectContaining({
         credentials: 'include',
@@ -1412,7 +1418,7 @@ describe('driveFileVersionsApi', () => {
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/api/drive/items/item%2Fid/versions/version%2Fid',
       expect.objectContaining({
         credentials: 'include',

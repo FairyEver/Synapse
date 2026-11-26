@@ -1,5 +1,6 @@
 import {
   Button,
+  buttonVariants,
   Chip,
   Link,
   Modal,
@@ -14,11 +15,19 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
-import type {
-  DriveFileVersionDto,
-  DriveFileVersionSource,
+import {
+  buildOwnerDriveChangesUrl,
+  type DriveFileVersionDto,
+  type DriveFileVersionSource,
 } from '@synapse/shared'
-import { Download, Loader2, RotateCcw, Trash2 } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Download,
+  GitCompareArrows,
+  Loader2,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RelativeTime } from '@/components/relative-time'
 import { trackedDriveFileVersionsApi as driveFileVersionsApi } from './shared/drive-telemetry-api'
@@ -40,12 +49,14 @@ type ConfirmTarget =
 export function DriveFileVersionsDialog({
   itemId,
   open,
+  canViewChangeHistory = false,
   hasUnsavedChanges = false,
   onChanged,
   onOpenChange,
 }: {
   readonly itemId: string
   readonly open: boolean
+  readonly canViewChangeHistory?: boolean
   readonly hasUnsavedChanges?: boolean
   readonly onChanged?: () => void | Promise<unknown>
   readonly onOpenChange: (open: boolean) => void
@@ -127,6 +138,8 @@ export function DriveFileVersionsDialog({
               <DriveFileVersionContent
                 itemId={itemId}
                 versions={versions}
+                totalCount={versionsQuery.data?.pages[0]?.total}
+                canViewChangeHistory={canViewChangeHistory}
                 loading={versionsQuery.isLoading}
                 error={
                   versions.length === 0 &&
@@ -188,6 +201,8 @@ export function DriveFileVersionsDialog({
 export function DriveFileVersionContent({
   itemId,
   versions,
+  totalCount,
+  canViewChangeHistory = false,
   loading,
   error,
   loadMoreError,
@@ -200,6 +215,8 @@ export function DriveFileVersionContent({
 }: {
   readonly itemId: string
   readonly versions: readonly DriveFileVersionDto[]
+  readonly totalCount?: number
+  readonly canViewChangeHistory?: boolean
   readonly loading: boolean
   readonly error: string | null
   readonly loadMoreError: string | null
@@ -255,18 +272,39 @@ export function DriveFileVersionContent({
         ) : null}
       </Table.Footer>
     ) : null
+  const displayTotal = totalCount ?? versions.length
   return (
-    <DriveFileVersionTable footer={footer}>
-      {versions.map((version) => (
-        <DriveFileVersionRow
-          key={version.id}
-          itemId={itemId}
-          version={version}
-          onRestore={onRestore}
-          onDelete={onDelete}
-        />
-      ))}
-    </DriveFileVersionTable>
+    <>
+      {canViewChangeHistory ? (
+        <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
+          <span className='text-sm tabular-nums text-muted'>
+            共 {displayTotal} 个版本
+          </span>
+          <a
+            href={buildOwnerDriveChangesUrl(itemId)}
+            target='_blank'
+            rel='noopener noreferrer'
+            data-drive-telemetry-event='web.drive.version.change-history-open'
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+          >
+            <GitCompareArrows className='size-4' aria-hidden />
+            变更历史
+            <ArrowUpRight className='size-3.5 text-muted' aria-hidden />
+          </a>
+        </div>
+      ) : null}
+      <DriveFileVersionTable footer={footer}>
+        {versions.map((version) => (
+          <DriveFileVersionRow
+            key={version.id}
+            itemId={itemId}
+            version={version}
+            onRestore={onRestore}
+            onDelete={onDelete}
+          />
+        ))}
+      </DriveFileVersionTable>
+    </>
   )
 }
 function DriveFileVersionTable({

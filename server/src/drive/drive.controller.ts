@@ -630,6 +630,16 @@ export class DriveUserController {
     })
   }
 
+  @Get("/items/:id/versions/:versionId/content")
+  @Throttle(driveItemReadThrottle)
+  getFileVersionContent(
+    @Param("id") id: string,
+    @Param("versionId") versionId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.getFileVersionContent(request.user!.id, id, versionId)
+  }
+
   @Get("/items/:id/versions/:versionId/download")
   @Throttle(driveItemReadThrottle)
   async downloadFileVersion(

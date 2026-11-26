@@ -65,7 +65,7 @@ describe('normalizeDashboardRedirect', () => {
 
   describe.each(['console', 'dashboard'])('legacy %s reader login returns', (prefix) => {
     it.each(['items', 'folders'])('normalizes %s targets before stripping the app prefix', (kind) => {
-      expect(normalizeDashboardRedirect(`/${prefix}/drive/${kind}/doc%2Fname/?surface=console&versions=1#discussion=annotation&threadId=thread`)).toBe('/drive/items/doc%2Fname?surface=standalone&versions=1#discussion=annotation&threadId=thread')
+      expect(normalizeDashboardRedirect(`/${prefix}/drive/${kind}/doc%2Fname/?surface=console&versions=1#discussion=annotation&threadId=thread`)).toBe('/drive/items/doc%2Fname?versions=1#discussion=annotation&threadId=thread')
       expect(isRootPublicDashboardRedirect(`/${prefix}/drive/${kind}/doc`)).toBe(true)
     })
   })
@@ -85,11 +85,11 @@ describe('normalizeDashboardRedirect', () => {
   })
 
   it('keeps absolute legacy file targets on this deployment', () => {
-    expect(normalizeDashboardRedirect('https://other.test/console/drive/folders/doc?surface=console#comment')).toBe('/drive/items/doc?surface=standalone#comment')
+    expect(normalizeDashboardRedirect('https://other.test/console/drive/folders/doc?surface=console#comment')).toBe('/drive/items/doc#comment')
   })
 
   it('upgrades folder targets already stripped by the old login page', () => {
-    expect(normalizeDashboardRedirect('/drive/folders/doc?surface=console&versions=1#comment')).toBe('/drive/items/doc?surface=standalone&versions=1#comment')
+    expect(normalizeDashboardRedirect('/drive/folders/doc?surface=console&versions=1#comment')).toBe('/drive/items/doc?versions=1#comment')
     expect(isRootPublicDashboardRedirect('/drive/folders/doc')).toBe(true)
   })
 })

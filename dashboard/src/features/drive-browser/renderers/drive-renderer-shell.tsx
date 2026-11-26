@@ -9,6 +9,7 @@ import {
 } from 'react'
 import {
   buildOwnerDriveBrowserUrl,
+  isDriveTextDiffPreviewKind,
   type DriveCollaborationJoinContext,
   type DriveBrowserEditUnavailableReason,
   type DriveBrowserSnapshotDto,
@@ -378,6 +379,9 @@ function DriveRendererShellChrome({
         <DriveFileVersionsDialog
           itemId={versionItemId}
           open={versionsOpen}
+          canViewChangeHistory={isDriveTextDiffPreviewKind(
+            snapshot.current.previewKind
+          )}
           hasUnsavedChanges={hasUnsavedChanges}
           onChanged={editContext?.reload}
           onOpenChange={setVersionsOpen}

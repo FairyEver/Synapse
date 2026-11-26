@@ -4,7 +4,9 @@ import { resolveWebEntrypoint } from '@/lib/web-entrypoints'
 // Exercise the actual SPA-selection policy, not deleted console component source.
 describe('independent Drive browser entrypoints', () => {
   it.each([
+    '/drive/items/document',
     '/drive/items/document?surface=standalone',
+    '/drive/items/document/changes',
     '/drive/items/folder',
     '/share/public-share',
     '/share/public-share/items/child',
@@ -17,7 +19,7 @@ describe('independent Drive browser entrypoints', () => {
       const result = resolveWebEntrypoint(`/${prefix}/drive/${kind}/document?surface=console&threadId=discussion#comment`)
       expect(result).toEqual({
         kind: 'redirect',
-        location: '/drive/items/document?surface=standalone&threadId=discussion#comment',
+        location: '/drive/items/document?threadId=discussion#comment',
       })
     })
   })

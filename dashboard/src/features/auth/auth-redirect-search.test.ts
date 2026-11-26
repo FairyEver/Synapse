@@ -27,8 +27,8 @@ describe('auth redirect search', () => {
     it.each(['items', 'folders'])('preserves the independent %s target across auth links and repeated normalization', (kind) => {
       const redirectTo = normalizeAuthRedirect(`/${prefix}/drive/${kind}/doc?surface=console&versions=1#comment`)
 
-      expect(redirectTo).toBe('/drive/items/doc?surface=standalone&versions=1#comment')
-      expect(buildAuthRedirectSearch(redirectTo)).toEqual({ redirect: '/drive/items/doc?surface=standalone&versions=1#comment' })
+      expect(redirectTo).toBe('/drive/items/doc?versions=1#comment')
+      expect(buildAuthRedirectSearch(redirectTo)).toEqual({ redirect: '/drive/items/doc?versions=1#comment' })
       expect(normalizeAuthRedirect(redirectTo)).toBe(redirectTo)
       expect(isRootPublicDashboardRedirect(redirectTo)).toBe(true)
     })

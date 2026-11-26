@@ -108,6 +108,24 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('v1')
   })
 
+  it('shows the change-history button above the table only for text-diffable files', () => {
+    const withButton = renderVersionContent({
+      versions: [version({ id: 'version-1', versionNumber: 1, isCurrent: true })],
+      totalCount: 3,
+      canViewChangeHistory: true,
+    })
+    const withoutButton = renderVersionContent({
+      versions: [version({ id: 'version-1', versionNumber: 1, isCurrent: true })],
+      canViewChangeHistory: false,
+    })
+
+    expect(withButton).toContain('共 3 个版本')
+    expect(withButton).toContain('变更历史')
+    expect(withButton).toContain('href="/drive/items/item-1/changes"')
+    expect(withButton).toContain('target="_blank"')
+    expect(withoutButton).not.toContain('变更历史')
+  })
+
   it('limits current version actions to download', () => {
     const html = renderVersions([
       version({ id: 'version-current', versionNumber: 4, isCurrent: true }),

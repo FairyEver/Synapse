@@ -375,7 +375,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/file?surface=standalone')
+    expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/file')
   })
 
   it('describes empty folder children without sibling wording', () => {

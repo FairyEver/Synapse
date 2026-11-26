@@ -511,6 +511,17 @@ export interface DriveFileVersionDto {
   readonly createdBy: string | null
 }
 
+export interface DriveFileVersionContentDto {
+  readonly itemId: string
+  readonly versionId: string
+  readonly versionNumber: number
+  readonly size: string
+  readonly mimeType: string | null
+  readonly text: string
+}
+
+export const DRIVE_FILE_VERSION_DIFF_MAX_BYTES = 1024 * 1024
+
 export interface DriveFileVersionListInput {
   readonly offset?: number
   readonly limit?: number
@@ -1532,8 +1543,16 @@ export function isDrivePublicAssetTextMimeType(mimeType: string | null | undefin
   return normalized === "text/plain" || normalized === "text/markdown" || normalized === "text/csv"
 }
 
+export function isDriveTextDiffPreviewKind(kind: DriveBrowserPreviewKind): boolean {
+  return kind === "markdown" || kind === "text" || kind === "html-source"
+}
+
 export function buildOwnerDriveBrowserUrl(itemId: string): string {
   return `${DRIVE_OWNER_BROWSER_PATH_PREFIX}/${encodeURIComponent(itemId)}`
+}
+
+export function buildOwnerDriveChangesUrl(itemId: string): string {
+  return `${buildOwnerDriveBrowserUrl(itemId)}/changes`
 }
 
 export function buildOwnerDriveDownloadUrl(itemId: string): string {
