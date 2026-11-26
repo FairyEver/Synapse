@@ -29,10 +29,15 @@ export interface DiffStats {
 
 const MAX_LCS_CELLS = 4_000_000
 const MAX_INLINE_CELLS = 40_000
+const MAX_INLINE_PAIRS = 200
 
 function splitDocumentLines(text: string): string[] {
   if (text.length === 0) return []
-  return text.replace(/\r\n/gu, '\n').split('\n')
+  const normalized = text.replace(/\r\n?/gu, '\n')
+  const trimmedTrailingNewline = normalized.endsWith('\n')
+    ? normalized.slice(0, -1)
+    : normalized
+  return trimmedTrailingNewline.split('\n')
 }
 
 export function computeLineDiff(oldText: string, newText: string): DiffLineOp[] {
@@ -237,19 +242,25 @@ function diffInlinePair(
 function decorateInlineDiff(ops: readonly DiffLineOp[]): DiffLineOp[] {
   const result = ops.map((op) => ({ ...op }))
   let index = 0
-  while (index < result.length) {
+  let totalPairs = 0
+  while (index < result.length && totalPairs < MAX_INLINE_PAIRS) {
     if (result[index]!.type === 'del') {
       const delStart = index
       while (index < result.length && result[index]!.type === 'del') index += 1
       const addStart = index
       while (index < result.length && result[index]!.type === 'add') index += 1
-      const pairCount = Math.min(addStart - delStart, index - addStart)
+      const pairCount = Math.min(
+        addStart - delStart,
+        index - addStart,
+        MAX_INLINE_PAIRS - totalPairs
+      )
       for (let offset = 0; offset < pairCount; offset += 1) {
         const delOp = result[delStart + offset]!
         const addOp = result[addStart + offset]!
         const { oldSegments, newSegments } = diffInlinePair(delOp.text, addOp.text)
         result[delStart + offset] = { ...delOp, segments: oldSegments }
         result[addStart + offset] = { ...addOp, segments: newSegments }
+        totalPairs += 1
       }
     } else {
       index += 1

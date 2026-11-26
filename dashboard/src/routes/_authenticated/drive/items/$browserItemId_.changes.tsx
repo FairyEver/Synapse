@@ -9,5 +9,5 @@ export const Route = createFileRoute(
 
 function RouteComponent() {
   const { browserItemId } = Route.useParams()
-  return <DriveChangeHistoryPage itemId={browserItemId} />
+  return <DriveChangeHistoryPage key={browserItemId} itemId={browserItemId} />
 }

@@ -28,10 +28,10 @@ function InlineLineText({
           <mark
             key={index}
             className={cn(
-              'rounded-xs px-0.5 text-inherit',
+              'rounded-xs px-0.5 text-foreground',
               kind === 'add'
-                ? 'bg-success-soft-hover font-medium'
-                : 'bg-danger-soft-hover line-through'
+                ? 'bg-success/30 font-medium ring-1 ring-inset ring-success/40'
+                : 'bg-danger/30 line-through ring-1 ring-inset ring-danger/40'
             )}
           >
             {segment.text}
@@ -91,7 +91,12 @@ export function DriveChangeHistoryDiffView({
 
   if (style === 'split') {
     return (
-      <div className='overflow-x-auto bg-surface'>
+      <div
+        tabIndex={0}
+        role='region'
+        aria-label='分栏差异对比内容'
+        className='overflow-x-auto bg-surface focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent'
+      >
         <table className='w-full min-w-[720px] table-fixed border-collapse font-mono text-xs leading-6'>
           <colgroup>
             <col className='w-11' />
@@ -141,7 +146,7 @@ export function DriveChangeHistoryDiffView({
                       <td
                         className={cn(
                           'whitespace-pre-wrap break-words px-2 py-0.5 text-foreground',
-                          row.left.type === 'del' ? 'bg-danger-soft' : 'bg-surface'
+                          row.left.type === 'del' ? 'bg-danger-soft/55' : 'bg-surface'
                         )}
                       >
                         <InlineLineText
@@ -182,7 +187,7 @@ export function DriveChangeHistoryDiffView({
                       <td
                         className={cn(
                           'whitespace-pre-wrap break-words px-2 py-0.5 text-foreground',
-                          row.right.type === 'add' ? 'bg-success-soft' : 'bg-surface'
+                          row.right.type === 'add' ? 'bg-success-soft/55' : 'bg-surface'
                         )}
                       >
                         <InlineLineText
@@ -208,12 +213,17 @@ export function DriveChangeHistoryDiffView({
   }
 
   return (
-    <div className='overflow-x-auto bg-surface'>
-      <table className='w-full min-w-[540px] table-fixed border-collapse font-mono text-xs leading-6'>
+    <div
+      tabIndex={0}
+      role='region'
+      aria-label='统一差异对比内容'
+      className='overflow-x-auto bg-surface focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent'
+    >
+      <table className='w-full table-fixed border-collapse font-mono text-xs leading-6'>
         <colgroup>
-          <col className='w-12' />
-          <col className='w-12' />
-          <col className='w-6' />
+          <col className='w-10 sm:w-12' />
+          <col className='w-10 sm:w-12' />
+          <col className='w-5 sm:w-6' />
           <col />
         </colgroup>
         <tbody>
@@ -231,9 +241,9 @@ export function DriveChangeHistoryDiffView({
             return block.ops.map((op, rowIndex) => {
               const rowClass =
                 op.type === 'add'
-                  ? 'bg-success-soft'
+                  ? 'bg-success-soft/55'
                   : op.type === 'del'
-                    ? 'bg-danger-soft'
+                    ? 'bg-danger-soft/55'
                     : 'bg-surface'
               const gutterClass =
                 op.type === 'add'

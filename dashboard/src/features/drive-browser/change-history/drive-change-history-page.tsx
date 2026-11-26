@@ -8,6 +8,8 @@ import {
   Select,
   Skeleton,
   Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
   toast,
 } from '@heroui/react'
 import {
@@ -23,6 +25,7 @@ import {
   type DriveFileVersionDto,
 } from '@synapse/shared'
 import {
+  ArrowUpDown,
   Download,
   FileText,
   GitCompareArrows,
@@ -44,6 +47,7 @@ import {
   computeLineDiff,
   getDiffStats,
   type DiffLineOp,
+  type DiffStats,
 } from './change-history-diff'
 import {
   driveChangeSourceLabel,
@@ -72,7 +76,7 @@ const TIME_PRESETS: ReadonlyArray<{
   { id: '7d', label: '近 7 天' },
   { id: '14d', label: '近 14 天' },
   { id: '30d', label: '近 30 天' },
-  { id: 'custom', label: '自定义时间段' },
+  { id: 'custom', label: '自定义' },
 ]
 
 const SOURCE_OPTIONS: ReadonlyArray<{
@@ -114,10 +118,18 @@ function DriveChangeHistoryPageContent({
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [baseVersionId, setBaseVersionId] = useState<string>(EMPTY_BASE_VERSION_ID)
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null)
+  const [rangeClickTarget, setRangeClickTarget] = useState<'base' | 'target'>('target')
+  const [incompleteRangeBase, setIncompleteRangeBase] = useState(false)
   const [diffStyle, setDiffStyle] = useState<ChangeHistoryDiffStyle>('unified')
   const [showFull, setShowFull] = useState(false)
   const [feedOrder, setFeedOrder] = useState<ChangeHistoryFeedOrder>('desc')
   const [feedLimit, setFeedLimit] = useState(FEED_BATCH_SIZE)
+  const [pendingScrollFeedVersionId, setPendingScrollFeedVersionId] = useState<
+    string | null
+  >(null)
+  const [pendingRestorePrevLatestId, setPendingRestorePrevLatestId] = useState<
+    string | null
+  >(null)
   const [expandedGapKeys, setExpandedGapKeys] = useState<ReadonlySet<string>>(
     () => new Set()
   )
@@ -147,7 +159,7 @@ function DriveChangeHistoryPageContent({
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.page.nextOffset ?? undefined,
-    enabled: Boolean(item && item.type === 'file'),
+    enabled: supportsTextDiff,
   })
 
   const allVersionsDesc = useMemo(
@@ -188,6 +200,8 @@ function DriveChangeHistoryPageContent({
     return comparableFilteredDesc[0]?.id ?? null
   }, [comparableFilteredDesc, selectedVersionId])
 
+  const hasMoreOlder = Boolean(versionsQuery.hasNextPage)
+
   // Keep range endpoints synchronized when versions load.
   useEffect(() => {
     if (comparableAllDesc.length === 0) return
@@ -195,8 +209,47 @@ function DriveChangeHistoryPageContent({
     const latest = comparableAllDesc[0]!
     const prev = findPreviousComparableVersion(allVersionsDesc, latest.id)
     setTargetVersionId(latest.id)
-    setBaseVersionId(prev ? prev.id : EMPTY_BASE_VERSION_ID)
-  }, [allVersionsDesc, comparableAllDesc, targetVersionId, versionById])
+    setBaseVersionId(
+      prev ? prev.id : hasMoreOlder ? latest.id : EMPTY_BASE_VERSION_ID
+    )
+    setIncompleteRangeBase(!prev && hasMoreOlder)
+  }, [allVersionsDesc, comparableAllDesc, hasMoreOlder, targetVersionId, versionById])
+
+  // Auto-load the next page if the selected version sits on a pagination boundary.
+  const selectedPrevious = useMemo(
+    () =>
+      activeSelectedId
+        ? findPreviousComparableVersion(allVersionsDesc, activeSelectedId)
+        : null,
+    [activeSelectedId, allVersionsDesc]
+  )
+
+  useEffect(() => {
+    if (
+      mode === 'single' &&
+      activeSelectedId &&
+      !selectedPrevious &&
+      versionsQuery.hasNextPage &&
+      !versionsQuery.isFetchingNextPage
+    ) {
+      void versionsQuery.fetchNextPage()
+    }
+  }, [
+    activeSelectedId,
+    mode,
+    selectedPrevious,
+    versionsQuery,
+  ])
+
+  // Focus the newly generated current version after a restore completes.
+  useEffect(() => {
+    if (pendingRestorePrevLatestId === null) return
+    const latest = comparableAllDesc[0]
+    if (!latest || latest.id === pendingRestorePrevLatestId) return
+    setSelectedVersionId(latest.id)
+    setTargetVersionId(latest.id)
+    setPendingRestorePrevLatestId(null)
+  }, [comparableAllDesc, pendingRestorePrevLatestId])
 
   // Reset feed pagination when filter or ordering changes.
   useEffect(() => {
@@ -213,30 +266,48 @@ function DriveChangeHistoryPageContent({
       ? baseVersionId
       : EMPTY_BASE_VERSION_ID
 
-  const visibleFeedVersions = useMemo(() => {
-    const ordered =
+  const orderedFeedVersions = useMemo(
+    () =>
       feedOrder === 'desc'
         ? comparableFilteredDesc
-        : [...comparableFilteredDesc].reverse()
-    return ordered.slice(0, feedLimit)
-  }, [comparableFilteredDesc, feedLimit, feedOrder])
+        : [...comparableFilteredDesc].reverse(),
+    [comparableFilteredDesc, feedOrder]
+  )
+
+  const visibleFeedVersions = useMemo(
+    () => orderedFeedVersions.slice(0, feedLimit),
+    [feedLimit, orderedFeedVersions]
+  )
+
+  useEffect(() => {
+    if (!pendingScrollFeedVersionId) return
+    if (!visibleFeedVersions.some((v) => v.id === pendingScrollFeedVersionId)) return
+    const card = document.getElementById(
+      `change-feed-${pendingScrollFeedVersionId}`
+    )
+    card?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setPendingScrollFeedVersionId(null)
+  }, [pendingScrollFeedVersionId, visibleFeedVersions])
 
   // Collect exact immutable version IDs needed for the active view.
   const neededVersionIds = useMemo(() => {
     if (!supportsTextDiff) return [] as string[]
     const ids = new Set<string>()
     if (mode === 'single' && activeSelectedId) {
-      ids.add(activeSelectedId)
-      const prev = findPreviousComparableVersion(allVersionsDesc, activeSelectedId)
-      if (prev) ids.add(prev.id)
+      if (selectedPrevious || !hasMoreOlder) {
+        ids.add(activeSelectedId)
+        if (selectedPrevious) ids.add(selectedPrevious.id)
+      }
     } else if (mode === 'range') {
       if (activeBaseId !== EMPTY_BASE_VERSION_ID) ids.add(activeBaseId)
       if (activeTargetId) ids.add(activeTargetId)
     } else if (mode === 'feed') {
       for (const version of visibleFeedVersions) {
-        ids.add(version.id)
         const prev = findPreviousComparableVersion(allVersionsDesc, version.id)
-        if (prev) ids.add(prev.id)
+        if (prev || !hasMoreOlder) {
+          ids.add(version.id)
+          if (prev) ids.add(prev.id)
+        }
       }
     }
     return [...ids]
@@ -245,7 +316,9 @@ function DriveChangeHistoryPageContent({
     activeSelectedId,
     activeTargetId,
     allVersionsDesc,
+    hasMoreOlder,
     mode,
+    selectedPrevious,
     supportsTextDiff,
     visibleFeedVersions,
   ])
@@ -289,6 +362,7 @@ function DriveChangeHistoryPageContent({
       driveFileVersionsApi.restore(itemId, versionId),
     onSuccess: () => {
       setRestoreTarget(null)
+      setPendingRestorePrevLatestId(comparableAllDesc[0]?.id ?? '')
       void queryClient.invalidateQueries({
         queryKey: ['drive-file-versions', itemId],
       })
@@ -311,12 +385,27 @@ function DriveChangeHistoryPageContent({
   const handleApplyCumulativeRange = () => {
     const bounds = resolveRangeCumulativeBounds(
       allVersionsDesc,
-      filteredVersionsDesc
+      filteredVersionsDesc,
+      { hasMoreOlder }
     )
     if (!bounds) return
     setBaseVersionId(bounds.baseVersionId)
     setTargetVersionId(bounds.targetVersionId)
+    setIncompleteRangeBase(bounds.incompleteBase)
     setMode('range')
+  }
+
+  const handleSwapRangeEndpoints = () => {
+    if (
+      activeBaseId === EMPTY_BASE_VERSION_ID ||
+      !activeTargetId ||
+      activeBaseId === activeTargetId
+    ) {
+      return
+    }
+    setBaseVersionId(activeTargetId)
+    setTargetVersionId(activeBaseId)
+    setIncompleteRangeBase(false)
   }
 
   const handleSelectTimelineVersion = (version: DriveFileVersionDto) => {
@@ -326,19 +415,22 @@ function DriveChangeHistoryPageContent({
       return
     }
     if (mode === 'range') {
-      const baseNum =
-        activeBaseId === EMPTY_BASE_VERSION_ID
-          ? 0
-          : (versionById.get(activeBaseId)?.versionNumber ?? 0)
-      if (version.versionNumber <= baseNum) {
+      setIncompleteRangeBase(false)
+      if (rangeClickTarget === 'base') {
         setBaseVersionId(version.id)
       } else {
         setTargetVersionId(version.id)
       }
       return
     }
-    const card = document.getElementById(`change-feed-${version.id}`)
-    card?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const feedIndex = orderedFeedVersions.findIndex(
+      (entry) => entry.id === version.id
+    )
+    if (feedIndex === -1) return
+    if (feedIndex >= feedLimit) {
+      setFeedLimit(feedIndex + 1)
+    }
+    setPendingScrollFeedVersionId(version.id)
   }
 
   if (itemQuery.isLoading) {
@@ -424,23 +516,73 @@ function DriveChangeHistoryPageContent({
     activeTargetId ? (versionById.get(activeTargetId)?.versionNumber ?? 0) : 0
   const rangeLow = Math.min(baseNum, targetNum)
   const rangeHigh = Math.max(baseNum, targetNum)
+  const canSwapRange =
+    activeBaseId !== EMPTY_BASE_VERSION_ID &&
+    Boolean(activeTargetId) &&
+    activeBaseId !== activeTargetId
+
+  const activeSelectedVersion = activeSelectedId
+    ? (versionById.get(activeSelectedId) ?? null)
+    : null
+  const activeBaseVersion =
+    activeBaseId === EMPTY_BASE_VERSION_ID
+      ? null
+      : (versionById.get(activeBaseId) ?? null)
+  const activeTargetVersion = activeTargetId
+    ? (versionById.get(activeTargetId) ?? null)
+    : null
+
+  const liveAnnouncement = (() => {
+    if (versionsQuery.isLoading) return ''
+    if (comparableFilteredDesc.length === 0) {
+      return '当前筛选条件下没有可对比的变更记录'
+    }
+    if (mode === 'single' && activeSelectedVersion) {
+      return selectedPrevious
+        ? `当前查看 v${selectedPrevious.versionNumber} 到 v${activeSelectedVersion.versionNumber}`
+        : hasMoreOlder
+          ? `当前查看 v${activeSelectedVersion.versionNumber}，正在加载更早版本`
+          : `当前查看初始创建 v${activeSelectedVersion.versionNumber}`
+    }
+    if (mode === 'range' && activeTargetVersion) {
+      return activeBaseVersion
+        ? `范围对比 v${activeBaseVersion.versionNumber} 到 v${activeTargetVersion.versionNumber}`
+        : `范围对比 创建前到 v${activeTargetVersion.versionNumber}`
+    }
+    return `按次总览，当前展示 ${visibleFeedVersions.length} / ${comparableFilteredDesc.length} 次变更`
+  })()
 
   return (
     <div className='flex min-h-screen flex-col bg-background text-foreground'>
+      <div
+        className='sr-only'
+        role='status'
+        aria-live='polite'
+        aria-atomic='true'
+      >
+        {liveAnnouncement}
+      </div>
+
       {/* Sticky Header (no back button; opens as dedicated page) */}
-      <header className='sticky top-0 z-20 border-b border-separator bg-surface px-4 py-3 md:px-6'>
-        <div className='mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3'>
-          <div className='flex min-w-0 items-center gap-2.5'>
+      <header className='sticky top-0 z-20 border-b border-separator bg-surface px-4 py-3 md:px-6 lg:flex lg:h-16 lg:items-center lg:py-0'>
+        <div className='mx-auto flex w-full max-w-[1440px] flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3'>
+          <div className='flex min-w-0 items-center gap-2.5 lg:flex-1'>
             <div className='flex size-8 shrink-0 items-center justify-center rounded-xl bg-surface-secondary text-foreground'>
               <FileText className='size-4' aria-hidden />
             </div>
-            <h1 className='min-w-0 truncate text-base font-semibold text-foreground'>
+            <h1
+              title={item.name}
+              className='min-w-0 truncate text-base font-semibold text-foreground'
+            >
               {item.name}
             </h1>
-            <Chip variant='secondary'>变更历史</Chip>
+            <Chip variant='secondary' className='shrink-0'>
+              变更历史
+            </Chip>
           </div>
 
           <Tabs
+            className='w-fit shrink-0'
             selectedKey={mode}
             onSelectionChange={(key) =>
               setMode(String(key) as ChangeHistoryViewMode)
@@ -469,36 +611,35 @@ function DriveChangeHistoryPageContent({
       {/* Filter Bar (on bg-background -> form controls use default primary variant) */}
       <div className='border-b border-separator bg-background px-4 py-2.5 md:px-6'>
         <div className='mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3'>
-          <div className='flex flex-wrap items-center gap-2.5'>
-            <div
-              role='group'
-              aria-label='时间段筛选'
-              className='flex flex-wrap items-center gap-1 rounded-full bg-surface-secondary p-1'
-            >
-              {TIME_PRESETS.map((preset) => {
-                const active = filter.preset === preset.id
-                return (
-                  <Button
+          <div className='flex min-w-0 max-w-full flex-wrap items-center gap-2.5'>
+            <div className='max-w-full overflow-x-auto'>
+              <ToggleButtonGroup
+                aria-label='时间段筛选'
+                selectionMode='single'
+                disallowEmptySelection
+                size='sm'
+                className='w-max'
+                selectedKeys={new Set([filter.preset])}
+                onSelectionChange={(keys) => {
+                  const next = [...keys][0]
+                  if (!next) return
+                  setFilter((prev) => ({
+                    ...prev,
+                    preset: String(next) as ChangeHistoryTimePreset,
+                  }))
+                }}
+              >
+                {TIME_PRESETS.map((preset, index) => (
+                  <ToggleButton
                     key={preset.id}
-                    type='button'
-                    size='sm'
-                    variant={active ? 'outline' : 'ghost'}
-                    aria-pressed={active}
-                    className={cn(
-                      'h-7 rounded-full px-3 text-xs',
-                      active && 'bg-surface font-medium shadow-surface'
-                    )}
-                    onPress={() =>
-                      setFilter((prev) => ({
-                        ...prev,
-                        preset: preset.id,
-                      }))
-                    }
+                    id={preset.id}
+                    className='px-2.5 sm:px-3'
                   >
+                    {index > 0 ? <ToggleButtonGroup.Separator /> : null}
                     {preset.label}
-                  </Button>
-                )
-              })}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
             </div>
 
             {filter.preset === 'custom' ? (
@@ -507,26 +648,38 @@ function DriveChangeHistoryPageContent({
                   type='date'
                   aria-label='开始日期'
                   value={filter.dateFrom}
-                  onChange={(event) =>
+                  max={filter.dateTo || undefined}
+                  onChange={(event) => {
+                    const nextFrom = event.target.value
                     setFilter((prev) => ({
                       ...prev,
-                      dateFrom: event.target.value,
+                      dateFrom: nextFrom,
+                      dateTo:
+                        nextFrom && prev.dateTo && nextFrom > prev.dateTo
+                          ? nextFrom
+                          : prev.dateTo,
                     }))
-                  }
-                  className='h-8 w-36 tabular-nums'
+                  }}
+                  className='w-36 tabular-nums'
                 />
                 <span>至</span>
                 <Input
                   type='date'
                   aria-label='结束日期'
                   value={filter.dateTo}
-                  onChange={(event) =>
+                  min={filter.dateFrom || undefined}
+                  onChange={(event) => {
+                    const nextTo = event.target.value
                     setFilter((prev) => ({
                       ...prev,
-                      dateTo: event.target.value,
+                      dateFrom:
+                        nextTo && prev.dateFrom && nextTo < prev.dateFrom
+                          ? nextTo
+                          : prev.dateFrom,
+                      dateTo: nextTo,
                     }))
-                  }
-                  className='h-8 w-36 tabular-nums'
+                  }}
+                  className='w-36 tabular-nums'
                 />
               </div>
             ) : null}
@@ -542,7 +695,7 @@ function DriveChangeHistoryPageContent({
                 }))
               }
             >
-              <Select.Trigger className='h-8'>
+              <Select.Trigger>
                 <Select.Value />
                 <Select.Indicator />
               </Select.Trigger>
@@ -586,7 +739,7 @@ function DriveChangeHistoryPageContent({
         {/* Left Commit Timeline Rail */}
         <aside
           aria-label='版本时间线'
-          className='flex flex-col overflow-hidden rounded-2xl border border-separator bg-surface shadow-surface lg:sticky lg:top-[76px] lg:max-h-[calc(100vh-96px)]'
+          className='flex flex-col overflow-hidden rounded-2xl border border-separator bg-surface shadow-surface lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)]'
         >
           <div className='flex items-center justify-between gap-2 border-b border-separator px-4 py-3'>
             <span className='text-sm font-semibold tabular-nums text-foreground'>
@@ -607,17 +760,18 @@ function DriveChangeHistoryPageContent({
           </div>
 
           {mode === 'range' && comparableAllDesc.length > 0 ? (
-            <div className='grid gap-2 border-b border-separator bg-surface-secondary p-3'>
+            <div className='grid gap-2.5 border-b border-separator bg-surface-secondary p-3'>
               <div className='grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2'>
                 <span className='text-xs text-muted'>基准</span>
                 <Select
                   aria-label='选择基准版本'
                   value={activeBaseId}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    setIncompleteRangeBase(false)
                     setBaseVersionId(String(value ?? EMPTY_BASE_VERSION_ID))
-                  }
+                  }}
                 >
-                  <Select.Trigger className='h-8'>
+                  <Select.Trigger>
                     <Select.Value />
                     <Select.Indicator />
                   </Select.Trigger>
@@ -653,17 +807,19 @@ function DriveChangeHistoryPageContent({
                   aria-label='选择目标版本'
                   value={activeTargetId ?? undefined}
                   onChange={(value) => {
-                    if (value) setTargetVersionId(String(value))
+                    if (!value) return
+                    setIncompleteRangeBase(false)
+                    setTargetVersionId(String(value))
                   }}
                 >
-                  <Select.Trigger className='h-8'>
+                  <Select.Trigger>
                     <Select.Value />
                     <Select.Indicator />
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
                       {comparableAllDesc.map((version) => {
-                        const label = `v${version.versionNumber} · ${toLocalCalendarDate(version.createdAt)}${version.isCurrent ? '（当前）' : ''}`
+                        const label = `v${version.versionNumber} · ${toLocalCalendarDate(version.createdAt)}（${driveChangeSourceLabel(version.source)}${version.isCurrent ? ' · 当前' : ''}）`
                         return (
                           <ListBox.Item
                             key={version.id}
@@ -678,6 +834,37 @@ function DriveChangeHistoryPageContent({
                     </ListBox>
                   </Select.Popover>
                 </Select>
+              </div>
+              <div className='flex flex-wrap items-center justify-between gap-2 pt-0.5'>
+                <ToggleButtonGroup
+                  aria-label='点击时间线设置的端点'
+                  selectionMode='single'
+                  disallowEmptySelection
+                  size='sm'
+                  selectedKeys={new Set([rangeClickTarget])}
+                  onSelectionChange={(keys) => {
+                    const next = [...keys][0]
+                    if (next === 'base' || next === 'target') {
+                      setRangeClickTarget(next)
+                    }
+                  }}
+                >
+                  <ToggleButton id='base'>点选基准</ToggleButton>
+                  <ToggleButton id='target'>
+                    <ToggleButtonGroup.Separator />
+                    点选目标
+                  </ToggleButton>
+                </ToggleButtonGroup>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  isDisabled={!canSwapRange}
+                  onPress={handleSwapRangeEndpoints}
+                >
+                  <ArrowUpDown className='size-3.5' aria-hidden />
+                  互换
+                </Button>
               </div>
             </div>
           ) : null}
@@ -712,9 +899,10 @@ function DriveChangeHistoryPageContent({
               {filteredVersionsDesc.map((version, index) => {
                 const isSelected =
                   mode === 'single' && version.id === activeSelectedId
-                const isEndpoint =
-                  mode === 'range' &&
-                  (version.id === activeBaseId || version.id === activeTargetId)
+                const isBase = mode === 'range' && version.id === activeBaseId
+                const isTarget =
+                  mode === 'range' && version.id === activeTargetId
+                const isEndpoint = isBase || isTarget
                 const isInRange =
                   mode === 'range' &&
                   !isEndpoint &&
@@ -765,6 +953,16 @@ function DriveChangeHistoryPageContent({
                           <span className='text-sm font-semibold tabular-nums text-foreground'>
                             v{version.versionNumber}
                           </span>
+                          {isBase ? (
+                            <Chip color='warning' variant='soft' size='sm'>
+                              基准
+                            </Chip>
+                          ) : null}
+                          {isTarget ? (
+                            <Chip color='accent' variant='soft' size='sm'>
+                              目标
+                            </Chip>
+                          ) : null}
                           {version.isCurrent ? (
                             <Chip size='sm'>当前</Chip>
                           ) : null}
@@ -818,7 +1016,7 @@ function DriveChangeHistoryPageContent({
         </aside>
 
         {/* Right Diff Inspector */}
-        <section className='flex min-w-0 flex-col gap-4' aria-live='polite'>
+        <section className='flex min-w-0 flex-col gap-4'>
           {versionsQuery.isLoading ? (
             <div className='rounded-2xl border border-separator bg-surface p-6 shadow-surface'>
               <Skeleton className='mb-4 h-6 w-48' />
@@ -833,14 +1031,14 @@ function DriveChangeHistoryPageContent({
                 可切换至「创建至今」或清空来源筛选查看完整变更历史。
               </p>
             </div>
-          ) : mode === 'single' && activeSelectedId ? (
+          ) : mode === 'single' && activeSelectedVersion ? (
             <SingleDiffCard
               itemId={itemId}
-              current={versionById.get(activeSelectedId)!}
-              previous={findPreviousComparableVersion(
-                allVersionsDesc,
-                activeSelectedId
-              )}
+              current={activeSelectedVersion}
+              previous={selectedPrevious}
+              hasMoreOlder={hasMoreOlder}
+              isLoadingMoreOlder={versionsQuery.isFetchingNextPage}
+              onLoadMoreOlder={() => void versionsQuery.fetchNextPage()}
               versionById={versionById}
               contentStateById={contentStateById}
               diffStyle={diffStyle}
@@ -851,15 +1049,15 @@ function DriveChangeHistoryPageContent({
               onExpandGap={handleExpandGap}
               onRestore={setRestoreTarget}
             />
-          ) : mode === 'range' && activeTargetId ? (
+          ) : mode === 'range' && activeTargetVersion ? (
             <RangeDiffCard
               itemId={itemId}
-              base={
-                activeBaseId === EMPTY_BASE_VERSION_ID
-                  ? null
-                  : (versionById.get(activeBaseId) ?? null)
-              }
-              target={versionById.get(activeTargetId)!}
+              base={activeBaseVersion}
+              target={activeTargetVersion}
+              incompleteRangeBase={incompleteRangeBase && hasMoreOlder}
+              isLoadingMoreOlder={versionsQuery.isFetchingNextPage}
+              onLoadMoreOlder={() => void versionsQuery.fetchNextPage()}
+              onSwap={canSwapRange ? handleSwapRangeEndpoints : undefined}
               contentStateById={contentStateById}
               diffStyle={diffStyle}
               showFull={showFull}
@@ -899,6 +1097,9 @@ function DriveChangeHistoryPageContent({
                     allVersionsDesc,
                     version.id
                   )}
+                  hasMoreOlder={hasMoreOlder}
+                  isLoadingMoreOlder={versionsQuery.isFetchingNextPage}
+                  onLoadMoreOlder={() => void versionsQuery.fetchNextPage()}
                   versionById={versionById}
                   contentStateById={contentStateById}
                   diffStyle={diffStyle}
@@ -964,38 +1165,25 @@ function DiffControlsBar({
 }) {
   return (
     <div className='flex flex-wrap items-center gap-2'>
-      <div
-        role='group'
+      <ToggleButtonGroup
         aria-label='对比视图'
-        className='inline-flex items-center gap-0.5 rounded-full bg-surface-secondary p-0.5'
+        selectionMode='single'
+        disallowEmptySelection
+        size='sm'
+        selectedKeys={new Set([diffStyle])}
+        onSelectionChange={(keys) => {
+          const next = [...keys][0]
+          if (next === 'unified' || next === 'split') {
+            onDiffStyleChange(next)
+          }
+        }}
       >
-        <Button
-          type='button'
-          size='sm'
-          variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
-          aria-pressed={diffStyle === 'unified'}
-          className={cn(
-            'h-7 rounded-full px-3 text-xs',
-            diffStyle === 'unified' && 'bg-surface font-medium shadow-surface'
-          )}
-          onPress={() => onDiffStyleChange('unified')}
-        >
-          统一
-        </Button>
-        <Button
-          type='button'
-          size='sm'
-          variant={diffStyle === 'split' ? 'outline' : 'ghost'}
-          aria-pressed={diffStyle === 'split'}
-          className={cn(
-            'h-7 rounded-full px-3 text-xs',
-            diffStyle === 'split' && 'bg-surface font-medium shadow-surface'
-          )}
-          onPress={() => onDiffStyleChange('split')}
-        >
+        <ToggleButton id='unified'>统一</ToggleButton>
+        <ToggleButton id='split'>
+          <ToggleButtonGroup.Separator />
           分栏
-        </Button>
-      </div>
+        </ToggleButton>
+      </ToggleButtonGroup>
       <Button
         type='button'
         variant='outline'
@@ -1019,42 +1207,28 @@ type ContentStateMap = ReadonlyMap<
 >
 
 function VersionDiffBody({
-  baseVersionId,
-  targetVersionId,
-  contentStateById,
+  ops,
+  stats,
+  loading,
+  error,
+  onRetry,
   diffStyle,
   showFull,
   expandedGapKeys,
   keyPrefix,
   onExpandGap,
-  onStatsReady,
 }: {
-  readonly baseVersionId: string | null
-  readonly targetVersionId: string
-  readonly contentStateById: ContentStateMap
+  readonly ops: readonly DiffLineOp[] | null
+  readonly stats: DiffStats | null
+  readonly loading: boolean
+  readonly error: string | null
+  readonly onRetry: () => void
   readonly diffStyle: ChangeHistoryDiffStyle
   readonly showFull: boolean
   readonly expandedGapKeys: ReadonlySet<string>
   readonly keyPrefix: string
   readonly onExpandGap: (gapKey: string) => void
-  readonly onStatsReady?: (ops: readonly DiffLineOp[]) => void
 }) {
-  const baseState = baseVersionId ? contentStateById.get(baseVersionId) : null
-  const targetState = contentStateById.get(targetVersionId)
-
-  const loading = Boolean(baseState?.isLoading || targetState?.isLoading)
-  const error = targetState?.error ?? baseState?.error ?? null
-
-  const ops = useMemo(() => {
-    if (!targetState?.data) return null
-    if (baseVersionId && !baseState?.data) return null
-    return computeLineDiff(baseState?.data?.text ?? '', targetState.data.text)
-  }, [baseState?.data, baseVersionId, targetState?.data])
-
-  useEffect(() => {
-    if (ops && onStatsReady) onStatsReady(ops)
-  }, [onStatsReady, ops])
-
   if (loading || (!ops && !error)) {
     return (
       <div className='grid gap-2 p-4'>
@@ -1065,7 +1239,7 @@ function VersionDiffBody({
     )
   }
 
-  if (error || !ops) {
+  if (error || !ops || !stats) {
     return (
       <div className='p-4'>
         <Alert status='danger'>
@@ -1079,10 +1253,7 @@ function VersionDiffBody({
                   type='button'
                   variant='outline'
                   size='sm'
-                  onPress={() => {
-                    baseState?.refetch()
-                    targetState?.refetch()
-                  }}
+                  onPress={onRetry}
                 >
                   重试
                 </Button>
@@ -1094,7 +1265,6 @@ function VersionDiffBody({
     )
   }
 
-  const stats = getDiffStats(ops)
   if (stats.additions === 0 && stats.deletions === 0) {
     return (
       <div className='px-6 py-12 text-center text-sm text-muted'>
@@ -1120,6 +1290,9 @@ function SingleDiffCard({
   itemId,
   current,
   previous,
+  hasMoreOlder,
+  isLoadingMoreOlder,
+  onLoadMoreOlder,
   versionById,
   contentStateById,
   diffStyle,
@@ -1135,6 +1308,9 @@ function SingleDiffCard({
   readonly itemId: string
   readonly current: DriveFileVersionDto
   readonly previous: DriveFileVersionDto | null
+  readonly hasMoreOlder: boolean
+  readonly isLoadingMoreOlder: boolean
+  readonly onLoadMoreOlder: () => void
   readonly versionById: ReadonlyMap<string, DriveFileVersionDto>
   readonly contentStateById: ContentStateMap
   readonly diffStyle: ChangeHistoryDiffStyle
@@ -1146,27 +1322,32 @@ function SingleDiffCard({
   readonly onExpandGap: (gapKey: string) => void
   readonly onRestore: (version: DriveFileVersionDto) => void
 }) {
+  const needsOlderVersion = previous === null && hasMoreOlder
   const prevState = previous ? contentStateById.get(previous.id) : null
   const curState = contentStateById.get(current.id)
-  const stats = useMemo(() => {
+  const ops = useMemo(() => {
+    if (needsOlderVersion) return null
     if (!curState?.data) return null
     if (previous && !prevState?.data) return null
-    return getDiffStats(
-      computeLineDiff(prevState?.data?.text ?? '', curState.data.text)
-    )
-  }, [curState?.data, prevState?.data, previous])
+    return computeLineDiff(prevState?.data?.text ?? '', curState.data.text)
+  }, [curState?.data, needsOlderVersion, prevState?.data, previous])
+  const stats = useMemo(() => (ops ? getDiffStats(ops) : null), [ops])
+  const loading = Boolean(prevState?.isLoading || curState?.isLoading)
+  const error = curState?.error ?? prevState?.error ?? null
 
   const restoredFrom = current.restoredFromVersionId
     ? versionById.get(current.restoredFromVersionId)
     : null
   const heading = previous
     ? `v${previous.versionNumber} → v${current.versionNumber}`
-    : `初始创建 · v${current.versionNumber}`
+    : needsOlderVersion
+      ? `v${current.versionNumber}`
+      : `初始创建 · v${current.versionNumber}`
 
   return (
     <article
       id={id}
-      className='overflow-hidden rounded-2xl border border-separator bg-surface shadow-surface'
+      className='scroll-mt-28 overflow-hidden rounded-2xl border border-separator bg-surface shadow-surface lg:scroll-mt-20'
     >
       <div className='flex flex-wrap items-center justify-between gap-3 border-b border-separator px-4 py-3'>
         <div className='flex min-w-0 flex-col gap-1'>
@@ -1244,16 +1425,41 @@ function SingleDiffCard({
         </div>
       </div>
 
-      <VersionDiffBody
-        baseVersionId={previous?.id ?? null}
-        targetVersionId={current.id}
-        contentStateById={contentStateById}
-        diffStyle={diffStyle}
-        showFull={showFull}
-        expandedGapKeys={expandedGapKeys}
-        keyPrefix={`single:${current.id}`}
-        onExpandGap={onExpandGap}
-      />
+      {needsOlderVersion ? (
+        <div className='flex flex-col items-center justify-center gap-3 px-6 py-12 text-center'>
+          <p className='text-sm text-muted'>
+            需要加载更早版本以对比 v{current.versionNumber} 的上一版变更
+          </p>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            isDisabled={isLoadingMoreOlder}
+            onPress={onLoadMoreOlder}
+          >
+            {isLoadingMoreOlder ? (
+              <Loader2 className='size-3.5 animate-spin' aria-hidden />
+            ) : null}
+            {isLoadingMoreOlder ? '加载中' : '加载更早版本'}
+          </Button>
+        </div>
+      ) : (
+        <VersionDiffBody
+          ops={ops}
+          stats={stats}
+          loading={loading}
+          error={error}
+          onRetry={() => {
+            prevState?.refetch()
+            curState?.refetch()
+          }}
+          diffStyle={diffStyle}
+          showFull={showFull}
+          expandedGapKeys={expandedGapKeys}
+          keyPrefix={`single:${current.id}`}
+          onExpandGap={onExpandGap}
+        />
+      )}
     </article>
   )
 }
@@ -1262,6 +1468,10 @@ function RangeDiffCard({
   itemId,
   base,
   target,
+  incompleteRangeBase,
+  isLoadingMoreOlder,
+  onLoadMoreOlder,
+  onSwap,
   contentStateById,
   diffStyle,
   showFull,
@@ -1274,6 +1484,10 @@ function RangeDiffCard({
   readonly itemId: string
   readonly base: DriveFileVersionDto | null
   readonly target: DriveFileVersionDto
+  readonly incompleteRangeBase: boolean
+  readonly isLoadingMoreOlder: boolean
+  readonly onLoadMoreOlder: () => void
+  readonly onSwap?: () => void
   readonly contentStateById: ContentStateMap
   readonly diffStyle: ChangeHistoryDiffStyle
   readonly showFull: boolean
@@ -1285,14 +1499,16 @@ function RangeDiffCard({
 }) {
   const baseState = base ? contentStateById.get(base.id) : null
   const targetState = contentStateById.get(target.id)
-  const stats = useMemo(() => {
+  const ops = useMemo(() => {
     if (!targetState?.data) return null
     if (base && !baseState?.data) return null
-    return getDiffStats(
-      computeLineDiff(baseState?.data?.text ?? '', targetState.data.text)
-    )
+    return computeLineDiff(baseState?.data?.text ?? '', targetState.data.text)
   }, [base, baseState?.data, targetState?.data])
+  const stats = useMemo(() => (ops ? getDiffStats(ops) : null), [ops])
+  const loading = Boolean(baseState?.isLoading || targetState?.isLoading)
+  const error = targetState?.error ?? baseState?.error ?? null
 
+  const isReversed = base !== null && base.versionNumber > target.versionNumber
   const spanCount = Math.abs(target.versionNumber - (base?.versionNumber ?? 0))
   const heading = base
     ? `v${base.versionNumber} → v${target.versionNumber}`
@@ -1309,6 +1525,11 @@ function RangeDiffCard({
             <Chip variant='secondary' size='sm' className='tabular-nums'>
               累计跨 {spanCount} 次变更
             </Chip>
+            {isReversed ? (
+              <Chip color='warning' variant='soft' size='sm'>
+                逆向对比
+              </Chip>
+            ) : null}
             {stats ? (
               <>
                 <Chip
@@ -1344,6 +1565,17 @@ function RangeDiffCard({
         </div>
 
         <div className='flex flex-wrap items-center gap-2'>
+          {isReversed && onSwap ? (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onPress={onSwap}
+            >
+              <ArrowUpDown className='size-3.5' aria-hidden />
+              调换顺序
+            </Button>
+          ) : null}
           <DiffControlsBar
             diffStyle={diffStyle}
             showFull={showFull}
@@ -1371,10 +1603,33 @@ function RangeDiffCard({
         </div>
       </div>
 
+      {incompleteRangeBase ? (
+        <div className='flex flex-wrap items-center justify-between gap-2 border-b border-separator bg-surface-secondary px-4 py-2 text-xs text-muted'>
+          <span>
+            更早历史版本尚未全部加载，当前基准暂以已加载的最早版本 v
+            {base?.versionNumber ?? 1} 为起点。
+          </span>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            isDisabled={isLoadingMoreOlder}
+            onPress={onLoadMoreOlder}
+          >
+            {isLoadingMoreOlder ? '加载中' : '加载更早版本'}
+          </Button>
+        </div>
+      ) : null}
+
       <VersionDiffBody
-        baseVersionId={base?.id ?? null}
-        targetVersionId={target.id}
-        contentStateById={contentStateById}
+        ops={ops}
+        stats={stats}
+        loading={loading}
+        error={error}
+        onRetry={() => {
+          baseState?.refetch()
+          targetState?.refetch()
+        }}
         diffStyle={diffStyle}
         showFull={showFull}
         expandedGapKeys={expandedGapKeys}

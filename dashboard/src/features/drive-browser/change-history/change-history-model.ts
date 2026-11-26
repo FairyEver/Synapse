@@ -37,9 +37,9 @@ export function resolveDateBounds(
   now: Date = new Date()
 ): { readonly from: string | null; readonly to: string | null } {
   const today = toLocalCalendarDate(now)
-  if (filter.preset === '7d') return { from: shiftLocalCalendarDays(now, -7), to: today }
-  if (filter.preset === '14d') return { from: shiftLocalCalendarDays(now, -14), to: today }
-  if (filter.preset === '30d') return { from: shiftLocalCalendarDays(now, -30), to: today }
+  if (filter.preset === '7d') return { from: shiftLocalCalendarDays(now, -6), to: today }
+  if (filter.preset === '14d') return { from: shiftLocalCalendarDays(now, -13), to: today }
+  if (filter.preset === '30d') return { from: shiftLocalCalendarDays(now, -29), to: today }
   if (filter.preset === 'custom') {
     const from = filter.dateFrom.trim() || null
     const to = filter.dateTo.trim() || null
@@ -82,16 +82,29 @@ export function findPreviousComparableVersion(
 
 export function resolveRangeCumulativeBounds(
   allVersionsDesc: readonly DriveFileVersionDto[],
-  filteredVersionsDesc: readonly DriveFileVersionDto[]
-): { readonly baseVersionId: string; readonly targetVersionId: string } | null {
+  filteredVersionsDesc: readonly DriveFileVersionDto[],
+  options: { readonly hasMoreOlder?: boolean } = {}
+): {
+  readonly baseVersionId: string
+  readonly targetVersionId: string
+  readonly incompleteBase: boolean
+} | null {
   const comparable = filteredVersionsDesc.filter((version) => !version.deletePending)
   if (comparable.length === 0) return null
   const latest = comparable[0]!
   const earliest = comparable[comparable.length - 1]!
   const preceding = findPreviousComparableVersion(allVersionsDesc, earliest.id)
+  if (!preceding && options.hasMoreOlder) {
+    return {
+      baseVersionId: earliest.id,
+      targetVersionId: latest.id,
+      incompleteBase: true,
+    }
+  }
   return {
     baseVersionId: preceding ? preceding.id : EMPTY_BASE_VERSION_ID,
     targetVersionId: latest.id,
+    incompleteBase: false,
   }
 }
 

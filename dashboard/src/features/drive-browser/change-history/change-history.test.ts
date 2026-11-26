@@ -110,17 +110,29 @@ describe('change-history diff engine', () => {
     expect(rows[1]?.left?.text).toBe('b')
     expect(rows[1]?.right?.text).toBe('b2')
   })
+
+  it('normalizes CR/CRLF line endings and handles single newline without double counting', () => {
+    expect(getDiffStats(computeLineDiff('a\r\nb\rc', 'a\nb\nc'))).toEqual({
+      additions: 0,
+      deletions: 0,
+    })
+    expect(getDiffStats(computeLineDiff('', '\n'))).toEqual({
+      additions: 1,
+      deletions: 0,
+    })
+  })
 })
 
 describe('change-history filtering and range bounds', () => {
   const now = new Date('2026-11-26T12:00:00+08:00')
   const versions: DriveFileVersionDto[] = [
     makeVersion({ id: 'v3', versionNumber: 3, source: 'online_edit', createdAt: '2026-11-25T10:00:00+08:00', isCurrent: true }),
-    makeVersion({ id: 'v2', versionNumber: 2, source: 'collaboration', createdAt: '2026-11-16T10:00:00+08:00' }),
+    makeVersion({ id: 'v2', versionNumber: 2, source: 'collaboration', createdAt: '2026-11-19T10:00:00+08:00' }),
     makeVersion({ id: 'v1', versionNumber: 1, source: 'upload', createdAt: '2026-10-20T10:00:00+08:00' }),
   ]
 
-  it('filters by time preset, custom date range, and source', () => {
+  it('filters by inclusive time preset, custom date range, and source', () => {
+    // 7d on 2026-11-26 covers 2026-11-20..2026-11-26 (7 calendar days, excluding 2026-11-19).
     expect(
       filterChangeHistoryVersions(versions, { preset: '7d', dateFrom: '', dateTo: '', source: 'all' }, now).map((v) => v.id)
     ).toEqual(['v3'])
@@ -138,15 +150,24 @@ describe('change-history filtering and range bounds', () => {
     ).toEqual(['v1'])
   })
 
-  it('resolves cumulative range bounds to the version preceding the earliest filtered entry', () => {
+  it('resolves cumulative range bounds and avoids fake empty base when older pages remain unloaded', () => {
     const recent = filterChangeHistoryVersions(versions, { preset: '14d', dateFrom: '', dateTo: '', source: 'all' }, now)
     expect(resolveRangeCumulativeBounds(versions, recent)).toEqual({
       baseVersionId: 'v1',
       targetVersionId: 'v3',
+      incompleteBase: false,
     })
     expect(resolveRangeCumulativeBounds(versions, versions)).toEqual({
       baseVersionId: EMPTY_BASE_VERSION_ID,
       targetVersionId: 'v3',
+      incompleteBase: false,
+    })
+    expect(
+      resolveRangeCumulativeBounds(versions, versions, { hasMoreOlder: true })
+    ).toEqual({
+      baseVersionId: 'v1',
+      targetVersionId: 'v3',
+      incompleteBase: true,
     })
   })
 })
@@ -194,7 +215,7 @@ describe('DriveChangeHistoryPage', () => {
     })
   })
 
-  it('shows an unsupported notice for non-text files', async () => {
+  it('shows an unsupported notice for non-text files without querying versions', async () => {
     vi.mocked(driveBrowserApi.getOwnerItem).mockResolvedValue(ownerSnapshot('archive.zip', 'download-only'))
 
     renderPage()
@@ -202,7 +223,38 @@ describe('DriveChangeHistoryPage', () => {
     await waitFor(() => {
       expect(document.body.textContent).toContain('该文件类型不支持文本变更对比')
     })
+    expect(driveFileVersionsApi.list).not.toHaveBeenCalled()
     expect(driveFileVersionsApi.getContent).not.toHaveBeenCalled()
+  })
+
+  it('keeps aria-live on a dedicated sr-only status node instead of the diff container', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockResolvedValue(ownerSnapshot('notes.md', 'markdown'))
+    vi.mocked(driveFileVersionsApi.list).mockResolvedValue({
+      items: [
+        makeVersion({ id: 'v2', versionNumber: 2, source: 'online_edit', createdAt: '2026-11-26T10:00:00+08:00', isCurrent: true }),
+        makeVersion({ id: 'v1', versionNumber: 1, source: 'upload', createdAt: '2026-11-20T10:00:00+08:00' }),
+      ],
+      total: 2,
+      page: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveFileVersionsApi.getContent).mockResolvedValue({
+      itemId: 'item-1',
+      versionId: 'v2',
+      versionNumber: 2,
+      size: '10',
+      mimeType: 'text/markdown',
+      text: 'hello',
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('v1 → v2')
+    })
+    const liveNodes = document.querySelectorAll('[aria-live]')
+    expect(liveNodes).toHaveLength(1)
+    expect(liveNodes[0]?.getAttribute('role')).toBe('status')
+    expect(liveNodes[0]?.className).toContain('sr-only')
   })
 })
 

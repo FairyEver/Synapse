@@ -232,7 +232,7 @@ export function DriveFileVersionContent({
   }
   if (error) {
     return (
-      <div className='flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-md border p-4 text-center'>
+      <div className='flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-separator p-4 text-center'>
         <div className='grid gap-1 text-sm'>
           <div className='font-medium'>读取失败</div>
           <div className='text-muted'>{error}</div>
@@ -245,7 +245,7 @@ export function DriveFileVersionContent({
   }
   if (versions.length === 0) {
     return (
-      <div className='flex min-h-48 flex-1 items-center justify-center rounded-md border p-4 text-sm text-muted'>
+      <div className='flex min-h-48 flex-1 items-center justify-center rounded-2xl border border-separator p-4 text-sm text-muted'>
         暂无历史版本
       </div>
     )

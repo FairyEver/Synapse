@@ -66,6 +66,7 @@ import {
   type DriveCollaborationCheckpointResultDto,
   type DriveDocumentImageUploadPrepareResult,
   type DriveHostedDocumentImageDto,
+  isDriveTextDiffPreviewKind,
   isPlainDriveMarkdownItem,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
@@ -917,7 +918,7 @@ export class DriveService implements OnApplicationBootstrap {
   async getFileVersionContent(userId: string, itemId: string, versionId: string): Promise<DriveFileVersionContentDto> {
     const item = await this.requireOwnedFile(userId, itemId)
     const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
-    if (!isDriveTextEditablePreviewKind(previewKind)) {
+    if (!isDriveTextDiffPreviewKind(previewKind)) {
       throw new BadRequestException("该文件类型暂不支持查看文本变更历史。")
     }
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
