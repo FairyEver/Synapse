@@ -79,3 +79,30 @@ it("adds a newly configured account only after confirming its own receipt bounda
   expect(prepared).toEqual(["new-account"])
   expect((await rig.repo.sourcesFor(item.mailSubscription!.id)).map(source => source.cursor)).toContain("99")
 })
+it("skips deliveries that miss trigger metadata filters before hydrating body or running the executor", async () => {
+  const rig = await fixture()
+  const item = await rig.items.create({ ...rig.input, enabled: true })
+  const root = item.mailSubscription!.id, source = (await rig.repo.sourcesFor(root))[0]!
+  await rig.repo.enqueuePage(root, source.sourceKey, 0, {
+    receipts: [
+      { sourceKey: source.sourceKey, receiptKey: "filtered-out", messageId: "skip-me", receivedAt: "2026-11-05T01:00:00Z" },
+      { sourceKey: source.sourceKey, receiptKey: "matched", messageId: "run-me", receivedAt: "2026-11-05T01:01:00Z" },
+    ],
+    nextCursor: "22",
+    complete: true,
+  })
+  const hydratedIds: string[] = []
+  const origHydrate = rig.source.hydrate
+  rig.source.matchesFilter = async (_ctx, receipt) => receipt.messageId === "run-me"
+  rig.source.hydrate = async (ctx, receipt) => {
+    hydratedIds.push(receipt.messageId!)
+    return origHydrate(ctx, receipt)
+  }
+
+  await rig.worker.reconcile("filtered")
+
+  expect(hydratedIds).toEqual(["run-me"])
+  expect(rig.bodies).toEqual(["body"])
+  expect(await rig.repo.nextPending(item.id, rig.ctx.identity)).toBeNull()
+  expect(await rig.runs.listByAutomation(item.id)).toHaveLength(1)
+})

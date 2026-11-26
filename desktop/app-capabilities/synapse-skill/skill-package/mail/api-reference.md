@@ -1238,7 +1238,7 @@
 
 ### app_mail_draft_create
 
-起草邮件、回复、回复全部和转发。Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId, mode and optional forwardMode. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.
+起草邮件、回复、回复全部和转发。Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId (em_<uuid> or full synapse://mail/em_<uuid> reference), mode, optional forwardMode and optional prependText/prependHtml placed directly above the quoted original message. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.
 
 权限：content.mutate；风险：normal。
 
@@ -1375,7 +1375,8 @@
     },
     "sourceMessageId": {
       "type": "string",
-      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      "maxLength": 2048,
+      "description": "Source external email ID (em_<uuid>) or full synapse://mail/em_<uuid> reference (such as {{trigger.payload.id}})."
     },
     "mode": {
       "type": "string",
@@ -1392,6 +1393,14 @@
         "inline",
         "eml"
       ]
+    },
+    "prependText": {
+      "description": "Optional plain-text reply/forward message placed above the quoted original message (reply/reply_all/forward mode only). When provided without prependHtml, safe HTML paragraphs are generated automatically.",
+      "type": "string"
+    },
+    "prependHtml": {
+      "description": "Optional HTML reply/forward message placed above the quoted original message (reply/reply_all/forward mode only).",
+      "type": "string"
     }
   },
   "required": [

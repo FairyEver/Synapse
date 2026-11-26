@@ -198,3 +198,38 @@ it("invalidates cached account/message/draft IDs after the Synapse identity chan
   await expect(r.repo.get(ctx, "messages", r.source.id)).rejects.toMatchObject({ code: "UNAVAILABLE" })
   await expect(r.drafts.execute(ctx, "draft.get", { draftId: draft.id })).rejects.toMatchObject({ code: "UNAVAILABLE" })
 })
+
+it("accepts synapse://mail/ references and prepends reply text directly above the quoted message", async () => {
+  const r = guard(await draftRig())
+  const ref = `synapse://mail/${r.source.id}`
+  const parsed = MAIL_INPUT_SCHEMAS["draft.create"].parse({
+    accountId: r.account.id,
+    sourceMessageId: ref,
+    mode: "reply_all",
+    prependText: "同意部署\n\n请按计划执行",
+  })
+  const draft = await r.drafts.execute(r.ctx, "draft.create", parsed)
+  expect(draft.sourceMessageId).toBe(r.source.id)
+  expect(draft.text.startsWith("同意部署\n\n请按计划执行\n\n> ")).toBe(true)
+  expect(draft.html.startsWith("<p>同意部署</p><p>请按计划执行</p><blockquote>")).toBe(true)
+
+  const htmlOnly = await r.drafts.execute(r.ctx, "draft.create", MAIL_INPUT_SCHEMAS["draft.create"].parse({
+    accountId: r.account.id,
+    sourceMessageId: ref,
+    mode: "reply",
+    prependHtml: "<p>同意部署</p>",
+  }))
+  expect(htmlOnly.text.startsWith("同意部署\n\n> ")).toBe(true)
+  expect(htmlOnly.html.startsWith("<p>同意部署</p><blockquote>")).toBe(true)
+
+  expect(MAIL_INPUT_SCHEMAS["draft.create"].safeParse({
+    accountId: r.account.id,
+    sourceMessageId: "synapse://mail-internal/123",
+    mode: "reply",
+  }).success).toBe(false)
+  expect(MAIL_INPUT_SCHEMAS["draft.create"].safeParse({
+    accountId: r.account.id,
+    to: [{ address: "a@example.com" }],
+    prependText: "mixed",
+  }).success).toBe(false)
+})

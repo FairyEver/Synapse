@@ -11,6 +11,10 @@ export const jobIdSchema = opaque("mj")
 export const operationIdSchema = opaque("mo")
 export const scheduledIdSchema = opaque("ms")
 export const messageIdSchema = z.string().regex(MAIL_MESSAGE_ID_PATTERN)
+export const sourceMessageIdSchema = z.string().max(2048).refine(
+  (value) => MAIL_MESSAGE_ID_PATTERN.test(value) || parseMailReference(value) !== null,
+  "Invalid email message ID or synapse://mail/ reference",
+).describe("Source external email ID (em_<uuid>) or full synapse://mail/em_<uuid> reference (such as {{trigger.payload.id}}).")
 export const revisionSchema = z.number().int().positive()
 const line = z.string().max(1000).regex(/^[^\r\n\x00]*$/u)
 const text = z.string().refine((s) => new TextEncoder().encode(s).length <= MAIL_MAX_BODY_BYTES, "Body too large")
@@ -101,7 +105,14 @@ export const MAIL_INPUT_SCHEMAS = {
   "search.get": z.object({ jobId: jobIdSchema, ...pageInput }).strict(),
   "search.resume": z.object({ jobId: jobIdSchema }).strict(), "search.cancel": z.object({ jobId: jobIdSchema }).strict(),
   "draft.list": z.object({ ...account, ...pageInput }).strict(), "draft.get": z.object({ draftId: draftIdSchema }).strict(),
-  "draft.create": z.union([draftInputSchema, z.object({ ...account, sourceMessageId: messageIdSchema, mode: z.enum(["reply", "reply_all", "forward"]), forwardMode: z.enum(["inline", "eml"]).default("inline") }).strict()]),
+  "draft.create": z.union([draftInputSchema, z.object({
+    ...account,
+    sourceMessageId: sourceMessageIdSchema,
+    mode: z.enum(["reply", "reply_all", "forward"]),
+    forwardMode: z.enum(["inline", "eml"]).default("inline"),
+    prependText: text.optional().describe("Optional plain-text reply/forward message placed above the quoted original message (reply/reply_all/forward mode only). When provided without prependHtml, safe HTML paragraphs are generated automatically."),
+    prependHtml: text.optional().describe("Optional HTML reply/forward message placed above the quoted original message (reply/reply_all/forward mode only)."),
+  }).strict()]),
   "draft.update": z.object({ draftId: draftIdSchema, expectedRevision: revisionSchema, patch: draftPatchSchema }).strict(),
   "draft.delete": z.object({ draftId: draftIdSchema, expectedRevision: revisionSchema }).strict(),
   "attachment.import_local": z.object({ ...account, filePath: z.string().min(1).max(4096).optional(), shareImageRef: z.string().uuid().optional() }).strict().refine(input => (input.filePath === undefined) !== (input.shareImageRef === undefined), "Provide exactly one of filePath or shareImageRef."),

@@ -6,7 +6,7 @@ it("exposes alternative inputs as discoverable object properties for clients wit
   const tools = buildMailTools()
   const expected = {
     app_mail_message_get: ["messageId", "reference"],
-    app_mail_draft_create: ["accountId", "to", "subject", "sourceMessageId", "mode", "forwardMode"],
+    app_mail_draft_create: ["accountId", "to", "subject", "sourceMessageId", "mode", "forwardMode", "prependText", "prependHtml"],
     app_mail_attachment_list: ["messageId", "draftId", "cursor", "limit"],
     app_mail_attachment_get: ["assetId", "messageId", "attachmentId"],
     app_mail_attachment_download_file: ["assetId", "messageId", "attachmentId", "outputPath"],

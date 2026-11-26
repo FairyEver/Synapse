@@ -35,7 +35,7 @@ const descriptions: Record<MailAction, string> = {
   "search.cancel": "Cancel remaining search work and keep the results already found.",
   "draft.list": "List local and indexed remote email draft summaries for one account.",
   "draft.get": "Read a draft and its revision, content and independent local/server save states.",
-  "draft.create": "Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId, mode and optional forwardMode. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.",
+  "draft.create": "Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId (em_<uuid> or full synapse://mail/em_<uuid> reference), mode, optional forwardMode and optional prependText/prependHtml placed directly above the quoted original message. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.",
   "draft.update": "Save email draft fields and asset references with expectedRevision; concurrent edits are rejected without overwriting.",
   "draft.delete": "Discard one exact draft revision and its associated remote copy; never deletes unrelated drafts.",
   "attachment.import_local": "Import exactly one local filePath or app.agent.share.generate shareImageRef (PNG) into this account's independent controlled email assets. Does not upload it to Drive.",

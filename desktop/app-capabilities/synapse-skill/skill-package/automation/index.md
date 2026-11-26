@@ -51,7 +51,7 @@ Known built-in trigger types include:
 - `builtin.interval` - schedule by fixed interval.
 - `builtin.webhook` - run when a matching Webhook delivery arrives.
 - `builtin.mail-internal-received` - receive any new internal letter; strict empty config.
-- `builtin.mail-received` - receive new external Inbox mail; omit `accountId` for all accounts or select one discovered local account.
+- `builtin.mail-received` - receive new external Inbox mail; omit `accountId` for all accounts or select one discovered local account, and optionally set local metadata pre-filters (`senderMatches`, `subjectContains`, `originalOnly`) evaluated before fetching the body or starting the executor.
 - `builtin.manual` - run only when a user or Agent explicitly invokes the existing manual-run operation; strict empty config and no automatic trigger.
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.

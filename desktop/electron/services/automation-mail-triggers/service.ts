@@ -166,6 +166,15 @@ export class AutomationMailTriggerService {
     let claimed = false
     const runId = `automation-mail-run:${row.id}`
     try {
+      if (row.state !== "awaiting_metadata" && source.matchesFilter) {
+        const precheckItem = await this.deps.items.get(item.id)
+        if (!precheckItem?.enabled || precheckItem.mailSubscription?.id !== item.mailSubscription!.id) return false
+        const matched = await source.matchesFilter(context, row.receipt, precheckItem.trigger.config); this.assert(context)
+        if (!matched) {
+          await this.deps.repository.finishDispatch(row.id, { state: "skipped", errorCode: "FILTER_NOT_MATCHED" })
+          return true
+        }
+      }
       const payload = validateMailPayload(await source.hydrate(context, row.receipt)); this.assert(context)
       if (row.state === "awaiting_metadata") {
         await this.deps.repository.refreshMetadata(row, payload.receivedAt); return true

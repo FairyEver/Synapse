@@ -17,6 +17,8 @@ import { MailAssets } from "./assets"
 import { MailAccounts, type StoredAccount } from "./accounts"
 import { MailSync, resolveMessage } from "./sync"
 import { MailAutomationReceipts } from "./automation-receipts"
+import { hasMailReceivedFilters, matchesMailReceivedMetadata } from "../../../automation-trigger-packages/builtin/mail-received/filter"
+import { mailReceivedConfigSchema } from "../../../automation-trigger-packages/builtin/mail-received/schema"
 import type { MailTriggerContext, MailSourceBoundary } from "../../../electron/services/automation-mail-triggers/types"
 import type { MailReceiptRef } from "../../../electron/services/automation-mail-triggers/types"
 import { buildExternalMailPayload } from "../../../electron/services/automation-mail-triggers/payload"
@@ -128,6 +130,21 @@ export class MailService {
   }
   scanAutomationReceipts(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number) {
     return this.automationReceipts.scan(this.automationContext(context), boundary, cursor, limit)
+  }
+  async matchesAutomationReceiptFilter(context: MailTriggerContext, receipt: MailReceiptRef, triggerConfig: Record<string, unknown>): Promise<boolean> {
+    const parsed = mailReceivedConfigSchema.safeParse(triggerConfig)
+    if (!parsed.success || !hasMailReceivedFilters(parsed.data)) return true
+    const ctx = this.automationContext(context)
+    if (!receipt.messageId || !receipt.locator) throw new MailError("UNAVAILABLE", "邮件引用不可用")
+    const row = await resolveMessage(this.repo, ctx, receipt.messageId)
+    if ((await this.accounts.get(ctx, row.accountId)).paused) throw new MailError("ACCOUNT_PAUSED", "邮箱已暂停，请恢复后处理新信")
+    if (row.data.originReceiptKey !== receipt.receiptKey || row.accountId !== receipt.locator.accountId) throw new MailError("STALE_TARGET", "邮件身份已变化")
+    if (row.data.summary.metadataTruncated) return false
+    return matchesMailReceivedMetadata(parsed.data, {
+      fromAddresses: row.data.summary.from.map(address => address.address),
+      subject: row.data.summary.subject,
+      hasReferences: row.data.headers.references.length > 0,
+    })
   }
   async readAutomationReceipt(context: MailTriggerContext, receipt: MailReceiptRef) {
     const ctx = this.automationContext(context)

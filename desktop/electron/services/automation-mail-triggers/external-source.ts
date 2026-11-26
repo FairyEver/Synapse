@@ -5,6 +5,7 @@ export interface ExternalMailSourceDeps {
   assertCurrent(context: MailTriggerContext): void
   prepare(context: MailTriggerContext, accountId?: string): Promise<MailSourceBoundary[]>
   scan(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number): Promise<MailReceiptPage>
+  matchesFilter?(context: MailTriggerContext, receipt: MailReceiptRef, triggerConfig: Record<string, unknown>): Promise<boolean>
   read(context: MailTriggerContext, receipt: MailReceiptRef): Promise<PreparedMailPayload>
 }
 export class ExternalMailReceiptSource implements MailReceiptSource {
@@ -18,6 +19,13 @@ export class ExternalMailReceiptSource implements MailReceiptSource {
   }
   async scan(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number) {
     this.assert(context); const result = await this.deps.scan(context, boundary, cursor, limit); this.assert(context); return result
+  }
+  async matchesFilter(context: MailTriggerContext, receipt: MailReceiptRef, triggerConfig: Record<string, unknown>) {
+    this.assert(context)
+    if (!this.deps.matchesFilter) return true
+    const result = await this.deps.matchesFilter(context, receipt, triggerConfig)
+    this.assert(context)
+    return result
   }
   async hydrate(context: MailTriggerContext, receipt: MailReceiptRef) {
     this.assert(context); const result = await this.deps.read(context, receipt); this.assert(context); return result

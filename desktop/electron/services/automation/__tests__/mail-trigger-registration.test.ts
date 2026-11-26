@@ -7,6 +7,17 @@ it("discovers two receipt triggers with body variables and strict filtering scop
   const internal = registry.get("builtin.mail-internal-received"), external = registry.get("builtin.mail-received")
   expect(internal.manifest.configSchema.parse({})).toEqual({})
   expect(external.manifest.configSchema.parse({ accountId: "account" })).toEqual({ accountId: "account" })
+  expect(external.manifest.configSchema.parse({
+    accountId: "account",
+    senderMatches: ["@world-tech.com.cn"],
+    subjectContains: ["部署"],
+    originalOnly: true,
+  })).toEqual({
+    accountId: "account",
+    senderMatches: ["@world-tech.com.cn"],
+    subjectContains: ["部署"],
+    originalOnly: true,
+  })
   expect(external.manifest.configSchema.safeParse({ subject: "filter" }).success).toBe(false)
   expect(internal.activationRequired).toBe(true)
   expect(external.manifest.variables?.some(v => v.key === "trigger.payload.body")).toBe(true)

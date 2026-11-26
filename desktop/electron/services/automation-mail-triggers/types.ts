@@ -17,6 +17,7 @@ export interface MailReceiptSource {
   discover?(context: MailTriggerContext): Promise<string[]>
   prepare(context: MailTriggerContext, accountId?: string): Promise<MailSourceBoundary[]>
   scan(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number): Promise<MailReceiptPage>
+  matchesFilter?(context: MailTriggerContext, receipt: MailReceiptRef, triggerConfig: Record<string, unknown>): Promise<boolean>
   hydrate(context: MailTriggerContext, receipt: MailReceiptRef): Promise<PreparedMailPayload>
 }
 export type MailTriggerEvent = AutomationTriggerEvent

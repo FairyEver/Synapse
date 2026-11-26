@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
 import { MAIL_MAX_BODY_BYTES, MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
+import { parseMailReference } from "../shared/manifest"
 import { draftInputSchema, draftSchema, MAIL_INPUT_SCHEMAS } from "../shared/schema"
 import { draftCommitSchema, type DraftCommit } from "../shared/private-schema"
 import { MailError, type Address, type Draft, type DraftAction, type DraftInput, type MailContext, type MailInputs, type MailResults, type MessageLocator } from "../shared/types"
@@ -25,6 +26,23 @@ type DraftHooks = { schedule?: (ctx: MailContext, draftId: string) => void; chan
 const validId = (id: string | null): id is string => !!id && /^<[^<>\s\x00-\x1f]{1,900}>$/u.test(id)
 const safeRefs = (refs: string[]) => [...new Set(refs.filter(validId))].slice(-100)
 const escape = (text: string) => text.replace(/[&<>"']/gu, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!)
+const prependTextToHtml = (value: string): string => {
+  const normalized = value.replace(/\r\n?/gu, "\n")
+  if (!normalized) return "<p></p>"
+  return normalized.split(/\n{2,}/u).map(paragraph => `<p>${escape(paragraph).replace(/\n/gu, "<br>")}</p>`).join("")
+}
+const stripHtmlToText = (value: string): string => value
+  .replace(/<\s*br\s*\/?>/giu, "\n")
+  .replace(/<\/\s*(?:p|div|li|h[1-6]|blockquote)\s*>/giu, "\n")
+  .replace(/<[^>]+>/gu, "")
+  .replace(/&nbsp;/giu, " ")
+  .replace(/&lt;/giu, "<")
+  .replace(/&gt;/giu, ">")
+  .replace(/&quot;/giu, '"')
+  .replace(/&#39;/giu, "'")
+  .replace(/&amp;/giu, "&")
+  .replace(/\n{3,}/gu, "\n\n")
+  .trim()
 const sortKey = () => String(9_999_999_999_999 - Date.now()).padStart(13, "0")
 const remoteDraftId = (source: string) => {
   const hash = createHash("sha256").update(source).digest("hex")
@@ -91,7 +109,8 @@ export class MailDrafts {
     return this.metadata(saved, { html: parsed.html, text: parsed.text })
   }
   private async prepareSource(ctx: MailContext, input: Extract<MailInputs["draft.create"], { sourceMessageId: string }>): Promise<{ input: DraftInput; extra: Partial<StoredDraft> }> {
-    const source = await resolveMessage(this.repo, ctx, input.sourceMessageId)
+    const sourceId = parseMailReference(input.sourceMessageId) ?? input.sourceMessageId
+    const source = await resolveMessage(this.repo, ctx, sourceId)
     if (source.accountId !== input.accountId) throw new MailError("UNAVAILABLE", "源邮件不属于此邮箱")
     if (source.data.summary.metadataTruncated) throw new MailError("METADATA_INCOMPLETE", "源邮件头不完整，请先核对原文")
     const account = await this.accounts.get(ctx, input.accountId), content = await this.content.body(ctx, source.id)
@@ -103,7 +122,19 @@ export class MailDrafts {
     const cc = input.mode === "reply_all" ? unique(source.data.summary.cc) : []
     const author = source.data.summary.from.map(a => a.name ? `${a.name} <${a.address}>` : a.address).join(", ")
     const quoted = `${source.data.summary.date ?? ""} ${author}\n${content.body.text}`
-    let html = `<p></p><blockquote>${escape(quoted).replace(/\n/gu, "<br>")}</blockquote>`
+    const rawPrependText = input.prependText !== undefined ? input.prependText.replace(/\r\n?/gu, "\n") : undefined
+    const rawPrependHtml = input.prependHtml
+    const leadHtml = rawPrependHtml !== undefined && rawPrependHtml !== ""
+      ? rawPrependHtml
+      : rawPrependText !== undefined && rawPrependText !== ""
+        ? prependTextToHtml(rawPrependText)
+        : "<p></p>"
+    const leadText = rawPrependText !== undefined
+      ? rawPrependText
+      : rawPrependHtml !== undefined && rawPrependHtml !== ""
+        ? stripHtmlToText(rawPrependHtml)
+        : ""
+    let html = `${leadHtml}<blockquote>${escape(quoted).replace(/\n/gu, "<br>")}</blockquote>`
     const assetIds: string[] = [], inlineImages: Draft["inlineImages"] = []
     if (input.mode === "forward") {
       if (input.forwardMode === "eml") assetIds.push((await this.content.emlAsset(ctx, source.id)).id)
@@ -119,7 +150,7 @@ export class MailDrafts {
     }
     const messageId = source.data.headers.messageId
     const subject = source.data.summary.subject
-    return { input: draftInputSchema.parse({ accountId: input.accountId, to, cc, bcc: [], subject: input.mode === "forward" ? /^(?:fw|fwd):/iu.test(subject) ? subject : `Fwd: ${subject}` : /^re:/iu.test(subject) ? subject : `Re: ${subject}`, html, text: `\n\n${quoted.split("\n").map(line => `> ${line}`).join("\n")}`, assetIds, inlineImages }), extra: { sourceMessageId: source.id, mode: input.mode, headers: { inReplyTo: input.mode !== "forward" && validId(messageId) ? messageId : null, references: input.mode === "forward" ? [] : safeRefs([...source.data.headers.references, ...(validId(messageId) ? [messageId] : [])]) } } }
+    return { input: draftInputSchema.parse({ accountId: input.accountId, to, cc, bcc: [], subject: input.mode === "forward" ? /^(?:fw|fwd):/iu.test(subject) ? subject : `Fwd: ${subject}` : /^re:/iu.test(subject) ? subject : `Re: ${subject}`, html, text: `${leadText}\n\n${quoted.split("\n").map(line => `> ${line}`).join("\n")}`, assetIds, inlineImages }), extra: { sourceMessageId: source.id, mode: input.mode, headers: { inReplyTo: input.mode !== "forward" && validId(messageId) ? messageId : null, references: input.mode === "forward" ? [] : safeRefs([...source.data.headers.references, ...(validId(messageId) ? [messageId] : [])]) } } }
   }
   /** Prepare UI editing content without writing or synchronizing a draft. */
   async prepare(ctx: MailContext, input: MailInputs["draft.create"]): Promise<Draft> {
@@ -127,7 +158,8 @@ export class MailDrafts {
     await this.accounts.get(ctx, params.accountId)
     const prepared = "sourceMessageId" in params ? await this.prepareSource(ctx, params) : { input: params, extra: {} }
     this.accounts.context.assertCurrent(ctx)
-    return draftSchema.parse({ ...prepared.input, id: `md_${randomUUID()}`, revision: 1, state: "editing", sourceMessageId: "sourceMessageId" in params ? params.sourceMessageId : null, mode: "mode" in params ? params.mode : "new", remoteLocator: null, localSaved: false, syncState: "pending", updatedAt: new Date().toISOString() })
+    const sourceMessageId = "sourceMessageId" in params ? (parseMailReference(params.sourceMessageId) ?? params.sourceMessageId) : null
+    return draftSchema.parse({ ...prepared.input, id: `md_${randomUUID()}`, revision: 1, state: "editing", sourceMessageId, mode: "mode" in params ? params.mode : "new", remoteLocator: null, localSaved: false, syncState: "pending", updatedAt: new Date().toISOString() })
   }
   /** First explicit UI save: preserve the edited body, deriving threading only from owned metadata. */
   async commit(ctx: MailContext, input: DraftCommit): Promise<Draft> {

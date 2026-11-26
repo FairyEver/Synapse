@@ -31,3 +31,48 @@ it("hydrates the complete external body without Seen, attachment, or remote imag
       { sourceKey: "source", receiptKey: row.data.originReceiptKey as string, messageId: row.id, receivedAt: "2026-11-05T00:00:00Z", locator: { ...summary.locator, endpointEpoch: "epoch" } })).rejects.toMatchObject({ code: "ACCOUNT_PAUSED" })
   } finally { await service.dispose(); await rig.close() }
 })
+
+it("evaluates mail-received metadata pre-filters from indexed headers without fetching the body", async () => {
+  const rig = await syncRig()
+  const audit = new InMemoryAuditSink()
+  const service = new MailService({ storage: rig.storage, files: new ManagedAssetStore(`${rig.root}/assets`),
+    permissionGuard: { registerPolicy: () => () => undefined, check: async () => ({ allowed: true }) }, auditSink: audit,
+    resolveOwner: () => "test-owner", events: () => undefined, open: async () => undefined,
+    notifications: { show: () => undefined }, diagnostic: () => undefined, protocols: rig.protocols })
+  try {
+    vi.mocked(rig.session.searchUids).mockResolvedValue([1, 2])
+    vi.mocked(rig.session.fetchHeaders).mockResolvedValue([
+      {
+        ...remoteHeader(1),
+        subject: "财务系统部署申请",
+        from: [{ address: "chenp@world-tech.com.cn", name: "陈鹏" }],
+        references: [],
+        receivedAt: "2026-11-26T02:00:00Z",
+        structure: { type: "text/plain", part: "1" },
+      },
+      {
+        ...remoteHeader(2),
+        subject: "回复：财务系统部署申请",
+        from: [{ address: "fanxw@world-tech.com.cn", name: "樊晓旺" }],
+        references: ["<msg-1@world-tech.com.cn>"],
+        receivedAt: "2026-11-26T02:01:00Z",
+        structure: { type: "text/plain", part: "1" },
+      },
+    ])
+    await rig.sync.runOnce(rig.ctx, rig.account.id)
+    const items = (await rig.repo.page(rig.ctx, "messages", { accountId: rig.account.id })).items
+    const original = items.find(item => (item.data.summary as { locator: { uid: number } }).locator.uid === 1)!
+    const reply = items.find(item => (item.data.summary as { locator: { uid: number } }).locator.uid === 2)!
+    const triggerCtx = { identity: { ownerId: "test-owner", apiOrigin: "https://synapse.test" }, generation: 1, signal: new AbortController().signal }
+    const filterConfig = { senderMatches: ["@world-tech.com.cn"], subjectContains: ["部署"], originalOnly: true }
+    const toReceipt = (row: typeof original) => {
+      const summary = row.data.summary as { locator: { accountId: string; folderId: string; uidValidity: string; uid: number } }
+      return { sourceKey: "source", receiptKey: row.data.originReceiptKey as string, messageId: row.id, receivedAt: "2026-11-26T02:00:00Z", locator: { ...summary.locator, endpointEpoch: "epoch" } }
+    }
+
+    expect(await service.matchesAutomationReceiptFilter(triggerCtx, toReceipt(original), filterConfig)).toBe(true)
+    expect(await service.matchesAutomationReceiptFilter(triggerCtx, toReceipt(reply), filterConfig)).toBe(false)
+    expect(await service.matchesAutomationReceiptFilter(triggerCtx, toReceipt(original), { senderMatches: ["@other.com"] })).toBe(false)
+    expect(rig.session.fetchPart).not.toHaveBeenCalled()
+  } finally { await service.dispose(); await rig.close() }
+})

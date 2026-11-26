@@ -28,3 +28,40 @@ it("shows all accounts by default and preserves a configured account when loadin
   await render("saved", true)
   expect(document.body.textContent).toContain("账号加载失败")
 })
+
+it("edits optional senderMatches, subjectContains, and originalOnly filters without losing accountId", async () => {
+  const changes = await render("ma_1")
+  const senderInput = document.getElementById("automation-mail-sender-matches") as HTMLInputElement
+  const subjectInput = document.getElementById("automation-mail-subject-contains") as HTMLInputElement
+  const originalCheckbox = document.getElementById("automation-mail-original-only") as HTMLButtonElement
+  expect(senderInput).toBeTruthy()
+  expect(subjectInput).toBeTruthy()
+  expect(originalCheckbox).toBeTruthy()
+
+  const setInputValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
+  await act(async () => {
+    setInputValue.call(senderInput, "@world-tech.com.cn, alice@example.com")
+    senderInput.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  expect(changes).toHaveBeenLastCalledWith({
+    accountId: "ma_1",
+    senderMatches: ["@world-tech.com.cn", "alice@example.com"],
+  })
+
+  await act(async () => {
+    setInputValue.call(subjectInput, "部署，上线")
+    subjectInput.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  expect(changes).toHaveBeenLastCalledWith({
+    accountId: "ma_1",
+    subjectContains: ["部署", "上线"],
+  })
+
+  await act(async () => {
+    originalCheckbox.click()
+  })
+  expect(changes).toHaveBeenLastCalledWith({
+    accountId: "ma_1",
+    originalOnly: true,
+  })
+})

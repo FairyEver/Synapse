@@ -36,7 +36,7 @@ export const coreAutomationMailTriggersDescriptor: ServiceDescriptor<AutomationM
       } })
     const external = new ExternalMailReceiptSource({ assertCurrent: context => runtime.assertCurrent(context),
       listAccounts: context => mail.automationAccountIds(context),
-      prepare: (context, accountId) => mail.prepareAutomationReceipts(context, accountId), scan: (context, boundary, cursor, limit) => mail.scanAutomationReceipts(context, boundary, cursor, limit), read: (context, receipt) => mail.readAutomationReceipt(context, receipt) })
+      prepare: (context, accountId) => mail.prepareAutomationReceipts(context, accountId), scan: (context, boundary, cursor, limit) => mail.scanAutomationReceipts(context, boundary, cursor, limit), matchesFilter: (context, receipt, triggerConfig) => mail.matchesAutomationReceiptFilter(context, receipt, triggerConfig), read: (context, receipt) => mail.readAutomationReceipt(context, receipt) })
     runtime = new AutomationMailTriggerLifecycle({ repository: new MailTriggerRepository(storage), items: { list: () => items.list(), get: id => items.get(id) },
       runs: new AutomationRunRepository({ runs: storage.namespace<AutomationRun>("automation.runs") }), automation: ctx.registry.get<AutomationService>("core.automation"),
       sources: new Map<string, MailReceiptSource>([[mailInternalReceivedManifest.id, internal], [mailReceivedManifest.id, external]]),
