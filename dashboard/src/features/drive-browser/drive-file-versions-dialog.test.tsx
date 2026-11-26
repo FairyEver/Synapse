@@ -90,7 +90,7 @@ describe('DriveFileVersionContent', () => {
     expect(source).not.toContain('maxPages')
   })
 
-  it('keeps version rows inside a bounded table frame', () => {
+  it('renders version rows directly in the HeroUI table without an outer bordered wrapper', () => {
     const html = renderVersions([
       version({ id: 'version-4', versionNumber: 4, isCurrent: true }),
       version({ id: 'version-3', versionNumber: 3 }),
@@ -98,7 +98,7 @@ describe('DriveFileVersionContent', () => {
       version({ id: 'version-1', versionNumber: 1 }),
     ])
 
-    expect(html).toContain('class="rounded-md border"')
+    expect(html).not.toContain('rounded-md border')
     expect(html).not.toContain('data-slot="scroll-area"')
     expect(html).toContain('data-slot="table"')
     expect(html).toContain('版本')
@@ -161,6 +161,7 @@ describe('DriveFileVersionContent', () => {
       loadingMore: false,
     })
 
+    expect(html).toContain('data-slot="table-footer"')
     expect(html).toContain('加载更多')
   })
 
@@ -183,6 +184,7 @@ describe('DriveFileVersionContent', () => {
     const errorHtml = renderVersionContent({ error: '版本加载失败。' })
 
     expect(loadingHtml).toContain('data-slot="table"')
+    expect(loadingHtml).not.toContain('rounded-md border')
     expect(loadingHtml).toContain('skeleton--shimmer')
     expect(emptyHtml).toContain('暂无历史版本')
     expect(emptyHtml).toContain('min-h-48')

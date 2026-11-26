@@ -242,11 +242,7 @@ export function DriveFileVersionContent({
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
   if (loading) {
-    return (
-      <DriveFileVersionTableFrame>
-        <DriveFileVersionTable skeleton />
-      </DriveFileVersionTableFrame>
-    )
+    return <DriveFileVersionTable skeleton />
   }
   if (error) {
     return (
@@ -268,57 +264,51 @@ export function DriveFileVersionContent({
       </div>
     )
   }
+  const footer =
+    hasMore || loadMoreError ? (
+      <Table.Footer className='flex-col justify-center gap-2'>
+        {loadMoreError ? (
+          <div className='text-center text-sm text-danger'>
+            加载更多失败：{loadMoreError}
+          </div>
+        ) : null}
+        {hasMore ? (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            isDisabled={loadingMore}
+            onPress={onLoadMore}
+          >
+            {loadingMore ? <Loader2 className='animate-spin' /> : null}
+            {loadingMore ? '加载中' : '加载更多'}
+          </Button>
+        ) : null}
+      </Table.Footer>
+    ) : null
   return (
-    <DriveFileVersionTableFrame>
-      <DriveFileVersionTable>
-        {versions.map((version) => (
-          <DriveFileVersionRow
-            key={version.id}
-            itemId={itemId}
-            version={version}
-            pinning={pinning && pinningVersionId === version.id}
-            onPin={onPin}
-            onRestore={onRestore}
-            onDelete={onDelete}
-          />
-        ))}
-      </DriveFileVersionTable>
-      {hasMore || loadMoreError ? (
-        <div className='grid justify-items-center gap-2 border-t p-2'>
-          {loadMoreError ? (
-            <div className='text-center text-sm text-danger'>
-              加载更多失败：{loadMoreError}
-            </div>
-          ) : null}
-          {hasMore ? (
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              isDisabled={loadingMore}
-              onPress={onLoadMore}
-            >
-              {loadingMore ? <Loader2 className='animate-spin' /> : null}
-              {loadingMore ? '加载中' : '加载更多'}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </DriveFileVersionTableFrame>
+    <DriveFileVersionTable footer={footer}>
+      {versions.map((version) => (
+        <DriveFileVersionRow
+          key={version.id}
+          itemId={itemId}
+          version={version}
+          pinning={pinning && pinningVersionId === version.id}
+          onPin={onPin}
+          onRestore={onRestore}
+          onDelete={onDelete}
+        />
+      ))}
+    </DriveFileVersionTable>
   )
-}
-function DriveFileVersionTableFrame({
-  children,
-}: {
-  readonly children: ReactNode
-}) {
-  return <div className='rounded-md border'>{children}</div>
 }
 function DriveFileVersionTable({
   children,
+  footer,
   skeleton = false,
 }: {
   readonly children?: ReactNode
+  readonly footer?: ReactNode
   readonly skeleton?: boolean
 }) {
   return (
@@ -342,6 +332,7 @@ function DriveFileVersionTable({
           </Table.Body>
         </Table.Content>
       </Table.ScrollContainer>
+      {footer}
     </Table>
   )
 }

@@ -37,7 +37,7 @@ describe('version history dialog geometry', () => {
     for (const count of [0, 1]) {
       it(`keeps ${count} versions naturally sized with an inset heading at ${width}px`, async () => {
         await page.viewport(width, 800)
-        const { dialog, heading } = await renderHistory(count)
+        const { dialog, body, heading } = await renderHistory(count)
         const bounds = dialog.getBoundingClientRect()
         const title = heading.getBoundingClientRect()
         expect(title.left - bounds.left).toBeGreaterThanOrEqual(20)
@@ -45,6 +45,12 @@ describe('version history dialog geometry', () => {
         expect(bounds.height).toBeLessThan(400)
         expect(bounds.left).toBeGreaterThanOrEqual(0)
         expect(bounds.right).toBeLessThanOrEqual(width)
+        if (count > 0) {
+          const table = body.querySelector<HTMLElement>('[data-slot="table"]')!
+          expect(table.parentElement).toBe(body)
+          expect(getComputedStyle(table).borderTopWidth).toBe('0px')
+          expect(getComputedStyle(body).borderTopWidth).toBe('0px')
+        }
         await page.screenshot({ path: `/tmp/synapse-version-history-${width}-${count}.png` })
       })
     }
