@@ -9,7 +9,7 @@ import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthService } from "../auth/user-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
-import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
+import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
@@ -162,6 +162,16 @@ describe("DriveController", () => {
     expect(getDefaultThrottleLimit(DriveUserController.prototype.completeUpload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
     expect(getDefaultThrottleLimit(DriveUserController.prototype.completePublicAssetUpload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
     expect(getDefaultThrottleLimit(DriveLocalStorageController.prototype.upload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
+  })
+
+  it("uses a dedicated high limit for Drive item metadata and version read endpoints", () => {
+    expect(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE).toBe(2400)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.getItem)).toBe(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleTtl(DriveUserController.prototype.getItem)).toBe(RATE_LIMIT_TTL_MS)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.listFileVersions)).toBe(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleTtl(DriveUserController.prototype.listFileVersions)).toBe(RATE_LIMIT_TTL_MS)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.downloadFileVersion)).toBe(DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleTtl(DriveUserController.prototype.downloadFileVersion)).toBe(RATE_LIMIT_TTL_MS)
   })
 
   beforeEach(async () => {

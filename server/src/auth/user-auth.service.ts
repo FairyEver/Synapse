@@ -436,10 +436,11 @@ export class UserAuthService {
     return { token: web.token, expiresAt: web.expiresAt, userId: input.userId }
   }
 
-  async verifyWebSession(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{
+  private async findActiveWebSession(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{
     readonly userId: string
     readonly sessionId: string
     readonly expiresAt: Date
+    readonly now: Date
   } | null> {
     const now = new Date()
     const record = await client.userSessionRefreshToken.findUnique({
@@ -470,14 +471,34 @@ export class UserAuthService {
       })
       if (!source || source.userId !== record.session.user.id || source.revokedAt || source.expiresAt <= now) return null
     }
-    await client.userSession.update({
-      where: { id: record.session.id },
-      data: { lastUsedAt: now },
-    })
     return {
       userId: record.session.user.id,
       sessionId: record.session.id,
       expiresAt: record.expiresAt < record.session.expiresAt ? record.expiresAt : record.session.expiresAt,
+      now,
+    }
+  }
+
+  async resolveWebSessionUserId(token: string, client: Prisma.TransactionClient = this.prisma): Promise<string | null> {
+    const active = await this.findActiveWebSession(token, client)
+    return active?.userId ?? null
+  }
+
+  async verifyWebSession(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{
+    readonly userId: string
+    readonly sessionId: string
+    readonly expiresAt: Date
+  } | null> {
+    const active = await this.findActiveWebSession(token, client)
+    if (!active) return null
+    await client.userSession.update({
+      where: { id: active.sessionId },
+      data: { lastUsedAt: active.now },
+    })
+    return {
+      userId: active.userId,
+      sessionId: active.sessionId,
+      expiresAt: active.expiresAt,
     }
   }
 
@@ -906,6 +927,18 @@ export class UserAuthService {
     })
 
     return toUserMeResponse(user)
+  }
+
+  resolveAccessTokenSubject(token: string): string | null {
+    try {
+      const payload = this.jwt.verify<UserJwtPayload>(token)
+      return typeof payload?.sub === "string" && payload.sub.length > 0 ? payload.sub : null
+    } catch (error) {
+      if (!isExpectedAccessTokenFailure(error)) {
+        this.logger.warn(safeAuditErrorDetail(error), "Unexpected error while resolving access token subject for throttling")
+      }
+      return null
+    }
   }
 
   async verifyAccessToken(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{ userId: string }> {

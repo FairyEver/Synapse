@@ -10,7 +10,7 @@ import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { ScheduleModule } from "@nestjs/schedule"
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
+import { ThrottlerModule } from "@nestjs/throttler"
 import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
@@ -35,6 +35,7 @@ import { ProfileAvatarModule } from "./profile-avatar/profile-avatar.module"
 import { hubLogPath, skillHubLogRequest } from "./skill-hub/skill-hub-log"
 import { SkillHubModule } from "./skill-hub/skill-hub.module"
 import { TeamModule } from "./team/team.module"
+import { AppThrottlerGuard } from "./common/app-throttler.guard"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
@@ -141,7 +142,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     HealthModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })

@@ -16,7 +16,7 @@ import { auditActors, AuditLogService } from "../common/audit-log.service"
 import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
-import { DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
+import { DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE, DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
@@ -135,6 +135,7 @@ const publicAssetPrepareUploadSchema = z.object({
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 const driveUploadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE } } as const
+const driveItemReadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE } } as const
 const documentImageUploadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE } } as const
 const documentImagePrepareUploadSchema = z.object({
   name: z.string().min(1).max(255),
@@ -589,6 +590,7 @@ export class DriveUserController {
   }
 
   @Get("/items/:id")
+  @Throttle(driveItemReadThrottle)
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
   }
@@ -616,6 +618,7 @@ export class DriveUserController {
   }
 
   @Get("/items/:id/versions")
+  @Throttle(driveItemReadThrottle)
   listFileVersions(
     @Param("id") id: string,
     @Query("offset") offset: string | undefined,
@@ -629,6 +632,7 @@ export class DriveUserController {
   }
 
   @Get("/items/:id/versions/:versionId/download")
+  @Throttle(driveItemReadThrottle)
   async downloadFileVersion(
     @Param("id") id: string,
     @Param("versionId") versionId: string,

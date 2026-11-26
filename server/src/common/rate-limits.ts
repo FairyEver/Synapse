@@ -1,6 +1,11 @@
 export const RATE_LIMIT_TTL_MS = 60_000
 export const DEFAULT_API_RATE_LIMIT_PER_MINUTE = 600
 export const DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE = 2400
+/**
+ * 云盘条目元数据与版本读取。批量覆盖上传和本地同步会高频查询条目详情、祖先目录与
+ * 版本信息，按单账号放宽至与上传同档位，避免大批量文件操作触发误限流。
+ */
+export const DRIVE_ITEM_READ_RATE_LIMIT_PER_MINUTE = 2400
 export const DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE = 60
 export const UPDATE_INTENT_ISSUE_RATE_LIMIT_PER_MINUTE = 10
 export const UPDATE_INTENT_VERIFY_RATE_LIMIT_PER_MINUTE = 30
