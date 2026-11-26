@@ -55,7 +55,8 @@ function AgentUsageCard({
 
   if (!data) return null
 
-  const totalTokenValue = data.rows.reduce((sum, row) => sum + row.total, 0)
+  const barRows = data.rows.filter((row) => row.total > 0)
+  const totalTokenValue = barRows.reduce((sum, row) => sum + row.total, 0)
   const copyText = formatAgentUsageCopyText(data)
 
   const handleCopy = () => {
@@ -81,19 +82,14 @@ function AgentUsageCard({
         )}
       >
       <div className="flex items-center justify-between gap-2 px-2.5 pt-1.5 pb-1">
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden text-sm whitespace-nowrap">
-          <span className="shrink-0 font-semibold">用量统计</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
-          {timestamp ? <time>{formatTime(timestamp)}</time> : null}
-          <Button type="button" variant="ghost" size="icon-xs" aria-label="复制用量统计" onClick={handleCopy}>
-            {copied ? <Check /> : <Clipboard />}
-          </Button>
-        </div>
+        <span className="min-w-0 truncate text-sm font-semibold whitespace-nowrap">用量统计</span>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="复制用量统计" onClick={handleCopy}>
+          {copied ? <Check /> : <Clipboard />}
+        </Button>
       </div>
       <div className="min-w-0 px-2.5 py-2">
         <div className="flex h-2 overflow-hidden rounded-full bg-background" aria-label="Token 分类占比">
-          {data.rows.map((row, index) => (
+          {barRows.map((row, index) => (
             <span
               key={row.key}
               data-usage-segment
@@ -123,18 +119,16 @@ function AgentUsageCard({
                 <span className={cn("size-1.5 rounded-full", rowColorClass[row.key])} />
                 <span className="truncate">{row.label}</span>
               </div>
-              <div className="mt-1 flex min-w-0 items-baseline gap-1 truncate leading-none">
+              <div className="mt-1 flex min-w-0 items-baseline leading-none">
                 <UsageValueTooltip label={row.totalTooltip} className="truncate text-base font-semibold tabular-nums">
                   {formatTokenUsageValue(row.total)}
                 </UsageValueTooltip>
               </div>
               <div className="mt-1 flex justify-between gap-1 text-xs text-muted-foreground">
-                <span className="flex min-w-0 items-baseline truncate">
-                  <UsageValueTooltip label={row.deltaTooltip} className="min-w-0 truncate">
-                    {row.delta === undefined ? "--" : `+${formatTokenUsageValue(row.delta)}`}
-                  </UsageValueTooltip>
-                </span>
-                <span>{row.percent === undefined ? "--" : `${row.percent}%`}</span>
+                <UsageValueTooltip label={row.deltaTooltip} className="min-w-0 truncate tabular-nums">
+                  {row.delta === undefined ? "--" : `+${formatTokenUsageValue(row.delta)}`}
+                </UsageValueTooltip>
+                <span className="shrink-0 tabular-nums">{row.percent === undefined ? "--" : `${row.percent}%`}</span>
               </div>
             </div>
           ))}
@@ -162,12 +156,6 @@ function UsageValueTooltip({ label, className, children }: UsageValueTooltipProp
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
-}
-
-function formatTime(timestamp: string): string | undefined {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return undefined
-  return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`
 }
 
 export { AgentUsageCard }

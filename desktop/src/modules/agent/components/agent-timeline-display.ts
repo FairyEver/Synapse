@@ -72,7 +72,7 @@ function isHiddenSdkStatus(item: SynapseAgentTimelineItem): item is SynapseAgent
 }
 
 export type AgentTimelineDisplayNode =
-  | { readonly kind: "item"; readonly entry: TimelineDisplayEntry }
+  | { readonly kind: "item"; readonly entry: TimelineDisplayEntry; readonly continuation?: boolean }
   | {
       readonly kind: "processGroup"
       readonly id: string
@@ -149,15 +149,17 @@ function appendTurnNodes(
     ? parseProcessTimestamp(first.item.timestamp)
     : undefined
   let anchoredAtUser = hasUserAnchor
-  const trailingCompletedResults: TimelineDisplayEntry[] = []
-  if (finalAssistantIndex >= 0) {
-    for (let index = finalAssistantIndex + 1; index < entries.length; index += 1) {
-      const candidate = entries[index]
-      if (candidate && isCompletedResultEntry(candidate)) {
-        trailingCompletedResults.push(candidate)
-      }
-    }
-  }
+  let seenMainlineAssistant = false
+  const trailingEntriesAfterFinalAssistant = finalAssistantIndex >= 0
+    ? entries.slice(finalAssistantIndex + 1)
+    : []
+  const hasOnlyCompletedResultsAfterFinalAssistant = finalAssistantIndex >= 0
+    && trailingEntriesAfterFinalAssistant.length > 0
+    && trailingEntriesAfterFinalAssistant.every((candidate) =>
+      isCompletedResultEntry(candidate) || candidate.item.kind === "fileCheckpoint")
+  const trailingCompletedResults = hasOnlyCompletedResultsAfterFinalAssistant
+    ? trailingEntriesAfterFinalAssistant.filter(isCompletedResultEntry)
+    : []
 
   const flushProcessEntries = () => {
     if (pendingProcessEntries.length === 0) return
@@ -177,17 +179,15 @@ function appendTurnNodes(
   for (let index = hasUserAnchor ? 1 : 0; index < entries.length; index += 1) {
     const entry = entries[index]
     if (!entry) continue
-    if (finalAssistantIndex >= 0 && index > finalAssistantIndex && isCompletedResultEntry(entry)) {
+    if (hasOnlyCompletedResultsAfterFinalAssistant && index > finalAssistantIndex && isCompletedResultEntry(entry)) {
       continue
     }
     if (entry.item.kind === "fileCheckpoint") {
       postludeEntries.push(entry)
       continue
     }
-    if (
-      isRequiredMainlineEntry(entry, context)
-      || (promoteCompletedAssistantMessages && isAssistantMessage(entry))
-    ) {
+    const isPromotedAssistant = promoteCompletedAssistantMessages && isMainlineAssistantMessage(entry)
+    if (isRequiredMainlineEntry(entry, context) || isPromotedAssistant) {
       if (isCancelledTerminalEntry(entry)) {
         pendingProcessEntries = markLastCancelledTool(pendingProcessEntries)
       }
@@ -195,7 +195,12 @@ function appendTurnNodes(
         pendingProcessEntries.push(...trailingCompletedResults)
       }
       flushProcessEntries()
-      nodes.push({ kind: "item", entry })
+      nodes.push({
+        kind: "item",
+        entry,
+        ...(isPromotedAssistant && seenMainlineAssistant ? { continuation: true } : {}),
+      })
+      if (isPromotedAssistant) seenMainlineAssistant = true
       anchorId = entry.item.id
       anchoredAtUser = false
       continue
@@ -246,8 +251,10 @@ function isUserMessage(entry: TimelineDisplayEntry): boolean {
   return entry.item.kind === "message" && entry.item.role === "user"
 }
 
-function isAssistantMessage(entry: TimelineDisplayEntry): boolean {
-  return entry.item.kind === "message" && entry.item.role === "assistant"
+function isMainlineAssistantMessage(entry: TimelineDisplayEntry): boolean {
+  const item = entry.item
+  if (item.kind !== "message" || item.role !== "assistant") return false
+  return item.content.trim().length > 0 || Boolean(item.metadata?.generatedUi)
 }
 
 function isCompletedResultEntry(entry: TimelineDisplayEntry): boolean {
@@ -258,8 +265,8 @@ function isCompletedResultEntry(entry: TimelineDisplayEntry): boolean {
 
 function findLastAssistantIndex(entries: readonly TimelineDisplayEntry[]): number {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const item = entries[index]?.item
-    if (item?.kind === "message" && item.role === "assistant") return index
+    const entry = entries[index]
+    if (entry && isMainlineAssistantMessage(entry)) return index
   }
   return -1
 }

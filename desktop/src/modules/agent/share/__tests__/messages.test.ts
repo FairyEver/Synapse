@@ -51,9 +51,9 @@ describe("conversation share snapshots", () => {
     expect(getTimelineContentChunk).not.toHaveBeenCalled()
     expect(input.attachments).toHaveLength(2)
   })
-  it("only selects completed mainline questions and final replies, excluding tools and intermediate reasoning", () => {
+  it("selects completed mainline questions and assistant replies, excluding tools and intermediate reasoning", () => {
     const items: SynapseAgentTimelineItem[] = [message(1), message(2), { kind: "toolCall", id: "tool", toolName: "Read", timestamp: "" }, message(4)]
-    expect(shareMessages(items, false).map((item) => item.id)).toEqual(["m1", "m4"])
+    expect(shareMessages(items, false).map((item) => item.id)).toEqual(["m1", "m2", "m4"])
     expect(shareMessages([message(1), { ...message(2), streaming: true }], true).map((item) => item.id)).toEqual(["m1"])
   })
 

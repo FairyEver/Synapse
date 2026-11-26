@@ -579,6 +579,7 @@ function buildSdkStreamExport(
     captureDroppedEventCount += reportedDropped
   }
 
+  let extraStreamCapturedBytes = 0
   for (const row of rows) {
     if (row.eventType !== "stream") continue
     const sequence = eventSequence(row.id)
@@ -587,12 +588,14 @@ function buildSdkStreamExport(
     }
     streamTurnIds.add(row.turnId)
     observedEventCount += 1
-    candidates.push({
+    const event: SdkStreamExportEvent = {
       turnId: row.turnId,
       sequence,
       createdAt: row.createdAt,
       payload: row.payload,
-    })
+    }
+    extraStreamCapturedBytes += Buffer.byteLength(JSON.stringify(sanitizeExportValue(event)), "utf8") + 1
+    candidates.push(event)
   }
 
   candidates.sort(compareSdkStreamEvents)
@@ -650,7 +653,7 @@ function buildSdkStreamExport(
       deliveryPolicy: "ordered-no-drop-main-process-queue",
       truncatedTurnCount,
       exportTruncated: droppedEventCount > 0,
-      capturedBytes: diagnosticTurnIds.size > 0 ? diagnosticCapturedBytes : exportedBytes,
+      capturedBytes: diagnosticCapturedBytes + extraStreamCapturedBytes,
       exportedBytes,
       diagnosticTurnCount: diagnosticTurnIds.size,
       streamOnlyTurnCount: [...streamTurnIds].filter((turnId) => !diagnosticTurnIds.has(turnId)).length,
@@ -902,6 +905,7 @@ function createDefaultFileName(rawName: string, now: Date): string {
 
 function createSafeFileNameSegment(rawName: string): string {
   const cleaned = rawName
+    .normalize("NFC")
     .replace(/[\p{Cc}\p{Cf}]/gu, " ")
     .replace(/[^\p{L}\p{N}_-]+/gu, "-")
     .replace(/-+/g, "-")

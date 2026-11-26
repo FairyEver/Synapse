@@ -1072,6 +1072,118 @@ describe("AgentTimeline", () => {
       durationLabel: "6s",
       lifecycle: "completed",
     }))
+    const closingNode = nodes.find((node) => node.kind === "item" && node.entry.item.id === "answer-closing")
+    expect(closingNode).toEqual(expect.objectContaining({ continuation: true }))
+  })
+
+  it("does not promote whitespace-only assistant placeholders or hoist trailing completed results before a trailing tool", () => {
+    const nodesWithBlank = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-blank",
+        kind: "message",
+        role: "user",
+        content: "Hi",
+        timestamp: "2026-11-25T13:50:00.000Z",
+      },
+      {
+        id: "blank-assistant",
+        kind: "message",
+        role: "assistant",
+        content: "   \n ",
+        timestamp: "2026-11-25T13:50:01.000Z",
+      },
+      {
+        id: "tool-after-blank",
+        kind: "toolCall",
+        toolName: "Read",
+        timestamp: "2026-11-25T13:50:02.000Z",
+      },
+      {
+        id: "final-after-blank",
+        kind: "message",
+        role: "assistant",
+        content: "Done",
+        timestamp: "2026-11-25T13:50:03.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+    expect(nodesWithBlank.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
+      "user-blank",
+      "process:user-blank",
+      "final-after-blank",
+    ])
+
+    const nodesWithTrailingTool = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-trail",
+        kind: "message",
+        role: "user",
+        content: "Summarize",
+        timestamp: "2026-11-25T13:50:00.000Z",
+      },
+      {
+        id: "answer-trail",
+        kind: "message",
+        role: "assistant",
+        content: "Summary body",
+        timestamp: "2026-11-25T13:50:02.000Z",
+      },
+      {
+        id: "tool-trail",
+        kind: "toolCall",
+        toolName: "Bash",
+        timestamp: "2026-11-25T13:50:03.000Z",
+      },
+      {
+        id: "result-trail",
+        kind: "result",
+        content: "",
+        metadata: { turnOutcome: { status: "completed" } },
+        timestamp: "2026-11-25T13:50:08.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+    expect(nodesWithTrailingTool.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
+      "user-trail",
+      "answer-trail",
+      "process:answer-trail",
+    ])
+  })
+
+  it("hides duplicate assistant message headers on continuation replies in the same turn", () => {
+    const html = renderTimeline({
+      agentIcon: "data:image/png;base64,abc",
+      items: [
+        {
+          id: "user-dup-header",
+          kind: "message",
+          role: "user",
+          content: "Summarize",
+          timestamp: "2026-11-25T13:50:00.000Z",
+        },
+        {
+          id: "answer-first",
+          kind: "message",
+          role: "assistant",
+          content: "First part",
+          timestamp: "2026-11-25T13:50:02.000Z",
+        },
+        {
+          id: "tool-mid",
+          kind: "toolCall",
+          toolName: "Bash",
+          timestamp: "2026-11-25T13:50:03.000Z",
+        },
+        {
+          id: "answer-second",
+          kind: "message",
+          role: "assistant",
+          content: "Second part",
+          timestamp: "2026-11-25T13:50:05.000Z",
+        },
+      ],
+    })
+    const container = document.createElement("div")
+    container.innerHTML = html
+    expect(container.querySelectorAll("img[src='data:image/png;base64,abc']")).toHaveLength(1)
   })
 
   it("keeps completed turns separate at user-message boundaries", () => {

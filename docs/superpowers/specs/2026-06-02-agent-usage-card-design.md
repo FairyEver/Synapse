@@ -29,18 +29,14 @@ Agent 对话结束后，当前界面在消息工具栏里用一行文字显示�
 卡片标题为 `用量统计`。标题行只保留必要摘要：
 
 - `用量统计`
-- 本轮费用
-- 会话累计费用
-- 估算标记
-- 时间
 - 复制按钮
 
-模型名不放在标题后。模型信息可以由 Agent 页面右上角或当前会话上下文承担；在卡片里重复会让标题行节奏变乱。
+模型名、时间戳与价格/估算费用均不放在卡片中（时间由消息头与工具栏承担，模型由会话上下文承担）。
 
-主体分两块：
+主体包含：
 
-- 左侧：token 分布条和 token 明细
-- 右侧：最近 5 轮小型堆叠柱图
+- token 分布条（仅渲染大于 0 的分类段）
+- token 明细网格
 
 Token 分类按现有字段保持：
 
@@ -48,7 +44,7 @@ Token 分类按现有字段保持：
 - 输出
 - 缓存读
 - 缓存写
-- 思考，仅在数据存在时显示；如果为了保持列宽稳定需要保留空列，可以显示 0。
+- 思考，仅在数据存在时显示
 
 每个 token 项显示三类信息：
 
@@ -62,106 +58,57 @@ Token 分类按现有字段保持：
 
 卡片应是消息流里的轻量统计组件，不是 dashboard 卡片。
 
-- 宽度跟 assistant 消息主体一致，沿用当前 `max-w-[76ch]` 的视觉范围，但实现时需要保证最小窗口下不会换行。
-- 高度目标约 130-150px。费用 label 不单独占行。
-- 标题行、费用、时间、复制按钮在同一基线附近。
-- 数字使用统一字号和字重；累计 token 是主数字，本轮增量和比例是次信息。
-- 数字列必须对齐。增量和百分比应有稳定宽度，避免每项看起来漂移。
+- 宽度跟 assistant 消息主体一致，通过容器查询在窄容器自动切换两列。
+- 标题行、复制按钮在同一基线附近。
+- 数字使用统一字号和字重；累计 token 是主数字，本轮增量和比例是次信息，使用 `tabular-nums`。
 - 不使用卡片套卡片，不额外加阴影。
-- 颜色只使用现有 shadcn token 和 `--chart-*` token。
-- 不使用 hex/rgb/hsl 字面色、渐变、glow、emoji 或内联 style。
 
 ## 布局细节
 
-推荐横向结构：
-
 ```text
-┌ 用量统计  本轮 ¥0.18  累计 ¥1.42  估算 i              14:32  copy ┐
-├────────────────────────────────────────────────────────────────────┤
-│ distribution bar                                      │ 最近 5 轮  │
-│ 输入      输出      缓存读      缓存写      思考       │ mini bars  │
-│ 10,248    3,812     42,180      1,216       680        │           │
-│ +2,104 21% +846 22% +9,640 23% +0 0% +180 26%         │           │
-└────────────────────────────────────────────────────────────────────┘
+┌ 用量统计                                                     copy ┐
+│ distribution bar                                                  │
+│ 输入         输出         缓存读        缓存写        思考         │
+│ 10,248       3,812        42,180        1,216         680         │
+│ +2,104  21%  +846   22%   +9,640  23%   +0     0%     +180   26%  │
+└───────────────────────────────────────────────────────────────────┘
 ```
-
-实现时不要照搬原型里的粗略尺寸。应根据真实组件渲染结果微调：
-
-- `grid-template-columns` 使用稳定列宽，避免五个 token 项宽度不均。
-- 图表区域固定宽度，避免挤压 token 数字。
-- 分布条与 token 项左边缘对齐。
-- 右侧小图只做趋势辅助，不抢占主视觉。
 
 ## 数据设计
 
-现有 assistant result metadata 已包含：
-
-- `usage`
-- `costUsd`
-- `costCny`
-- `costCurrency`
-
-现有累计 usage 由 `conversation-router` 的 `cumulativeUsageMetadata()` 写入 assistant history metadata。当前缺口是卡片还需要本轮 usage 和累计费用。
-
-建议卡片输入数据在 renderer 层归一化为：
+卡片只消费纯 Token 用量字段，不读取或展示任何价格字段：
 
 ```ts
 interface AgentUsageCardData {
-  totalUsage: NormalizedUsage
-  turnUsage: NormalizedUsage
-  totalCostCny?: number
-  turnCostCny?: number
-  estimated: boolean
-  timestamp?: string
+  readonly rows: readonly AgentUsageCardRow[]
+  readonly timestamp?: string
 }
 ```
 
-本轮 usage 来源优先级：
-
-1. result event 的原始 `usage`
-2. 如果历史记录只有累计 usage，则通过当前累计减上一条 assistant 累计推导
-3. 无法推导时只显示累计值，增量显示 `--`
-
-会话累计费用来源优先级：
-
-1. 后端持久化累计费用字段，如果后续补齐
-2. renderer 根据本轮 result cost 对历史 assistant metadata 求和
-3. 无法可靠计算时只显示本轮费用
-
-费用展示优先使用 CNY，沿用现有 `formatSynapseCost`。
-
 ## 复制内容
 
-点击复制按钮复制完整摘要，而不是复制 JSON 或只复制回复正文。
-
-建议格式：
+点击复制按钮复制纯 Token 用量摘要（不含任何价格或估算文案）：
 
 ```text
-用量统计：本轮费用 ¥0.18，会话累计费用 ¥1.42。
+用量统计
 Token 累计：输入 10,248（本轮 +2,104，占累计 21%）、输出 3,812（本轮 +846，占累计 22%）、缓存读 42,180（本轮 +9,640，占累计 23%）、缓存写 1,216（本轮 +0，占累计 0%）、思考 680（本轮 +180，占累计 26%）。
-价格按当前模型估算。
 ```
 
-如果某项数据缺失，应省略缺失项或显示“暂不可用”，不要复制 `undefined`、`NaN` 或内部字段名。
+如果某项数据缺失，应省略缺失项，不要复制 `undefined`、`NaN` 或内部字段名。
 
 ## 组件边界
-
-新增组件建议放在 Agent 模块内，而不是替换共享 `TokenUsageSummary`：
 
 - `desktop/src/modules/agent/components/agent-usage-card.tsx`
 - `desktop/src/modules/agent/utils/agent-usage-card.ts`
 
-`TokenUsageSummary` 继续供 action result 和 workflow node result 使用。
-
-`AgentMessageToolbar` 保留时间与复制回复能力。对有 usage 的 assistant 消息，新的用量卡片负责展示 usage；toolbar 不再重复渲染 usage 一行。
+`TokenUsageSummary` 继续供 action result 和 workflow node result 使用。`AgentMessageToolbar` 保留时间与复制回复能力。
 
 ## 状态处理
 
 - 无 usage：不渲染卡片。
-- 有 usage 无 cost：显示 token，隐藏费用或显示费用暂不可用。
 - 有累计无本轮：显示累计，增量和比例使用 `--`。
-- 费用估算：显示 `估算 i`，tooltip 文案短句即可，例如 `价格按当前模型估算`。
-- 思考 token 不存在：默认隐藏；如果隐藏会破坏列宽节奏，可保留为 0，但需要一致。
+- 0 值分类：明细列仍保留显示 `0`，但上方占比进度条不绘制 0 值色块。
+- 思考 token 不存在：隐藏思考列。
 
 ## 测试
 

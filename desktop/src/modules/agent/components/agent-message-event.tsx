@@ -85,6 +85,7 @@ interface AgentMessageEventProps {
   readonly item: SynapseAgentMessageTimelineItem
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
+  readonly hideHeader?: boolean
   readonly onOpenReference: (reference: string) => void
   readonly referenceActions?: AgentReferenceActions
   readonly projectId?: string
@@ -94,6 +95,7 @@ interface AgentMessageEventProps {
 function AgentMessageEvent({
   item,
   agentIcon,
+  hideHeader = false,
   onOpenReference,
   referenceActions = unavailableReferenceActions,
   projectId,
@@ -152,11 +154,13 @@ function AgentMessageEvent({
 
   return (
     <ShareMessageFrame item={item}><article className="flex w-full min-w-0 flex-col items-start">
-      <AgentMessageHeader
-        agentIcon={agentIcon}
-        timestamp={item.timestamp}
-        className={selecting ? "mb-2 min-h-10" : "mb-1"}
-      />
+      {!hideHeader || selecting ? (
+        <AgentMessageHeader
+          agentIcon={agentIcon}
+          timestamp={item.timestamp}
+          className={selecting ? "mb-2 min-h-10" : "mb-1"}
+        />
+      ) : null}
       <AssistantMessageBody
         item={item}
         projectId={projectId}

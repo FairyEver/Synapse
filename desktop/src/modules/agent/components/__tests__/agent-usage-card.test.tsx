@@ -197,6 +197,31 @@ describe("AgentUsageCard", () => {
     expect(segments[1]?.className).toContain("border-card")
   })
 
+  it("omits zero-token categories from the distribution bar", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 25611,
+            outputTokens: 616,
+            cacheReadInputTokens: 163840,
+            cacheCreationInputTokens: 0,
+            totalTokens: 190067,
+          }}
+        />
+      )
+    })
+
+    const segments = container.querySelectorAll<HTMLElement>("[data-usage-segment]")
+    expect(segments).toHaveLength(3)
+    expect(container.querySelector("[data-usage-segment].bg-amber-500")).toBeNull()
+  })
+
   it("copies a human readable usage summary", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, "clipboard", {

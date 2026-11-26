@@ -1245,6 +1245,55 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("subtracts cumulative modelUsage across turns even when model casing changes between turns", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router } = createRouter({
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "deepseek-v4.1-flash[1M]" },
+      priceRules: [
+        priceRule("deepseek-v4.1-flash", { inputPer1M: 2, outputPer1M: 8, cacheReadPer1M: 0.4 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "first",
+          done: true,
+          sdkResultUuid: "res-case-1",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 1_000, output_tokens: 100 },
+          modelUsage: {
+            "deepseek-v4.1-flash[1M]": { inputTokens: 1_000, outputTokens: 100 },
+          },
+        },
+        {
+          type: "result",
+          content: "second",
+          done: true,
+          sdkResultUuid: "res-case-2",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 500, output_tokens: 50 },
+          modelUsage: {
+            "deepseek-v4.1-flash[1M]": { inputTokens: 1_000, outputTokens: 100, canonicalModel: "deepseek-v4.1-flash[1m]" },
+            "deepseek-v4.1-flash[1m]": { inputTokens: 500, outputTokens: 50, canonicalModel: "deepseek-v4.1-flash[1m]" },
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("turn 1"))
+    const second = await router.send(baseMessage("turn 2"))
+    const saved = await conversations.get(second.conversationId)
+    const assistants = saved?.history.filter((entry) => entry.role === "assistant")
+
+    expect(assistants?.[1]?.metadata?.turnUsage).toEqual({
+      inputTokens: 500,
+      outputTokens: 50,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      totalTokens: 550,
+    })
+  })
+
   it("persists one thinking process when SDK metadata events interleave its deltas", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([

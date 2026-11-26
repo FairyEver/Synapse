@@ -692,7 +692,7 @@ describe("AgentConversationExportService", () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     await conversations.upsert({
       ...createConversation(),
-      name: "1.1【人力数字化管理系统】 1.1.1 建设现状和应用价值 截至2026年，围绕“1+6+1”新…",
+      name: "1.1【人力数字化管理系统】 cafe\u0301 1.1.1 建设现状和应用价值 截至2026年，围绕“1+6+1”新…",
     })
     const chooseSavePath = vi.fn().mockResolvedValue(null)
     const service = new AgentConversationExportService({
@@ -711,6 +711,7 @@ describe("AgentConversationExportService", () => {
 
     const suggestedName = chooseSavePath.mock.calls[0]?.[0] as string
     expect(suggestedName).toMatch(/^synapse-agent-conversation-.+-20261125-143342Z\.zip$/)
+    expect(suggestedName).toContain("café")
     expect(suggestedName).not.toMatch(/[【】“”…]/)
     expect(Buffer.byteLength(suggestedName, "utf8")).toBeLessThanOrEqual(120)
     const segment = suggestedName.replace(/^synapse-agent-conversation-/, "").replace(/-20261125-143342Z\.zip$/, "")

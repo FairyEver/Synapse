@@ -3573,10 +3573,15 @@ function subtractModelUsageRecords(
   current: Record<string, ModelUsageBreakdown>,
   previous: Record<string, ModelUsageBreakdown>,
 ): Record<string, ModelUsageBreakdown> | undefined {
-  if (Object.keys(previous).some((modelName) => !(modelName in current))) return undefined
+  const currentByLower = new Map(Object.entries(current).map(([modelName, breakdown]) => [modelName.toLowerCase(), breakdown]))
+  const previousByLower = new Map(Object.entries(previous).map(([modelName, breakdown]) => [modelName.toLowerCase(), breakdown]))
+  if ([...previousByLower.keys()].some((lowerName) => !currentByLower.has(lowerName))) return undefined
   const entries: Array<readonly [string, ModelUsageBreakdown]> = []
   for (const [modelName, currentBreakdown] of Object.entries(current)) {
-    const delta = subtractUsageBreakdowns(currentBreakdown, previous[modelName] ?? zeroUsageBreakdown())
+    const delta = subtractUsageBreakdowns(
+      currentBreakdown,
+      previousByLower.get(modelName.toLowerCase()) ?? zeroUsageBreakdown(),
+    )
     if (!delta) return undefined
     if (!isZeroUsageBreakdown(delta)) entries.push([modelName, delta])
   }

@@ -38,6 +38,7 @@ function AgentTimelineItem({
   onContinue,
   toolResult,
   toolCancelled,
+  hideMessageHeader,
   projectId,
   conversationId,
   generatedUiDisabled,
@@ -46,6 +47,7 @@ function AgentTimelineItem({
   readonly item: SynapseAgentTimelineItem
   readonly toolResult?: SynapseAgentToolResultTimelineItem
   readonly toolCancelled?: boolean
+  readonly hideMessageHeader?: boolean
   readonly projectId?: string
   readonly conversationId?: string
   readonly profile: SynapseAgentDisplayProfile
@@ -70,6 +72,7 @@ function AgentTimelineItem({
           item={item}
           profile={profile}
           agentIcon={agentIcon}
+          hideHeader={hideMessageHeader}
           onOpenReference={onOpenReference}
           referenceActions={referenceActions}
           projectId={projectId}

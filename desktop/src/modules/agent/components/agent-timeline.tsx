@@ -166,6 +166,7 @@ function AgentTimeline({
               ) : (
                 <Fragment key={entry.item.id}><AgentTimelineItem
                   item={entry.item}
+                  {...(node.continuation ? { hideMessageHeader: true } : {})}
                   {...(entry.result ? { toolResult: entry.result } : {})}
                   {...(entry.cancelled ? { toolCancelled: true } : {})}
                   profile={profile}

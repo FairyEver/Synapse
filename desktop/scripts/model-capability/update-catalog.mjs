@@ -256,6 +256,14 @@ function parseAliyunTextGenerationModels(pageHtml) {
       })
     }
   }
+  if (records.has("deepseek-v4.1-flash-1017") && !records.has("deepseek-v4.1-flash")) {
+    const snapshot = records.get("deepseek-v4.1-flash-1017")
+    records.set("deepseek-v4.1-flash", {
+      ...snapshot,
+      modelId: "deepseek-v4.1-flash",
+      equivalentSnapshot: "deepseek-v4.1-flash-1017",
+    })
+  }
   return [...records.values()].sort(byModelKey)
 }
 
